@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
+	"github.com/lumberbarons/epever_controller/config"
 	"github.com/lumberbarons/epever_controller/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -12,16 +13,16 @@ import (
 	"time"
 )
 
+func init() {
+	if os.Getenv("DEBUG") == "true" {
+		log.SetLevel(log.DebugLevel)
+	}
+}
+
 func prometheusHandler() gin.HandlerFunc {
 	h := promhttp.Handler()
 	return func(c *gin.Context) {
 		h.ServeHTTP(c.Writer, c.Request)
-	}
-}
-
-func init() {
-	if os.Getenv("DEBUG") == "true" {
-		log.SetLevel(log.DebugLevel)
 	}
 }
 
@@ -50,7 +51,7 @@ func main() {
 	defer handler.Close()
 
 	client := modbus.NewClient(handler)
-	prometheus.MustRegister(metrics.NewMetricsCollector(client))
+	prometheus.MustRegister(metrics.NewSolarCollector(client))
 
 	r := gin.Default()
 	r.GET("/health", func(c *gin.Context) {
@@ -58,6 +59,10 @@ func main() {
 	})
 
 	r.GET("/metrics", prometheusHandler())
+
+	configurer := config.NewSolarConfigurer(client)
+
+	r.GET("/api/time", configurer.TimeHandlerGet())
 
 	r.Run()
 }
