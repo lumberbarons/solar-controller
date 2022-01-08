@@ -5,6 +5,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	"net/http"
+	"time"
+	log "github.com/sirupsen/logrus"
 )
 
 type SolarConfigurer struct {
@@ -21,7 +23,7 @@ type ControllerTime struct {
 	Time string `json:"time"`
 }
 
-func (sc *SolarConfigurer) TimeHandlerGet() gin.HandlerFunc {
+func (sc *SolarConfigurer) TimeGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		data, _ := sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
 
@@ -30,6 +32,22 @@ func (sc *SolarConfigurer) TimeHandlerGet() gin.HandlerFunc {
 			data[3], data[0], data[1], data[2], data[5], data[4])
 
 		c.String(http.StatusOK, date)
+	}
+}
+
+func (sc *SolarConfigurer) TimePut() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		currentTime := time.Now()
+
+		// min, sec, day, hour, year, month
+		data := []byte {byte(currentTime.Minute()), byte(currentTime.Second()),
+			byte(currentTime.Day()), byte(currentTime.Hour()),
+			byte(currentTime.Year() - 2000), byte(currentTime.Month())}
+
+		result, _ := sc.modbusClient.WriteMultipleRegisters(0x9013, 3, data)
+		log.Debugf("time write result: %x", result)
+
+		c.Status(http.StatusOK)
 	}
 }
 

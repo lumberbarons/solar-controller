@@ -62,7 +62,8 @@ func main() {
 
 	configurer := config.NewSolarConfigurer(client)
 
-	r.GET("/api/time", configurer.TimeHandlerGet())
+	r.GET("/api/time", configurer.TimeGet())
+	r.PUT("/api/time", configurer.TimePut())
 
 	r.Run()
 }
