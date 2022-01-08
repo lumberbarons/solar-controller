@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"github.com/goburrow/modbus"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"sync"
@@ -14,7 +15,7 @@ const (
 type SolarCollector struct {
 	mutex sync.Mutex
 
-	portName string
+	modbusClient modbus.Client
 
 	scrapeFailures prometheus.Counter
 
@@ -36,9 +37,9 @@ type SolarCollector struct {
 	energyGeneratedTotal   *prometheus.Desc
 }
 
-func NewMetricsCollector(portName string) *SolarCollector {
+func NewMetricsCollector(client modbus.Client) *SolarCollector {
 	return &SolarCollector{
-		portName: portName,
+		modbusClient: client,
 
 		scrapeFailures: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
@@ -152,19 +153,20 @@ func (c *SolarCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func start(s string) (string, time.Time) {
-	log.Printf("Start %s", s)
+	log.Printf("start %s", s)
 	return s, time.Now()
 }
 
+
 func end(s string, startTime time.Time) {
 	endTime := time.Now()
-	log.Printf("End %s, time: %.4f sec", s, endTime.Sub(startTime).Seconds())
+	log.Printf("end %s, time: %.4f sec", s, endTime.Sub(startTime).Seconds())
 }
 
 func (c *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 	defer end(start("metrics collection"))
 
-	status, err := getStatus(c.portName)
+	status, err := getStatus(c.modbusClient)
 	if err != nil {
 		return err
 	}
