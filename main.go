@@ -8,7 +8,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 	"os"
 	"time"
 )
@@ -16,13 +15,6 @@ import (
 func init() {
 	if os.Getenv("DEBUG") == "true" {
 		log.SetLevel(log.DebugLevel)
-	}
-}
-
-func prometheusHandler() gin.HandlerFunc {
-	h := promhttp.Handler()
-	return func(c *gin.Context) {
-		h.ServeHTTP(c.Writer, c.Request)
 	}
 }
 
@@ -51,14 +43,17 @@ func main() {
 	defer handler.Close()
 
 	client := modbus.NewClient(handler)
-	prometheus.MustRegister(metrics.NewSolarCollector(client))
+	prometheus.MustRegister()
 
 	r := gin.Default()
-	r.GET("/health", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
 
-	r.GET("/metrics", prometheusHandler())
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(metrics.NewSolarCollector(client))
+	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+
+	r.GET("/metrics", func(c *gin.Context) {
+		h.ServeHTTP(c.Writer, c.Request)
+	})
 
 	configurer := config.NewSolarConfigurer(client)
 

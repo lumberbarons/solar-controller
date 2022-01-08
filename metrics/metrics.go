@@ -121,25 +121,25 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 
 		energyGeneratedDaily: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "energy_generated_daily"),
-			"Controller calculated daily power generation, (kWh)",
+			"Controller calculated daily power generation, (kWh).",
 			nil,
 			nil,
 		),
 		energyGeneratedMonthly: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "energy_generated_monthly"),
-			"Controller calculated monthly power generation, (kWh)",
+			"Controller calculated monthly power generation, (kWh).",
 			nil,
 			nil,
 		),
 		energyGeneratedAnnual: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "energy_generated_annual"),
-			"Controller calculated annual power generation, (kWh)",
+			"Controller calculated annual power generation, (kWh).",
 			nil,
 			nil,
 		),
 		energyGeneratedTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "energy_generated_total"),
-			"Controller calculated total power generation, (kWh)",
+			"Controller calculated total power generation, (kWh).",
 			nil,
 			nil,
 		),
