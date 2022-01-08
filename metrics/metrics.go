@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
 )

@@ -5,7 +5,7 @@ import (
 	"github.com/lumberbarons/epever_controller/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
