@@ -1,7 +1,7 @@
 package config
 
 import (
-	"encoding/hex"
+	"encoding/binary"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
@@ -27,9 +27,9 @@ type ControllerTime struct {
 }
 
 type ControllerQuery struct {
-	Register int     `json:"register"`
-	Address  string  `json:"address"`
-	Result	 string `json:"result"`
+	Register int    `json:"register"`
+	Address  string `json:"address"`
+	Result	 uint16 `json:"result"`
 }
 
 func (sc *SolarConfigurer) TimeGet() gin.HandlerFunc {
@@ -93,9 +93,9 @@ func (sc *SolarConfigurer) QueryPost() gin.HandlerFunc {
 			return
 		}
 
-		log.Info("query result: ", result)
-		query.Result = "0x" + hex.EncodeToString(result)
+		log.Info("Query result: ", result)
 
+		query.Result = binary.BigEndian.Uint16(result)
 		c.JSON(http.StatusOK, query)
 	}
 }
