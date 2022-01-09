@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	"github.com/lumberbarons/epever_controller/config"
@@ -47,18 +48,25 @@ func main() {
 
 	r := gin.Default()
 
+	collector := metrics.NewSolarCollector(client)
+
 	registry := prometheus.NewRegistry()
-	registry.MustRegister(metrics.NewSolarCollector(client))
+	registry.MustRegister(collector)
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 
 	r.GET("/metrics", func(c *gin.Context) {
 		h.ServeHTTP(c.Writer, c.Request)
 	})
 
+	r.GET("/api/metrics", collector.MetricsGet())
+
 	configurer := config.NewSolarConfigurer(client)
 
 	r.GET("/api/time", configurer.TimeGet())
 	r.PUT("/api/time", configurer.TimePut())
+	r.POST("/api/query", configurer.QueryPost())
+
+	r.Use(static.Serve("/", static.LocalFile("/views", false)))
 
 	r.Run()
 }

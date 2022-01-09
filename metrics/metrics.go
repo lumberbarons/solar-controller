@@ -2,9 +2,11 @@ package metrics
 
 import (
 	"encoding/binary"
+	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -146,26 +148,43 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 	}
 }
 
-func (c *SolarCollector) Describe(ch chan <- *prometheus.Desc) {
+func (sc *SolarCollector) MetricsGet() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sc.mutex.Lock()
+		defer sc.mutex.Unlock()
+
+		metrics, err := sc.getStatus()
+		if err != nil {
+			log.Error("failed to get metrics", err)
+			c.Status(http.StatusInternalServerError)
+		}
+
+		c.JSON(http.StatusOK, metrics)
+	}
+}
+
+func (sc *SolarCollector) Describe(ch chan <- *prometheus.Desc) {
 	ds := []*prometheus.Desc{
-		c.panelVoltage,
+		sc.panelVoltage,
 	}
 
 	for _, d := range ds {
 		ch <- d
 	}
 
-	c.scrapeFailures.Describe(ch)
+	sc.scrapeFailures.Describe(ch)
 }
 
-func (c *SolarCollector) Collect(ch chan<- prometheus.Metric) {
-	c.mutex.Lock() // To protect metrics from concurrent collects.
-	defer c.mutex.Unlock()
-	if err := c.collect(ch); err != nil {
+func (sc *SolarCollector) Collect(ch chan<- prometheus.Metric) {
+	sc.mutex.Lock()
+	defer sc.mutex.Unlock()
+
+	if err := sc.collect(ch); err != nil {
 		log.Printf("Error getting solar controller data: %s", err)
-		c.scrapeFailures.Inc()
-		c.scrapeFailures.Collect(ch)
+		sc.scrapeFailures.Inc()
+		sc.scrapeFailures.Collect(ch)
 	}
+
 	return
 }
 
@@ -180,79 +199,79 @@ func end(s string, startTime time.Time) {
 	log.Printf("end %s, time: %.4f sec", s, endTime.Sub(startTime).Seconds())
 }
 
-func (c *SolarCollector) collect(ch chan <- prometheus.Metric) error {
+func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 	defer end(start("metrics collection"))
 
-	status, err := getStatus(c.modbusClient)
+	status, err := sc.getStatus()
 	if err != nil {
 		return err
 	}
 
 	ch <- prometheus.MustNewConstMetric(
-		c.panelVoltage,
+		sc.panelVoltage,
 		prometheus.GaugeValue,
 		float64(status.ArrayVoltage),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.panelCurrent,
+		sc.panelCurrent,
 		prometheus.GaugeValue,
 		float64(status.ArrayCurrent),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.panelPower,
+		sc.panelPower,
 		prometheus.GaugeValue,
 		float64(status.ArrayPower),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		c.batteryVoltage,
+		sc.batteryVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryVoltage),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.batterySOC,
+		sc.batterySOC,
 		prometheus.GaugeValue,
 		float64(status.BatterySOC),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.batteryTemp,
+		sc.batteryTemp,
 		prometheus.GaugeValue,
 		float64(status.BatteryTemp),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.batteryMinVoltage,
+		sc.batteryMinVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryMinVoltage),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.batteryMaxVoltage,
+		sc.batteryMaxVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryMaxVoltage),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		c.deviceTemp,
+		sc.deviceTemp,
 		prometheus.GaugeValue,
 		float64(status.DeviceTemp),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		c.energyGeneratedDaily,
+		sc.energyGeneratedDaily,
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedDaily),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.energyGeneratedMonthly,
+		sc.energyGeneratedMonthly,
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedMonthly),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.energyGeneratedAnnual,
+		sc.energyGeneratedAnnual,
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedAnnual),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		c.energyGeneratedTotal,
+		sc.energyGeneratedTotal,
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedTotal),
 	)
@@ -260,29 +279,29 @@ func (c *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 	return nil
 }
 
-func getStatus(client modbus.Client) (c ControllerStatus, err error) {
-	c.ArrayVoltage = getValue(client, 0x3100) / 100
-	c.ArrayCurrent = getValue(client, 0x3101) / 100
-	c.BatteryVoltage = getValue(client, 0x3104) / 100
-	c.BatterySOC = int32(getValue(client, 0x311A))
+func (sc *SolarCollector) getStatus() (c ControllerStatus, err error) {
+	c.ArrayVoltage = sc.getValue(0x3100) / 100
+	c.ArrayCurrent = sc.getValue(0x3101) / 100
+	c.BatteryVoltage = sc.getValue(0x3104) / 100
+	c.BatterySOC = int32(sc.getValue(0x311A))
 
-	c.BatteryMaxVoltage = getValue(client, 0x3302) / 100
-	c.BatteryMinVoltage = getValue(client, 0x3303) / 100
+	c.BatteryMaxVoltage = sc.getValue(0x3302) / 100
+	c.BatteryMinVoltage = sc.getValue(0x3303) / 100
 
-	c.ArrayPower = getValue32(client, 0x3102) / 100
+	c.ArrayPower = sc.getValue32(0x3102) / 100
 
-	c.EnergyGeneratedDaily = getValue32(client, 0x330C) / 100
-	c.EnergyGeneratedMonthly = getValue32(client, 0x330E) / 100
-	c.EnergyGeneratedAnnual = getValue32(client, 0x3310) / 100
-	c.EnergyGeneratedTotal = getValue32(client, 0x3312) / 100
+	c.EnergyGeneratedDaily = sc.getValue32(0x330C) / 100
+	c.EnergyGeneratedMonthly = sc.getValue32(0x330E) / 100
+	c.EnergyGeneratedAnnual = sc.getValue32(0x3310) / 100
+	c.EnergyGeneratedTotal = sc.getValue32(0x3312) / 100
 
-	bt := getValue(client, 0x3110)
+	bt := sc.getValue(0x3110)
 	if bt > 32768 {
 		bt = bt - 65536
 	}
 	c.BatteryTemp = bt / 100
 
-	dt := getValue(client, 0x3111)
+	dt := sc.getValue(0x3111)
 	if dt > 32768 {
 		dt = dt - 65536
 	}
@@ -291,8 +310,8 @@ func getStatus(client modbus.Client) (c ControllerStatus, err error) {
 	return
 }
 
-func getValue(client modbus.Client, address uint16) float32 {
-	data, err := client.ReadInputRegisters(address, 1)
+func (sc *SolarCollector) getValue(address uint16) float32 {
+	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("failed to get data, address: %d", address)
 		return 0 // todo
@@ -300,8 +319,8 @@ func getValue(client modbus.Client, address uint16) float32 {
 	return float32(binary.BigEndian.Uint16(data))
 }
 
-func getValue32(client modbus.Client, lowAddress uint16) float32 {
-	lowData, err := client.ReadInputRegisters(lowAddress, 1)
+func (sc *SolarCollector) getValue32(lowAddress uint16) float32 {
+	lowData, err := sc.modbusClient.ReadInputRegisters(lowAddress, 1)
 	if err != nil {
 		log.Warnf("failed to get data, address: %d", lowAddress)
 		return 0 // todo
@@ -309,7 +328,7 @@ func getValue32(client modbus.Client, lowAddress uint16) float32 {
 
 	highAddress := lowAddress + 1
 
-	highData, err := client.ReadInputRegisters(highAddress, 1)
+	highData, err := sc.modbusClient.ReadInputRegisters(highAddress, 1)
 	if err != nil {
 		log.Warnf("failed to get data, address: %d", highAddress)
 		return 0 // todo
