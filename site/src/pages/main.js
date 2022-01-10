@@ -33,6 +33,9 @@ class Main extends React.Component {
             <Metric title="Panel Power" value={metrics.arrayPower} unit="W" />
           </Grid>
           <Grid item xs={4}>
+            <Metric title="Charging Power" value={metrics.chargingPower} unit="W" />
+          </Grid>
+          <Grid item xs={4}>
             <Metric title="Panel Voltage" value={metrics.arrayVoltage} unit="V" />
           </Grid>
           <Grid item xs={4}>

@@ -26,6 +26,8 @@ type SolarCollector struct {
 	panelCurrent *prometheus.Desc
 	panelPower   *prometheus.Desc
 
+	chargingPower *prometheus.Desc
+
 	batteryVoltage    *prometheus.Desc
 	batterySOC        *prometheus.Desc
 	batteryTemp       *prometheus.Desc
@@ -44,6 +46,7 @@ type ControllerStatus struct {
 	ArrayVoltage           float32   `json:"arrayVoltage"`
 	ArrayCurrent           float32   `json:"arrayCurrent"`
 	ArrayPower             float32   `json:"arrayPower"`
+	ChargingPower		   float32   `json:"chargingPower"`
 	BatteryVoltage         float32   `json:"batteryVoltage"`
 	BatterySOC             int32     `json:"batterySoc"`
 	BatteryTemp            float32   `json:"batteryTemp"`
@@ -80,6 +83,12 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 		panelPower: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "panel_power"),
 			"Solar panel power (W).",
+			nil,
+			nil,
+		),
+		chargingPower: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "charging_power"),
+			"Battery charging power (W).",
 			nil,
 			nil,
 		),
@@ -224,6 +233,12 @@ func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 	)
 
 	ch <- prometheus.MustNewConstMetric(
+		sc.chargingPower,
+		prometheus.GaugeValue,
+		float64(status.ChargingPower),
+	)
+
+	ch <- prometheus.MustNewConstMetric(
 		sc.batteryVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryVoltage),
@@ -289,6 +304,7 @@ func (sc *SolarCollector) getStatus() (c ControllerStatus, err error) {
 	c.BatteryMinVoltage = sc.getValue(0x3303) / 100
 
 	c.ArrayPower = sc.getValue32(0x3102) / 100
+	c.ChargingPower = sc.getValue32(0x3106) / 100
 
 	c.EnergyGeneratedDaily = sc.getValue32(0x330C) / 100
 	c.EnergyGeneratedMonthly = sc.getValue32(0x330E) / 100
