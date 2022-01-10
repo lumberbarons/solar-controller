@@ -13,5 +13,5 @@ socat -d -d -d pty,raw pty,raw
 ```
 
 ```bash
-go run client.go <port-2>
+SERIAL_PORT=<port-2> DEBUG=true go run main.go
 ```

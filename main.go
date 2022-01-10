@@ -66,7 +66,7 @@ func main() {
 	r.PUT("/api/time", configurer.TimePut())
 	r.POST("/api/query", configurer.QueryPost())
 
-	r.Use(static.Serve("/", static.LocalFile("/views", false)))
+	r.Use(static.Serve("/", static.LocalFile("/site", false)))
 
 	r.Run()
 }
