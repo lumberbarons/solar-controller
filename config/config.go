@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type SolarConfigurer struct {
@@ -22,8 +21,15 @@ func NewSolarConfigurer(client modbus.Client) *SolarConfigurer {
 	}
 }
 
-type ControllerTime struct {
-	Time string `json:"time"`
+type ControllerConfig struct {
+	Time            string `json:"time"`
+	BatteryType     string `json:"batteryType"`
+	BatteryCapacity uint16 `json:"batteryCapacity"`
+
+	EqualizationVoltage   float32 `json:"equalizationVoltage"`
+	BoostVoltage		  float32 `json:"boostVoltage"`
+	FloatVoltage		  float32 `json:"floatVoltage"`
+	BoostReconnectVoltage float32 `json:"boostReconnectVoltage"`
 }
 
 type ControllerQuery struct {
@@ -32,21 +38,51 @@ type ControllerQuery struct {
 	Result	 uint16 `json:"result"`
 }
 
-func (sc *SolarConfigurer) TimeGet() gin.HandlerFunc {
+func (sc *SolarConfigurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		data, _ := sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
+		data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 2)
 
-		// min, sec, day, hour, year, month
-		date := fmt.Sprintf("%02d:%02d:%02d %d-%d-%d",
-			data[3], data[0], data[1], data[2], data[5], data[4])
+		batteryType := binary.BigEndian.Uint16(data[0:2])
+		batteryCapacity := binary.BigEndian.Uint16(data[2:4])
 
-		c.JSON(http.StatusOK, ControllerTime{Time: date})
+		data, _ = sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
+
+		year := int(data[4]) + 2000
+		time := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
+			data[2], data[5], year, data[3], data[0], data[1])
+
+		data, _ = sc.modbusClient.ReadHoldingRegisters(0x9006, 4)
+		equalizationVoltage := float32(binary.BigEndian.Uint16(data[0:2])) / 100
+		boostVoltage := float32(binary.BigEndian.Uint16(data[2:4])) / 100
+		floatVoltage := float32(binary.BigEndian.Uint16(data[4:6])) / 100
+		boostReconnectVoltage := float32(binary.BigEndian.Uint16(data[6:8])) / 100
+
+		c.JSON(http.StatusOK, ControllerConfig{Time: time,
+			BatteryType: batteryTypeToString(batteryType),
+			BatteryCapacity: batteryCapacity, EqualizationVoltage: equalizationVoltage,
+			BoostVoltage: boostVoltage, FloatVoltage: floatVoltage,
+			BoostReconnectVoltage: boostReconnectVoltage})
 	}
 }
 
-func (sc *SolarConfigurer) TimePut() gin.HandlerFunc {
+func batteryTypeToString(batteryType uint16) string {
+	switch batteryType {
+	case 1:
+		return "sealed"
+	case 2:
+		return "gel"
+	case 3:
+		return "flooded"
+	case 4:
+		return "userDefined"
+	default:
+		return "unknown"
+	}
+}
+
+func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		currentTime := time.Now()
+		/* currentTime := time.Now()
 
 		// min, sec, day, hour, year, month
 		data := []byte {byte(currentTime.Minute()), byte(currentTime.Second()),
@@ -54,7 +90,7 @@ func (sc *SolarConfigurer) TimePut() gin.HandlerFunc {
 			byte(currentTime.Year() - 2000), byte(currentTime.Month())}
 
 		result, _ := sc.modbusClient.WriteMultipleRegisters(0x9013, 3, data)
-		log.Debugf("time write result: %x", result)
+		log.Debugf("time write result: %x", result) */
 
 		c.Status(http.StatusOK)
 	}

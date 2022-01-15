@@ -45,6 +45,7 @@ class Header extends React.Component {
                 Solar Controller
               </Link>
             </Typography>
+            <Button component={Link} to="/config" color="inherit" size="large">Config</Button>
             <Button component={Link} to="/query" color="inherit" size="large">Query</Button>
           </Toolbar>
       </AppBar>

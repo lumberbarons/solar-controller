@@ -62,8 +62,9 @@ func main() {
 
 	configurer := config.NewSolarConfigurer(client)
 
-	r.GET("/api/time", configurer.TimeGet())
-	r.PUT("/api/time", configurer.TimePut())
+	r.GET("/api/config", configurer.ConfigGet())
+	r.PATCH("/api/config", configurer.ConfigPatch())
+	
 	r.POST("/api/query", configurer.QueryPost())
 
 	r.Use(static.Serve("/", static.LocalFile("/site", false)))

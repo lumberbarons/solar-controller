@@ -19,11 +19,14 @@ def main():
 
         slave.set_values('real_time_data', 0x3100, [7856, 58]) # array voltage and current
         slave.set_values('real_time_data', 0x3102, [0xCBFF, 0x003]) # array power
-
         slave.set_values('real_time_data', 0x3104, 2425) # battery voltage
+
+        slave.set_values('real_time_data', 0x3106, [0xCB00, 0x003]) # charging power
 
         slave.set_values('real_time_data', 0x3110, [65536 - 240, 360]) # temperatures
         slave.set_values('real_time_data', 0x311A, 58) # battery soc
+
+        slave.set_values('real_time_status', 0x3201, 0x08) # controller status
 
         slave.set_values('statistics', 0x3302, [2801, 2301]) # min max daily voltage
 
@@ -32,7 +35,11 @@ def main():
         slave.set_values('statistics', 0x3310, [0x0FFF, 0x0100]) # year power gen
         slave.set_values('statistics', 0x3312, [0xFFFF, 0x1000]) # forever power gen
 
-        slave.add_block('holding_registers', cst.HOLDING_REGISTERS, 0x9013, 0x03) # time
+        slave.add_block('holding_registers', cst.HOLDING_REGISTERS, 0x9000, 0xFF)
+
+        slave.set_values('holding_registers', 0x9000, [3, 445]) # battery type and capacity
+
+        slave.set_values('holding_registers', 0x9006, [2700, 2850, 2900, 2725]) # various voltages
 
         now = datetime.datetime.now()
 

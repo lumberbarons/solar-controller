@@ -6,6 +6,7 @@ import PropTypes from "prop-types"
 import Header from "../components/header";
 import Main from "./main";
 import Query from "./query";
+import Config from "./config";
 
 class App extends React.Component {
   constructor(props) {
@@ -26,6 +27,9 @@ class App extends React.Component {
             <Switch>
               <Route path="/query">
                 <Query />
+              </Route>
+              <Route path="/config">
+                <Config />
               </Route>
               <Route path="/">
                 <Main />

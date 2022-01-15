@@ -52,7 +52,7 @@ class Query extends React.Component {
     let results = ""
     if(resultHex !== '') {
       results = 
-        <Grid style={{ marginTop: "20px" }} container spacing={2}>
+        <Grid container spacing={2}>
           <Grid item xs={12}>
             <Card>
                 <CardContent>
@@ -86,6 +86,7 @@ class Query extends React.Component {
     return (
       <Container component="main" maxWidth="xs">
         <Box
+          mt={2}
           component="form"
           autoComplete="off"
           onSubmit={this.handleSubmit}
@@ -132,7 +133,9 @@ class Query extends React.Component {
         </Grid>
       </Box>
 
-      {results}
+      <Box mt={2}>
+        {results}
+      </Box>
     </Container>
     );
   }

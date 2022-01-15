@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import axios from 'axios';
 
-import { Typography, Grid, Box } from '@material-ui/core';
+import { Grid, Box } from '@material-ui/core';
 
 import Metric from "../components/metric"
 
@@ -26,6 +26,22 @@ class Main extends React.Component {
   render() {
     const metrics = this.state.metrics;
 
+    let chargingStatus = "Unknown";
+    switch(metrics.chargingStatus) {
+      case 0:
+        chargingStatus = "Not charging";
+        break;
+      case 1:
+        chargingStatus = "Float";
+        break;
+      case 2:
+        chargingStatus = "Boost";
+        break;
+      case 3:
+        chargingStatus = "Equalization";
+        break;
+    }
+
     return (
       <Box sx={{ width: '100%' }}>
         <Grid container spacing={2}>
@@ -34,6 +50,9 @@ class Main extends React.Component {
           </Grid>
           <Grid item xs={4}>
             <Metric title="Charging Power" value={metrics.chargingPower} unit="W" />
+          </Grid>
+          <Grid item xs={4}>
+            <Metric title="Charging Status" value={chargingStatus} unit="" />
           </Grid>
           <Grid item xs={4}>
             <Metric title="Panel Voltage" value={metrics.arrayVoltage} unit="V" />

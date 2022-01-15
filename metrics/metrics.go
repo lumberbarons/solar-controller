@@ -7,7 +7,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -16,8 +15,6 @@ const (
 )
 
 type SolarCollector struct {
-	mutex sync.Mutex
-
 	modbusClient modbus.Client
 
 	scrapeFailures prometheus.Counter
@@ -40,6 +37,8 @@ type SolarCollector struct {
 	energyGeneratedMonthly *prometheus.Desc
 	energyGeneratedAnnual  *prometheus.Desc
 	energyGeneratedTotal   *prometheus.Desc
+
+	chargingStatus *prometheus.Desc
 }
 
 type ControllerStatus struct {
@@ -57,6 +56,7 @@ type ControllerStatus struct {
 	EnergyGeneratedMonthly float32   `json:"energyGeneratedMonthly"`
 	EnergyGeneratedAnnual  float32   `json:"energyGeneratedAnnually"`
 	EnergyGeneratedTotal   float32   `json:"energyGeneratedTotal"`
+	ChargingStatus		   int32     `json:"chargingStatus"`
 }
 
 func NewSolarCollector(client modbus.Client) *SolarCollector {
@@ -89,6 +89,12 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 		chargingPower: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "charging_power"),
 			"Battery charging power (W).",
+			nil,
+			nil,
+		),
+		chargingStatus: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "charging_status"),
+			"Charging status.",
 			nil,
 			nil,
 		),
@@ -159,9 +165,6 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 
 func (sc *SolarCollector) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sc.mutex.Lock()
-		defer sc.mutex.Unlock()
-
 		metrics, err := sc.getStatus()
 		if err != nil {
 			log.Error("failed to get metrics", err)
@@ -185,9 +188,6 @@ func (sc *SolarCollector) Describe(ch chan <- *prometheus.Desc) {
 }
 
 func (sc *SolarCollector) Collect(ch chan<- prometheus.Metric) {
-	sc.mutex.Lock()
-	defer sc.mutex.Unlock()
-
 	if err := sc.collect(ch); err != nil {
 		log.Printf("Error getting solar controller data: %s", err)
 		sc.scrapeFailures.Inc()
@@ -291,6 +291,12 @@ func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 		float64(status.EnergyGeneratedTotal),
 	)
 
+	ch <- prometheus.MustNewConstMetric(
+		sc.chargingStatus,
+		prometheus.GaugeValue,
+		float64(status.ChargingStatus),
+	)
+
 	return nil
 }
 
@@ -310,6 +316,10 @@ func (sc *SolarCollector) getStatus() (c ControllerStatus, err error) {
 	c.EnergyGeneratedMonthly = sc.getValue32(0x330E) / 100
 	c.EnergyGeneratedAnnual = sc.getValue32(0x3310) / 100
 	c.EnergyGeneratedTotal = sc.getValue32(0x3312) / 100
+
+	controllerStatus := int32(sc.getValue(0x3201))
+	chargingStatus := (controllerStatus & 0x0C) >> 2
+	c.ChargingStatus = chargingStatus
 
 	bt := sc.getValue(0x3110)
 	if bt > 32768 {
