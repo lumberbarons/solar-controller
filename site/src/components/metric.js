@@ -13,12 +13,12 @@ class Metric extends React.Component {
     return (
         <Card>
             <CardContent>
-            <Typography sx={{ fontSize: 14 }} color="textSecondary" gutterBottom>
-                {title}
-            </Typography>
-            <Typography variant="h2" component="div">
-                {value} {unit}
-            </Typography>
+              <Typography color="textSecondary" gutterBottom>
+                  {title}
+              </Typography>
+              <Typography variant="h5" component="div">
+                  {value} {unit}
+              </Typography>
             </CardContent>
         </Card>
     )
