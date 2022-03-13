@@ -41,6 +41,9 @@ def main():
 
         slave.set_values('holding_registers', 0x9006, [2700, 2850, 2900, 2725]) # various voltages
 
+        slave.set_values('holding_registers', 0x9016, [30]) # equalization charging cycle
+        slave.set_values('holding_registers', 0x906B, [90, 75]) # equalization + boost durations
+
         now = datetime.datetime.now()
 
         minSec = (now.minute << 8) | now.second

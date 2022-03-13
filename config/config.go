@@ -26,10 +26,13 @@ type ControllerConfig struct {
 	BatteryType     string `json:"batteryType"`
 	BatteryCapacity uint16 `json:"batteryCapacity"`
 
-	EqualizationVoltage   float32 `json:"equalizationVoltage"`
-	BoostVoltage		  float32 `json:"boostVoltage"`
 	FloatVoltage		  float32 `json:"floatVoltage"`
+	EqualizationVoltage   float32 `json:"equalizationVoltage"`
+	EqualizationCycle     uint16  `json:"equalizationCycle"`
+	EqualizationDuration  uint16  `json:"equalizationDuration"`
+	BoostVoltage		  float32 `json:"boostVoltage"`
 	BoostReconnectVoltage float32 `json:"boostReconnectVoltage"`
+	BoostDuration         uint16  `json:"boostDuration"`
 }
 
 type ControllerQuery struct {
@@ -57,11 +60,22 @@ func (sc *SolarConfigurer) ConfigGet() gin.HandlerFunc {
 		floatVoltage := float32(binary.BigEndian.Uint16(data[4:6])) / 100
 		boostReconnectVoltage := float32(binary.BigEndian.Uint16(data[6:8])) / 100
 
+		data, _ = sc.modbusClient.ReadHoldingRegisters(0x9016, 1)
+		equalizationCycle := binary.BigEndian.Uint16(data[0:2])
+
+		data, _ = sc.modbusClient.ReadHoldingRegisters(0x906B, 2)
+		equalizationDuration := binary.BigEndian.Uint16(data[0:2])
+		boostDuration := binary.BigEndian.Uint16(data[2:4])
+
 		c.JSON(http.StatusOK, ControllerConfig{Time: time,
 			BatteryType: batteryTypeToString(batteryType),
-			BatteryCapacity: batteryCapacity, EqualizationVoltage: equalizationVoltage,
+			BatteryCapacity: batteryCapacity, 
+			EqualizationVoltage: equalizationVoltage,
+			EqualizationCycle: equalizationCycle,
 			BoostVoltage: boostVoltage, FloatVoltage: floatVoltage,
-			BoostReconnectVoltage: boostReconnectVoltage})
+			BoostReconnectVoltage: boostReconnectVoltage,
+			BoostDuration: boostDuration,
+			EqualizationDuration: equalizationDuration})
 	}
 }
 

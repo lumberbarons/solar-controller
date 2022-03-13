@@ -9,8 +9,8 @@ class Config extends React.Component {
     super(props);
 
     this.state = {config: {batteryType: "unknown", batteryCapacity: 0, time: "",
-                  boostVoltage: 0, equalizationVoltage: 0, floatVoltage: 0, 
-                  boostReconnectVoltage: 0}};
+                  boostVoltage: 0, equalizationVoltage: 0, equalizationCycle: 0, equalizationDuration: 0,
+                  floatVoltage: 0, boostReconnectVoltage: 0, boostDuration: 0}};
 
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleInputChange = this.handleInputChange.bind(this);
@@ -60,10 +60,15 @@ class Config extends React.Component {
     let batteryCapacity = this.state.config.batteryCapacity;
     let time = this.state.config.time;
 
-    let equalizationVoltage = this.state.config.equalizationVoltage;
-    let boostVoltage = this.state.config.boostVoltage;
     let floatVoltage = this.state.config.floatVoltage;
+
+    let equalizationVoltage = this.state.config.equalizationVoltage;
+    let equalizationCycle = this.state.config.equalizationCycle;
+    let equalizationDuration = this.state.config.equalizationDuration;
+    
+    let boostVoltage = this.state.config.boostVoltage;
     let boostReconnectVoltage = this.state.config.boostReconnectVoltage;
+    let boostDuration = this.state.config.boostDuration;
 
     return (
       <Container component="main" maxWidth="md">
@@ -115,7 +120,7 @@ class Config extends React.Component {
             />
           </Grid>
 
-          <Grid item xs={3}>
+          <Grid item xs={4}>
             <TextField
               required
               fullWidth
@@ -123,6 +128,30 @@ class Config extends React.Component {
               label="Equalization Voltage"
               name="equalizationVoltage"
               value={equalizationVoltage}
+              onChange={this.handleInputChange}
+            />
+          </Grid>
+
+          <Grid item xs={4}>
+            <TextField
+              required
+              fullWidth
+              id="outlined-required"
+              label="Equalization Cycle"
+              name="equalizationCycle"
+              value={equalizationCycle}
+              onChange={this.handleInputChange}
+            />
+          </Grid>
+
+          <Grid item xs={4}>
+            <TextField
+              required
+              fullWidth
+              id="outlined-required"
+              label="Equalization Duration"
+              name="equalizationDuration"
+              value={equalizationDuration}
               onChange={this.handleInputChange}
             />
           </Grid>
@@ -138,18 +167,6 @@ class Config extends React.Component {
               onChange={this.handleInputChange}
             />
           </Grid>
-          
-          <Grid item xs={3}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Float Voltage"
-              name="floatVoltage"
-              value={floatVoltage}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
 
           <Grid item xs={3}>
             <TextField
@@ -159,6 +176,30 @@ class Config extends React.Component {
               label="Boost Reconnect Voltage"
               name="boostReconnectVoltage"
               value={boostReconnectVoltage}
+              onChange={this.handleInputChange}
+            />
+          </Grid>
+
+          <Grid item xs={3}>
+            <TextField
+              required
+              fullWidth
+              id="outlined-required"
+              label="Boost Duration"
+              name="boostDuration"
+              value={boostDuration}
+              onChange={this.handleInputChange}
+            />
+          </Grid>
+          
+          <Grid item xs={3}>
+            <TextField
+              required
+              fullWidth
+              id="outlined-required"
+              label="Float Voltage"
+              name="floatVoltage"
+              value={floatVoltage}
               onChange={this.handleInputChange}
             />
           </Grid>
