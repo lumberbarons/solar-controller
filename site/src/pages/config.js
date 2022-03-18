@@ -8,9 +8,7 @@ class Config extends React.Component {
   constructor(props) {
     super(props);
 
-    this.state = {config: {batteryType: "unknown", batteryCapacity: 0, time: "",
-                  boostVoltage: 0, equalizationVoltage: 0, equalizationCycle: 0, equalizationDuration: 0,
-                  floatVoltage: 0, boostReconnectVoltage: 0, boostDuration: 0}};
+    this.state = {config: this.getEmptyConfig()};
 
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleInputChange = this.handleInputChange.bind(this);
@@ -19,38 +17,49 @@ class Config extends React.Component {
   componentDidMount() {
     axios.get(`/api/config`)
       .then(res => {
-        console.log(res.data);
-        this.setState({config: res.data});
+        let clone = JSON.parse(JSON.stringify(res.data));
+        this.setState({originalConfig: clone, config: res.data});
       }).catch(error => {
         console.log(JSON.stringify(error));
       });
+  }
+
+  getEmptyConfig() {
+    return {batteryType: "unknown", batteryCapacity: 0, time: "",
+        boostVoltage: 0, equalizationVoltage: 0, equalizationCycle: 0, equalizationDuration: 0,
+        floatVoltage: 0, boostReconnectVoltage: 0, boostDuration: 0};
   }
 
   handleInputChange(event) {
     const value = event.target.value;
     const name = event.target.name;
 
+    let config = this.state.config;
+    config[name] = value;
+
     this.setState({
-      [name]: value
+      config: config
     });
   }
 
   handleSubmit(event) {
     const payload = {};
 
-    /* axios.patch(`/api/config`, payload)
-      .then(res => {
-        let resultDecimal = res.data.result;
-        let resultHex = "0x" + resultDecimal.toString(16).padStart(4, '0');
-        this.setState({resultHex: resultHex, resultDecimal: resultDecimal});
-      }).catch(error => {
-        console.log(error.response.data);
-        console.log(error.response.status);
-        console.log(error.response.headers);
+    const originalConfig = this.state.originalConfig;
+    const config = this.state.config;
 
-        this.setState({resultHex: '', resultDecimal: 0, 
+    if(config.equalizationCycle !== originalConfig.equalizationCycle) {
+      payload.equalizationCycle = parseInt(config.equalizationCycle);
+    }
+
+    axios.patch(`/api/config`, payload)
+      .then(res => {
+        let clone = JSON.parse(JSON.stringify(res.data));
+        this.setState({originalConfig: clone, config: res.data});
+      }).catch(error => {
+        this.setState({config: this.getEmptyConfig(),
           error: `Failed, status code: ${error.response.status}`});
-      }); */
+      });
 
     event.preventDefault();
   }

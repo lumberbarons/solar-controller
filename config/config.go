@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type SolarConfigurer struct {
@@ -22,10 +23,9 @@ func NewSolarConfigurer(client modbus.Client) *SolarConfigurer {
 }
 
 type ControllerConfig struct {
-	Time            string `json:"time"`
-	BatteryType     string `json:"batteryType"`
-	BatteryCapacity uint16 `json:"batteryCapacity"`
-
+	Time                  string `json:"time"`
+	BatteryType    	      string `json:"batteryType"`
+	BatteryCapacity 	  uint16 `json:"batteryCapacity"`
 	FloatVoltage		  float32 `json:"floatVoltage"`
 	EqualizationVoltage   float32 `json:"equalizationVoltage"`
 	EqualizationCycle     uint16  `json:"equalizationCycle"`
@@ -43,40 +43,45 @@ type ControllerQuery struct {
 
 func (sc *SolarConfigurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 2)
-
-		batteryType := binary.BigEndian.Uint16(data[0:2])
-		batteryCapacity := binary.BigEndian.Uint16(data[2:4])
-
-		data, _ = sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
-
-		year := int(data[4]) + 2000
-		time := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
-			data[2], data[5], year, data[3], data[0], data[1])
-
-		data, _ = sc.modbusClient.ReadHoldingRegisters(0x9006, 4)
-		equalizationVoltage := float32(binary.BigEndian.Uint16(data[0:2])) / 100
-		boostVoltage := float32(binary.BigEndian.Uint16(data[2:4])) / 100
-		floatVoltage := float32(binary.BigEndian.Uint16(data[4:6])) / 100
-		boostReconnectVoltage := float32(binary.BigEndian.Uint16(data[6:8])) / 100
-
-		data, _ = sc.modbusClient.ReadHoldingRegisters(0x9016, 1)
-		equalizationCycle := binary.BigEndian.Uint16(data[0:2])
-
-		data, _ = sc.modbusClient.ReadHoldingRegisters(0x906B, 2)
-		equalizationDuration := binary.BigEndian.Uint16(data[0:2])
-		boostDuration := binary.BigEndian.Uint16(data[2:4])
-
-		c.JSON(http.StatusOK, ControllerConfig{Time: time,
-			BatteryType: batteryTypeToString(batteryType),
-			BatteryCapacity: batteryCapacity, 
-			EqualizationVoltage: equalizationVoltage,
-			EqualizationCycle: equalizationCycle,
-			BoostVoltage: boostVoltage, FloatVoltage: floatVoltage,
-			BoostReconnectVoltage: boostReconnectVoltage,
-			BoostDuration: boostDuration,
-			EqualizationDuration: equalizationDuration})
+		config, _ := sc.getConfig();
+		c.JSON(http.StatusOK, config)
 	}
+}
+
+func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
+	data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 2)
+
+	batteryType := binary.BigEndian.Uint16(data[0:2])
+	batteryCapacity := binary.BigEndian.Uint16(data[2:4])
+
+	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
+
+	year := int(data[4]) + 2000
+	time := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
+		data[2], data[5], year, data[3], data[0], data[1])
+
+	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9006, 4)
+	equalizationVoltage := float32(binary.BigEndian.Uint16(data[0:2])) / 100
+	boostVoltage := float32(binary.BigEndian.Uint16(data[2:4])) / 100
+	floatVoltage := float32(binary.BigEndian.Uint16(data[4:6])) / 100
+	boostReconnectVoltage := float32(binary.BigEndian.Uint16(data[6:8])) / 100
+
+	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9016, 1)
+	equalizationCycle := binary.BigEndian.Uint16(data[0:2])
+
+	data, _ = sc.modbusClient.ReadHoldingRegisters(0x906B, 2)
+	equalizationDuration := binary.BigEndian.Uint16(data[0:2])
+	boostDuration := binary.BigEndian.Uint16(data[2:4])
+
+	return ControllerConfig{Time: time,
+		BatteryType: batteryTypeToString(batteryType),
+		BatteryCapacity: batteryCapacity,
+		EqualizationVoltage: equalizationVoltage,
+		EqualizationCycle: equalizationCycle,
+		BoostVoltage: boostVoltage, FloatVoltage: floatVoltage,
+		BoostReconnectVoltage: boostReconnectVoltage,
+		BoostDuration: boostDuration,
+		EqualizationDuration: equalizationDuration}, nil
 }
 
 func batteryTypeToString(batteryType uint16) string {
@@ -96,17 +101,40 @@ func batteryTypeToString(batteryType uint16) string {
 
 func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		/* currentTime := time.Now()
+		var config ControllerConfig
+		err := c.BindJSON(&config)
+		if err != nil {
+			log.Warn("Config patch bad json request", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		currentTime := time.Now()
 
 		// min, sec, day, hour, year, month
 		data := []byte {byte(currentTime.Minute()), byte(currentTime.Second()),
 			byte(currentTime.Day()), byte(currentTime.Hour()),
 			byte(currentTime.Year() - 2000), byte(currentTime.Month())}
 
-		result, _ := sc.modbusClient.WriteMultipleRegisters(0x9013, 3, data)
-		log.Debugf("time write result: %x", result) */
+		_, err = sc.modbusClient.WriteMultipleRegisters(0x9013, 3, data)
+		if err != nil {
+			log.Warn("Failed to write date to controller")
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 
-		c.Status(http.StatusOK)
+		if config.EqualizationCycle > 0 {
+			log.Info("Writing equalization cycle to controller")
+			_, err = sc.modbusClient.WriteSingleRegister(0x9016, config.EqualizationCycle)
+			if err != nil {
+				log.Warn("Failed to write equalization cycle to controller")
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
+		newConfig, _ := sc.getConfig()
+		c.JSON(http.StatusOK, newConfig)
 	}
 }
 
