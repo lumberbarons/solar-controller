@@ -5,7 +5,7 @@ Description=epever-controller
 Type=simple
 Restart=always
 RestartSec=5s
-ExecStart=/usr/bin/epever-controller
+ExecStart=/usr/bin/epever-controller --config /etc/epever-controller/config.yaml
 
 [Install]
 WantedBy=multi-user.target
