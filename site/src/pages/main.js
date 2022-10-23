@@ -26,7 +26,7 @@ class Main extends React.Component {
   render() {
     const metrics = this.state.metrics;
 
-    let chargingStatus = "Unknown";
+    let chargingStatus;
     switch(metrics.chargingStatus) {
       case 0:
         chargingStatus = "Not charging";
@@ -39,6 +39,9 @@ class Main extends React.Component {
         break;
       case 3:
         chargingStatus = "Equalization";
+        break;
+      default:
+        chargingStatus = "Unknown";
         break;
     }
 

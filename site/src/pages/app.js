@@ -9,10 +9,6 @@ import Query from "./query";
 import Config from "./config";
 
 class App extends React.Component {
-  constructor(props) {
-    super(props);
-  }
-
   render() {
     return (
       <div>

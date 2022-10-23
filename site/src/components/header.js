@@ -21,11 +21,7 @@ const styles = theme => ({
   }
 });
 
-class Header extends React.Component {
-  constructor(props) {
-    super(props);
-  }
-  
+class Header extends React.Component {  
   render() {
     const { classes } = this.props;
 
