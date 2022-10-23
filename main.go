@@ -1,22 +1,53 @@
 package main
 
 import (
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
-	"github.com/lumberbarons/epever_controller/config"
-	"github.com/lumberbarons/epever_controller/metrics"
+	"github.com/lumberbarons/epever-controller/config"
+	"github.com/lumberbarons/epever-controller/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
+	"io/fs"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"time"
+	"gopkg.in/yaml.v3"
+	"embed"
 )
+
+//go:embed site/build
+var site embed.FS
+
+type Config struct {
+	EpeverController EpeverController `yaml:"epeverController"`
+}
+
+type EpeverController struct {
+	SerialPort string `yaml:"serialPort"`
+}
 
 func init() {
 	if os.Getenv("DEBUG") == "true" {
 		log.SetLevel(log.DebugLevel)
 	}
+}
+
+func loadConfigFile(configFilePath string) Config {
+	configFile, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config := Config{}
+
+	err = yaml.Unmarshal(configFile, &config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return config
 }
 
 func main() {
@@ -64,10 +95,19 @@ func main() {
 
 	r.GET("/api/config", configurer.ConfigGet())
 	r.PATCH("/api/config", configurer.ConfigPatch())
-	
 	r.POST("/api/query", configurer.QueryPost())
 
-	r.Use(static.Serve("/", static.LocalFile("/site", false)))
+	r.StaticFS("/", staticFS())
 
 	r.Run()
+}
+
+func staticFS() http.FileSystem {
+	sub, err := fs.Sub(site, "site/build")
+
+	if err != nil {
+		panic(err)
+	}
+
+	return http.FS(sub)
 }

@@ -1,6 +1,6 @@
-module github.com/lumberbarons/epever_controller
+module github.com/lumberbarons/epever-controller
 
-go 1.17
+go 1.18
 
 require (
 	github.com/gin-contrib/static v0.0.1
@@ -8,6 +8,7 @@ require (
 	github.com/goburrow/modbus v0.1.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/sirupsen/logrus v1.8.1
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 )
 
 require (

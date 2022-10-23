@@ -1,0 +1,2 @@
+epeverController:
+  serialPort: /dev/ttyXRUSB0

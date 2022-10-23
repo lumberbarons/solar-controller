@@ -1,0 +1,11 @@
+[Unit]
+Description=epever-controller
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5s
+ExecStart=/usr/bin/epever-controller
+
+[Install]
+WantedBy=multi-user.target
