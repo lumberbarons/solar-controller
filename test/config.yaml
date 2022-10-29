@@ -1,0 +1,3 @@
+epeverController:
+  serialPort: /dev/ttys004
+  httpPort: 8000

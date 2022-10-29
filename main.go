@@ -3,6 +3,8 @@ package main
 import (
 	"embed"
 	"flag"
+	"fmt"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	"github.com/lumberbarons/epever-controller/configuration"
@@ -21,8 +23,8 @@ import (
 var site embed.FS
 
 var (
-	configFilePath  *string
-	debugMode   *bool
+	configFilePath *string
+	debugMode  	   *bool
 )
 
 type Config struct {
@@ -31,6 +33,7 @@ type Config struct {
 
 type EpeverController struct {
 	SerialPort string `yaml:"serialPort"`
+	HttpPort   int    `yaml:"httpPort"`
 }
 
 func init() {
@@ -65,6 +68,8 @@ func main() {
 
 	if *debugMode {
 		log.SetLevel(log.DebugLevel)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	controllerConfig := loadConfigFile()
@@ -88,6 +93,7 @@ func main() {
 	prometheus.MustRegister()
 
 	r := gin.Default()
+	r.SetTrustedProxies(nil)
 
 	collector := metrics.NewSolarCollector(client)
 
@@ -107,21 +113,43 @@ func main() {
 	r.PATCH("/api/configuration", configurer.ConfigPatch())
 	r.POST("/api/query", configurer.QueryPost())
 
-	r.StaticFS("/", staticFS())
+	siteFS := EmbedFolder(site, "site/build", true)
+	r.Use(static.Serve("/", siteFS))
 
-	err = r.Run()
+	err = r.Run(fmt.Sprintf(":%v", controllerConfig.EpeverController.HttpPort))
 
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
 
-func staticFS() http.FileSystem {
-	sub, err := fs.Sub(site, "site/build")
+type embedFileSystem struct {
+	http.FileSystem
+	indexes bool
+}
 
+func (e embedFileSystem) Exists(prefix string, path string) bool {
+	f, err := e.Open(path)
+	if err != nil {
+		return false
+	}
+
+	s, _ := f.Stat()
+	if s.IsDir() && !e.indexes {
+		return false
+	}
+
+	return true
+}
+
+func EmbedFolder(fsEmbed embed.FS, targetPath string, index bool) static.ServeFileSystem {
+	subFS, err := fs.Sub(fsEmbed, targetPath)
 	if err != nil {
 		log.Fatalf("Failed to load static site: %v", err)
 	}
 
-	return http.FS(sub)
+	return embedFileSystem{
+		FileSystem: http.FS(subFS),
+		indexes:    index,
+	}
 }

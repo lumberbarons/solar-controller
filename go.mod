@@ -3,6 +3,7 @@ module github.com/lumberbarons/epever-controller
 go 1.18
 
 require (
+	github.com/gin-contrib/static v0.0.1
 	github.com/gin-gonic/gin v1.7.7
 	github.com/goburrow/modbus v0.1.0
 	github.com/prometheus/client_golang v1.11.0
