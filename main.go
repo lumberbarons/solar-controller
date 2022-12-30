@@ -109,8 +109,8 @@ func main() {
 
 	configurer := configuration.NewSolarConfigurer(client)
 
-	r.GET("/api/configuration", configurer.ConfigGet())
-	r.PATCH("/api/configuration", configurer.ConfigPatch())
+	r.GET("/api/config", configurer.ConfigGet())
+	r.PATCH("/api/config", configurer.ConfigPatch())
 	r.POST("/api/query", configurer.QueryPost())
 
 	siteFS := EmbedFolder(site, "site/build", true)
