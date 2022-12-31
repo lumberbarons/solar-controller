@@ -16,10 +16,9 @@ class Main extends React.Component {
   componentDidMount() {
     axios.get(`/api/metrics`)
       .then(res => {
-        console.log(res.data);
         this.setState({metrics: res.data});
       }).catch(error => {
-        console.log(JSON.stringify(error));
+        console.error(JSON.stringify(error));
       });
   }
   

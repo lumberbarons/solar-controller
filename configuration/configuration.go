@@ -133,6 +133,30 @@ func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 			}
 		}
 
+		if config.BoostVoltage > 0 {
+			boostVoltage := uint16(config.BoostVoltage * 100)
+			log.Info(fmt.Sprintf("Writing boost voltage of %v on controller", boostVoltage))
+
+			_, err = sc.modbusClient.WriteSingleRegister(0x9007, boostVoltage)
+			if err != nil {
+				log.Warn("Failed to write boost voltage to controller")
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
+		if config.FloatVoltage > 0 {
+			floatVoltage := uint16(config.FloatVoltage * 100)
+			log.Info(fmt.Sprintf("Writing float voltage of %v on controller", floatVoltage))
+
+			_, err = sc.modbusClient.WriteSingleRegister(0x9008, floatVoltage)
+			if err != nil {
+				log.Warn("Failed to write float voltage to controller")
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
 		newConfig, _ := sc.getConfig()
 		c.JSON(http.StatusOK, newConfig)
 	}

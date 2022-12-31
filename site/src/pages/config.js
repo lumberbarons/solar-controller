@@ -20,7 +20,7 @@ class Config extends React.Component {
         let clone = JSON.parse(JSON.stringify(res.data));
         this.setState({originalConfig: clone, config: res.data});
       }).catch(error => {
-        console.log(JSON.stringify(error));
+        console.error(JSON.stringify(error));
       });
   }
 
@@ -50,6 +50,14 @@ class Config extends React.Component {
 
     if(config.equalizationCycle !== originalConfig.equalizationCycle) {
       payload.equalizationCycle = parseInt(config.equalizationCycle);
+    }
+
+    if(config.boostVoltage !== originalConfig.boostVoltage) {
+      payload.boostVoltage = parseFloat(config.boostVoltage);
+    }
+
+    if(config.floatVoltage !== originalConfig.floatVoltage) {
+      payload.floatVoltage = parseFloat(config.floatVoltage);
     }
 
     axios.patch(`/api/config`, payload)

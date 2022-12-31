@@ -31,9 +31,7 @@ class Query extends React.Component {
         let resultHex = "0x" + resultDecimal.toString(16).padStart(4, '0');
         this.setState({resultHex: resultHex, resultDecimal: resultDecimal});
       }).catch(error => {
-        console.log(error.response.data);
-        console.log(error.response.status);
-        console.log(error.response.headers);
+        console.error(JSON.stringify(error));
 
         this.setState({resultHex: '', resultDecimal: 0, 
           error: `Failed, status code: ${error.response.status}`});
