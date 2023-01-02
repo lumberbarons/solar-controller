@@ -23,36 +23,55 @@ func NewSolarConfigurer(client modbus.Client) *SolarConfigurer {
 }
 
 type ControllerConfig struct {
-	Time                  string `json:"time"`
-	BatteryType    	      string `json:"batteryType"`
-	BatteryCapacity 	  uint16 `json:"batteryCapacity"`
-	FloatVoltage		  float32 `json:"floatVoltage"`
-	EqualizationVoltage   float32 `json:"equalizationVoltage"`
-	EqualizationCycle     uint16  `json:"equalizationCycle"`
-	EqualizationDuration  uint16  `json:"equalizationDuration"`
-	BoostVoltage		  float32 `json:"boostVoltage"`
-	BoostReconnectVoltage float32 `json:"boostReconnectVoltage"`
-	BoostDuration         uint16  `json:"boostDuration"`
+	Time                          string  `json:"time"`
+	BatteryType                   string  `json:"batteryType"`
+	BatteryCapacity               uint16  `json:"batteryCapacity"`
+	TempCompCoefficient           float32 `json:"tempCompCoefficient"`
+	BoostDuration                 uint16  `json:"boostDuration"`
+	EqualizationCycle             uint16  `json:"equalizationCycle"`
+	EqualizationDuration          uint16  `json:"equalizationDuration"`
+	BoostVoltage                  float32 `json:"boostVoltage"`
+	BoostReconnectChargingVoltage float32 `json:"boostReconnectChargingVoltage"`
+	FloatVoltage                  float32 `json:"floatVoltage"`
+	EqualizationVoltage           float32 `json:"equalizationVoltage"`
+	ChargingLimitVoltage          float32 `json:"chargingLimitVoltage"`
+	OverVoltDisconnectVoltage     float32 `json:"overVoltDisconnectVoltage"`
+	OverVoltReconnectVoltage      float32 `json:"overVoltReconnectVoltage"`
+	LowVoltDisconnectVoltage      float32 `json:"lowVoltDisconnectVoltage"`
+	LowVoltReconnectVoltage       float32 `json:"lowVoltReconnectVoltage"`
+	UnderVoltWarningVoltage       float32 `json:"underVoltWarningVoltage"`
+	UnderVoltReconnectVoltage     float32 `json:"underVoltWarningReconnectVoltage"`
+	DischargingLimitVoltage       float32 `json:"dischargingLimitVoltage"`
+	BatteryTempUpperLimit         float32 `json:"batteryTempUpperLimit"`
+	BatteryTempLowerLimit         float32 `json:"batteryTempLowerLimit"`
+	ControllerTempUpperLimit      float32 `json:"controllerTempUpperLimit"`
+	ControllerTempLowerLimit      float32 `json:"controllerTempLowerLimit"`
 }
 
 type ControllerQuery struct {
 	Register int    `json:"register"`
 	Address  string `json:"address"`
-	Result	 uint16 `json:"result"`
+	Result   uint16 `json:"result"`
 }
 
 func (sc *SolarConfigurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		config, _ := sc.getConfig();
+		config, _ := sc.getConfig()
 		c.JSON(http.StatusOK, config)
 	}
 }
 
+func (sc *SolarConfigurer) getFloatValue(data []byte, index int) float32 {
+	offset := index * 2
+	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / 100
+}
+
 func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
-	data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 2)
+	data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 3)
 
 	batteryType := binary.BigEndian.Uint16(data[0:2])
 	batteryCapacity := binary.BigEndian.Uint16(data[2:4])
+	tempCompCoefficient := sc.getFloatValue(data, 2)
 
 	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
 
@@ -60,11 +79,19 @@ func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
 	time := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
 		data[2], data[5], year, data[3], data[0], data[1])
 
-	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9006, 4)
-	equalizationVoltage := float32(binary.BigEndian.Uint16(data[0:2])) / 100
-	boostVoltage := float32(binary.BigEndian.Uint16(data[2:4])) / 100
-	floatVoltage := float32(binary.BigEndian.Uint16(data[4:6])) / 100
-	boostReconnectVoltage := float32(binary.BigEndian.Uint16(data[6:8])) / 100
+	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9003, 12)
+	overVoltDisconnectVoltage := sc.getFloatValue(data, 0)
+	chargingLimitVoltage := sc.getFloatValue(data, 1)
+	overVoltReconnectVoltage := sc.getFloatValue(data, 2)
+	equalizationVoltage := sc.getFloatValue(data, 3)
+	boostVoltage := sc.getFloatValue(data, 4)
+	floatVoltage := sc.getFloatValue(data, 5)
+	boostReconnectVoltage := sc.getFloatValue(data, 6)
+	lowVoltageReconnect := sc.getFloatValue(data, 7)
+	underVoltageRecover := sc.getFloatValue(data, 8)
+	underVoltageWarning := sc.getFloatValue(data, 9)
+	lowVoltageDisconnect := sc.getFloatValue(data, 10)
+	dischargingLimitVoltage := sc.getFloatValue(data, 11)
 
 	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9016, 1)
 	equalizationCycle := binary.BigEndian.Uint16(data[0:2])
@@ -73,15 +100,52 @@ func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
 	equalizationDuration := binary.BigEndian.Uint16(data[0:2])
 	boostDuration := binary.BigEndian.Uint16(data[2:4])
 
-	return ControllerConfig{Time: time,
-		BatteryType: batteryTypeToString(batteryType),
-		BatteryCapacity: batteryCapacity,
-		EqualizationVoltage: equalizationVoltage,
-		EqualizationCycle: equalizationCycle,
-		BoostVoltage: boostVoltage, FloatVoltage: floatVoltage,
-		BoostReconnectVoltage: boostReconnectVoltage,
-		BoostDuration: boostDuration,
-		EqualizationDuration: equalizationDuration}, nil
+	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9017, 4)
+	batteryTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[0:2]))) / 100
+	batteryTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[2:4]))) / 100
+	controllerTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[4:6]))) / 100
+	controllerTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[6:8]))) / 100
+
+	return ControllerConfig{
+		Time:                          time,
+		BatteryType:                   batteryTypeToString(batteryType),
+		BatteryCapacity:               batteryCapacity,
+		TempCompCoefficient:           tempCompCoefficient,
+		BoostDuration:                 boostDuration,
+		EqualizationDuration:          equalizationDuration,
+		EqualizationCycle:             equalizationCycle,
+		EqualizationVoltage:           equalizationVoltage,
+		BoostVoltage:                  boostVoltage,
+		FloatVoltage:                  floatVoltage,
+		BoostReconnectChargingVoltage: boostReconnectVoltage,
+		OverVoltDisconnectVoltage:     overVoltDisconnectVoltage,
+		ChargingLimitVoltage:          chargingLimitVoltage,
+		OverVoltReconnectVoltage:      overVoltReconnectVoltage,
+		LowVoltReconnectVoltage:       lowVoltageReconnect,
+		UnderVoltReconnectVoltage:     underVoltageRecover,
+		UnderVoltWarningVoltage:       underVoltageWarning,
+		LowVoltDisconnectVoltage:      lowVoltageDisconnect,
+		DischargingLimitVoltage:       dischargingLimitVoltage,
+		BatteryTempUpperLimit:         batteryTempUpperLimit,
+		BatteryTempLowerLimit:         batteryTempLowerLimit,
+		ControllerTempUpperLimit:      controllerTempUpperLimit,
+		ControllerTempLowerLimit:      controllerTempLowerLimit,
+	}, nil
+}
+
+func batteryTypeToInt(batteryType string) uint16 {
+	switch batteryType {
+	case "sealed":
+		return 1
+	case "gel":
+		return 2
+	case "flooded":
+		return 3
+	case "userDefined":
+		return 4
+	default:
+		return 0
+	}
 }
 
 func batteryTypeToString(batteryType uint16) string {
@@ -99,6 +163,18 @@ func batteryTypeToString(batteryType uint16) string {
 	}
 }
 
+func (sc *SolarConfigurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
+	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
+	_, err := sc.modbusClient.WriteSingleRegister(address, value)
+	if err != nil {
+		errorMessage := fmt.Sprintf("Failed to write %v of %v to controller", description, value)
+		log.Warn(errorMessage, err.Error())
+
+		c.JSON(http.StatusBadRequest, gin.H{"message": errorMessage})
+		return
+	}
+}
+
 func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var config ControllerConfig
@@ -112,7 +188,7 @@ func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 		currentTime := time.Now()
 
 		// min, sec, day, hour, year, month
-		data := []byte {byte(currentTime.Minute()), byte(currentTime.Second()),
+		data := []byte{byte(currentTime.Minute()), byte(currentTime.Second()),
 			byte(currentTime.Day()), byte(currentTime.Hour()),
 			byte(currentTime.Year() - 2000), byte(currentTime.Month())}
 
@@ -123,37 +199,43 @@ func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 			return
 		}
 
-		if config.EqualizationCycle > 0 {
-			log.Info("Writing equalization cycle to controller")
-			_, err = sc.modbusClient.WriteSingleRegister(0x9016, config.EqualizationCycle)
-			if err != nil {
-				log.Warn("Failed to write equalization cycle to controller")
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
+		userDefined := false
+		if config.BatteryType != "" {
+			batteryType := batteryTypeToInt(config.BatteryType)
+			sc.writeSingle(c, 0x9000, batteryType, "battery type")
+
+			userDefined = batteryType == 4
+		} else {
+			data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 1)
+			userDefined = binary.BigEndian.Uint16(data[0:2]) == 4
 		}
 
-		if config.BoostVoltage > 0 {
-			boostVoltage := uint16(config.BoostVoltage * 100)
-			log.Info(fmt.Sprintf("Writing boost voltage of %v on controller", boostVoltage))
-
-			_, err = sc.modbusClient.WriteSingleRegister(0x9007, boostVoltage)
-			if err != nil {
-				log.Warn("Failed to write boost voltage to controller")
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
+		if userDefined {
+			if config.EqualizationCycle > 0 {
+				sc.writeSingle(c, 0x9016, config.EqualizationCycle, "equalization cycle")
 			}
-		}
 
-		if config.FloatVoltage > 0 {
-			floatVoltage := uint16(config.FloatVoltage * 100)
-			log.Info(fmt.Sprintf("Writing float voltage of %v on controller", floatVoltage))
+			if config.EqualizationDuration > 0 {
+				sc.writeSingle(c, 0x906B, config.EqualizationDuration, "equalization duration")
+			}
 
-			_, err = sc.modbusClient.WriteSingleRegister(0x9008, floatVoltage)
-			if err != nil {
-				log.Warn("Failed to write float voltage to controller")
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
+			if config.EqualizationVoltage > 0 {
+				equalizationVoltage := uint16(config.EqualizationVoltage * 100)
+				sc.writeSingle(c, 0x9006, equalizationVoltage, "equalization voltage")
+			}
+
+			if config.BoostVoltage > 0 {
+				boostVoltage := uint16(config.BoostVoltage * 100)
+				sc.writeSingle(c, 0x9007, boostVoltage, "boost voltage")
+			}
+
+			if config.BoostDuration > 0 {
+				sc.writeSingle(c, 0x906C, config.BoostDuration, "boost duration")
+			}
+
+			if config.FloatVoltage > 0 {
+				floatVoltage := uint16(config.FloatVoltage * 100)
+				sc.writeSingle(c, 0x9008, floatVoltage, "float voltage")
 			}
 		}
 
@@ -182,13 +264,13 @@ func (sc *SolarConfigurer) QueryPost() gin.HandlerFunc {
 
 		var result []byte
 		if query.Register == 1 {
-			result,_ = sc.modbusClient.ReadCoils(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadCoils(uint16(address), 1)
 		} else if query.Register == 2 {
-			result,_ = sc.modbusClient.ReadDiscreteInputs(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadDiscreteInputs(uint16(address), 1)
 		} else if query.Register == 3 {
-			result,_ = sc.modbusClient.ReadHoldingRegisters(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadHoldingRegisters(uint16(address), 1)
 		} else if query.Register == 4 {
-			result,_ = sc.modbusClient.ReadInputRegisters(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadInputRegisters(uint16(address), 1)
 		} else {
 			log.Warn("Query bad register: ", query.Register)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown register"})
@@ -201,4 +283,3 @@ func (sc *SolarConfigurer) QueryPost() gin.HandlerFunc {
 		c.JSON(http.StatusOK, query)
 	}
 }
-

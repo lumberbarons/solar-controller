@@ -23,7 +23,8 @@ type SolarCollector struct {
 	panelCurrent *prometheus.Desc
 	panelPower   *prometheus.Desc
 
-	chargingPower *prometheus.Desc
+	chargingPower   *prometheus.Desc
+	chargingCurrent *prometheus.Desc
 
 	batteryVoltage    *prometheus.Desc
 	batterySOC        *prometheus.Desc
@@ -45,6 +46,7 @@ type ControllerStatus struct {
 	ArrayVoltage           float32   `json:"arrayVoltage"`
 	ArrayCurrent           float32   `json:"arrayCurrent"`
 	ArrayPower             float32   `json:"arrayPower"`
+	ChargingCurrent		   float32   `json:"chargingCurrent"`
 	ChargingPower		   float32   `json:"chargingPower"`
 	BatteryVoltage         float32   `json:"batteryVoltage"`
 	BatterySOC             int32     `json:"batterySoc"`
@@ -89,6 +91,12 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 		chargingPower: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "charging_power"),
 			"Battery charging power (W).",
+			nil,
+			nil,
+		),
+		chargingCurrent: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "charging_current"),
+			"Battery charging current (A).",
 			nil,
 			nil,
 		),
@@ -145,18 +153,6 @@ func NewSolarCollector(client modbus.Client) *SolarCollector {
 		energyGeneratedMonthly: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "energy_generated_monthly"),
 			"Controller calculated monthly power generation, (kWh).",
-			nil,
-			nil,
-		),
-		energyGeneratedAnnual: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "energy_generated_annual"),
-			"Controller calculated annual power generation, (kWh).",
-			nil,
-			nil,
-		),
-		energyGeneratedTotal: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "energy_generated_total"),
-			"Controller calculated total power generation, (kWh).",
 			nil,
 			nil,
 		),
@@ -310,6 +306,7 @@ func (sc *SolarCollector) getStatus() (c ControllerStatus, err error) {
 	c.BatteryMinVoltage = sc.getValue(0x3303) / 100
 
 	c.ArrayPower = sc.getValue32(0x3102) / 100
+	c.ChargingCurrent = sc.getValue(0x3105) / 100
 	c.ChargingPower = sc.getValue32(0x3106) / 100
 
 	c.EnergyGeneratedDaily = sc.getValue32(0x330C) / 100

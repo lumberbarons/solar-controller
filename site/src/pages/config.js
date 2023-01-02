@@ -8,7 +8,7 @@ class Config extends React.Component {
   constructor(props) {
     super(props);
 
-    this.state = {config: this.getEmptyConfig()};
+    this.state = {config: undefined};
 
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleInputChange = this.handleInputChange.bind(this);
@@ -22,12 +22,6 @@ class Config extends React.Component {
       }).catch(error => {
         console.error(JSON.stringify(error));
       });
-  }
-
-  getEmptyConfig() {
-    return {batteryType: "unknown", batteryCapacity: 0, time: "",
-        boostVoltage: 0, equalizationVoltage: 0, equalizationCycle: 0, equalizationDuration: 0,
-        floatVoltage: 0, boostReconnectVoltage: 0, boostDuration: 0};
   }
 
   handleInputChange(event) {
@@ -48,12 +42,28 @@ class Config extends React.Component {
     const originalConfig = this.state.originalConfig;
     const config = this.state.config;
 
+    if(config.batteryType !== originalConfig.batteryType) {
+      payload.batteryType = config.batteryType;
+    }
+
     if(config.equalizationCycle !== originalConfig.equalizationCycle) {
       payload.equalizationCycle = parseInt(config.equalizationCycle);
     }
 
+    if(config.equalizationVoltage !== originalConfig.equalizationVoltage) {
+      payload.equalizationVoltage = parseFloat(config.equalizationVoltage);
+    }
+
+    if(config.equalizationDuration !== originalConfig.equalizationDuration) {
+      payload.equalizationDuration = parseFloat(config.equalizationDuration);
+    }
+
     if(config.boostVoltage !== originalConfig.boostVoltage) {
       payload.boostVoltage = parseFloat(config.boostVoltage);
+    }
+
+    if(config.boostDuration !== originalConfig.boostDuration) {
+      payload.boostDuration = parseInt(config.boostDuration);
     }
 
     if(config.floatVoltage !== originalConfig.floatVoltage) {
@@ -65,7 +75,7 @@ class Config extends React.Component {
         let clone = JSON.parse(JSON.stringify(res.data));
         this.setState({originalConfig: clone, config: res.data});
       }).catch(error => {
-        this.setState({config: this.getEmptyConfig(),
+        this.setState({config: undefined,
           error: `Failed, status code: ${error.response.status}`});
       });
 
@@ -73,169 +83,221 @@ class Config extends React.Component {
   }
   
   render() {
-    let batteryType = this.state.config.batteryType;
-    let batteryCapacity = this.state.config.batteryCapacity;
-    let time = this.state.config.time;
+    if(this.state.config) {
+      let config = this.state.config;
 
-    let floatVoltage = this.state.config.floatVoltage;
+      return (
+        <Container component="main" maxWidth="md">
+          <Box
+            mt={2}
+            component="form"
+            autoComplete="off"
+            onSubmit={this.handleSubmit}
+          >
+          <Grid container spacing={2}>
+            <Grid item xs={4}>
+              <FormControl fullWidth>
+                <InputLabel>Battery Type</InputLabel>
+                <Select
+                  name="batteryType"
+                  value={config.batteryType}
+                  label="Battery Type"
+                  onChange={this.handleInputChange}
+                >
+                  <MenuItem value="sealed">Sealed</MenuItem>
+                  <MenuItem value="gel">Gel</MenuItem>
+                  <MenuItem value="flooded">Flooded</MenuItem>
+                  <MenuItem value="userDefined">User Defined</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
 
-    let equalizationVoltage = this.state.config.equalizationVoltage;
-    let equalizationCycle = this.state.config.equalizationCycle;
-    let equalizationDuration = this.state.config.equalizationDuration;
-    
-    let boostVoltage = this.state.config.boostVoltage;
-    let boostReconnectVoltage = this.state.config.boostReconnectVoltage;
-    let boostDuration = this.state.config.boostDuration;
-
-    return (
-      <Container component="main" maxWidth="md">
-        <Box
-          mt={2}
-          component="form"
-          autoComplete="off"
-          onSubmit={this.handleSubmit}
-        >
-        <Grid container spacing={2}>
-          <Grid item xs={4}>
-            <FormControl fullWidth>
-              <InputLabel>Battery Type</InputLabel>
-              <Select
-                name="batteryType"
-                value={batteryType}
-                label="Battery Type"
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Battery Capacity (Ah)"
+                name="batteryCapacity"
+                value={config.batteryCapacity}
                 onChange={this.handleInputChange}
-              >
-                <MenuItem value="sealed">Sealed</MenuItem>
-                <MenuItem value="gel">Gel</MenuItem>
-                <MenuItem value="flooded">Flooded</MenuItem>
-                <MenuItem value="userDefined">User Defined</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
+              />
+            </Grid>
 
-          <Grid item xs={4}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Battery Capacity"
-              name="batteryCapacity"
-              value={batteryCapacity}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Time"
+                name="time"
+                value={config.time}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
 
-          <Grid item xs={4}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Time"
-              name="time"
-              value={time}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Equalization Voltage"
+                name="equalizationVoltage"
+                value={config.equalizationVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Equalization Cycle (Days)"
+                name="equalizationCycle"
+                value={config.equalizationCycle}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Equalization Duration (Minutes)"
+                name="equalizationDuration"
+                value={config.equalizationDuration}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
 
-          <Grid item xs={4}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Equalization Voltage"
-              name="equalizationVoltage"
-              value={equalizationVoltage}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Boost Voltage"
+                name="boostVoltage"
+                value={config.boostVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Boost Reconnect Voltage"
+                name="boostReconnectChargingVoltage"
+                value={config.boostReconnectChargingVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Boost Duration (Minutes)"
+                name="boostDuration"
+                value={config.boostDuration}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Float Voltage"
+                name="floatVoltage"
+                value={config.floatVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
 
-          <Grid item xs={4}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Equalization Cycle"
-              name="equalizationCycle"
-              value={equalizationCycle}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Over Volt Disconnect"
+                name="overVoltDisconnectVoltage"
+                value={config.overVoltDisconnectVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Over Volt Reconnect"
+                name="overVoltReconnectVoltage"
+                value={config.overVoltReconnectVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Low Volt Disconnect"
+                name="lowVoltDisconnectVoltage"
+                value={config.lowVoltDisconnectVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Low Volt Reconnect"
+                name="lowVoltReconnectVoltage"
+                value={config.lowVoltReconnectVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
 
-          <Grid item xs={4}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Equalization Duration"
-              name="equalizationDuration"
-              value={equalizationDuration}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Under Volt Warning"
+                name="underVoltWarningVoltage"
+                value={config.underVoltWarningVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Under Volt Reconnect"
+                name="underVoltWarningReconnectVoltage"
+                value={config.underVoltWarningReconnectVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <TextField
+                required
+                fullWidth
+                label="Discharging Limit"
+                name="dischargingLimitVoltage"
+                value={config.dischargingLimitVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
 
-          <Grid item xs={3}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Boost Voltage"
-              name="boostVoltage"
-              value={boostVoltage}
-              onChange={this.handleInputChange}
-            />
+            <Grid container justifyContent="flex-end">
+              <Box mt={2}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                >
+                  Save
+                </Button>
+              </Box>
+            </Grid>
           </Grid>
-
-          <Grid item xs={3}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Boost Reconnect Voltage"
-              name="boostReconnectVoltage"
-              value={boostReconnectVoltage}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
-
-          <Grid item xs={3}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Boost Duration"
-              name="boostDuration"
-              value={boostDuration}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
-          
-          <Grid item xs={3}>
-            <TextField
-              required
-              fullWidth
-              id="outlined-required"
-              label="Float Voltage"
-              name="floatVoltage"
-              value={floatVoltage}
-              onChange={this.handleInputChange}
-            />
-          </Grid>
-
-          <Grid container justifyContent="flex-end">
-            <Box mt={2}>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-              >
-                Save
-              </Button>
-            </Box>
-          </Grid>
-        </Grid>
-      </Box>
-    </Container>
-    );
+        </Box>
+      </Container>
+      );
+    } else {
+      return (
+        <Box></Box>
+      )
+    }
   }
 };
 

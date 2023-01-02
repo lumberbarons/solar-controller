@@ -21,7 +21,7 @@ def main():
         slave.set_values('real_time_data', 0x3102, [0xCBFF, 0x003]) # array power
         slave.set_values('real_time_data', 0x3104, 2425) # battery voltage
 
-        slave.set_values('real_time_data', 0x3106, [0xCB00, 0x003]) # charging power
+        slave.set_values('real_time_data', 0x3105, [650, 0xCB00, 0x003]) # charging current and power
 
         slave.set_values('real_time_data', 0x3110, [65536 - 240, 360]) # temperatures
         slave.set_values('real_time_data', 0x311A, 58) # battery soc
@@ -37,11 +37,15 @@ def main():
 
         slave.add_block('holding_registers', cst.HOLDING_REGISTERS, 0x9000, 0xFF)
 
-        slave.set_values('holding_registers', 0x9000, [3, 445]) # battery type and capacity
-
-        slave.set_values('holding_registers', 0x9006, [2700, 2850, 2900, 2725]) # various voltages
+        slave.set_values('holding_registers', 0x9000, [3, 445, 300]) # battery type, capacity, and temp comp coefficient
+        slave.set_values('holding_registers', 0x9003, [3200, 3000, 3001]) # over disconnect, charging limit, over reconnect
+        slave.set_values('holding_registers', 0x9006, [2700, 2850, 2900, 2725]) # equalization, boost, float, boost reconnect
+        slave.set_values('holding_registers', 0x900A, [2520, 2440, 2400, 2220]) # low reconnect, under recover, under warning, low disconnect
+        slave.set_values('holding_registers', 0x900E, [2120]) # discharge limit
 
         slave.set_values('holding_registers', 0x9016, [30]) # equalization charging cycle
+        slave.set_values('holding_registers', 0x9017, [6500, 61536, 10500, 61530]) # various temps
+        
         slave.set_values('holding_registers', 0x906B, [90, 75]) # equalization + boost durations
 
         now = datetime.datetime.now()
