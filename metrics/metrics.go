@@ -36,8 +36,6 @@ type SolarCollector struct {
 
 	energyGeneratedDaily   *prometheus.Desc
 	energyGeneratedMonthly *prometheus.Desc
-	energyGeneratedAnnual  *prometheus.Desc
-	energyGeneratedTotal   *prometheus.Desc
 
 	chargingStatus *prometheus.Desc
 }
@@ -233,6 +231,11 @@ func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 		prometheus.GaugeValue,
 		float64(status.ChargingPower),
 	)
+	ch <- prometheus.MustNewConstMetric(
+		sc.chargingCurrent,
+		prometheus.GaugeValue,
+		float64(status.ChargingCurrent),
+	)
 
 	ch <- prometheus.MustNewConstMetric(
 		sc.batteryVoltage,
@@ -275,16 +278,6 @@ func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 		sc.energyGeneratedMonthly,
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedMonthly),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		sc.energyGeneratedAnnual,
-		prometheus.GaugeValue,
-		float64(status.EnergyGeneratedAnnual),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		sc.energyGeneratedTotal,
-		prometheus.GaugeValue,
-		float64(status.EnergyGeneratedTotal),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
