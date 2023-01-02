@@ -70,6 +70,10 @@ class Config extends React.Component {
       payload.floatVoltage = parseFloat(config.floatVoltage);
     }
 
+    if(config.chargingLimitVoltage !== originalConfig.chargingLimitVoltage) {
+      payload.chargingLimitVoltage = parseFloat(config.chargingLimitVoltage);
+    }
+
     axios.patch(`/api/config`, payload)
       .then(res => {
         let clone = JSON.parse(JSON.stringify(res.data));
@@ -87,7 +91,7 @@ class Config extends React.Component {
       let config = this.state.config;
 
       return (
-        <Container component="main" maxWidth="md">
+        <Container component="main" maxWidth="lg">
           <Box
             mt={2}
             component="form"
@@ -111,7 +115,6 @@ class Config extends React.Component {
                 </Select>
               </FormControl>
             </Grid>
-
             <Grid item xs={4}>
               <TextField
                 required
@@ -122,7 +125,6 @@ class Config extends React.Component {
                 onChange={this.handleInputChange}
               />
             </Grid>
-
             <Grid item xs={4}>
               <TextField
                 required
@@ -134,37 +136,16 @@ class Config extends React.Component {
               />
             </Grid>
 
-            <Grid item xs={4}>
+            <Grid item xs={3}>
               <TextField
                 required
                 fullWidth
-                label="Equalization Voltage"
-                name="equalizationVoltage"
-                value={config.equalizationVoltage}
+                label="Charging Limit Voltage"
+                name="chargingLimitVoltage"
+                value={config.chargingLimitVoltage}
                 onChange={this.handleInputChange}
               />
             </Grid>
-            <Grid item xs={4}>
-              <TextField
-                required
-                fullWidth
-                label="Equalization Cycle (Days)"
-                name="equalizationCycle"
-                value={config.equalizationCycle}
-                onChange={this.handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField
-                required
-                fullWidth
-                label="Equalization Duration (Minutes)"
-                name="equalizationDuration"
-                value={config.equalizationDuration}
-                onChange={this.handleInputChange}
-              />
-            </Grid>
-
             <Grid item xs={3}>
               <TextField
                 required
@@ -189,12 +170,13 @@ class Config extends React.Component {
               <TextField
                 required
                 fullWidth
-                label="Boost Duration (Minutes)"
+                label="Boost Duration"
                 name="boostDuration"
                 value={config.boostDuration}
                 onChange={this.handleInputChange}
               />
             </Grid>
+
             <Grid item xs={3}>
               <TextField
                 required
@@ -202,6 +184,36 @@ class Config extends React.Component {
                 label="Float Voltage"
                 name="floatVoltage"
                 value={config.floatVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Equalization Voltage"
+                name="equalizationVoltage"
+                value={config.equalizationVoltage}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Equalization Cycle"
+                name="equalizationCycle"
+                value={config.equalizationCycle}
+                onChange={this.handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <TextField
+                required
+                fullWidth
+                label="Equalization Duration"
+                name="equalizationDuration"
+                value={config.equalizationDuration}
                 onChange={this.handleInputChange}
               />
             </Grid>
@@ -271,7 +283,7 @@ class Config extends React.Component {
               <TextField
                 required
                 fullWidth
-                label="Discharging Limit"
+                label="Discharging Limit Voltage"
                 name="dischargingLimitVoltage"
                 value={config.dischargingLimitVoltage}
                 onChange={this.handleInputChange}

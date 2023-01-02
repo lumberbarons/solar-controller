@@ -219,6 +219,11 @@ func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 				sc.writeSingle(c, 0x906B, config.EqualizationDuration, "equalization duration")
 			}
 
+			if config.ChargingLimitVoltage > 0 {
+				chargingLimitVoltage := uint16(config.ChargingLimitVoltage * 100)
+				sc.writeSingle(c, 0x9004, chargingLimitVoltage, "charging limit voltage")
+			}
+
 			if config.EqualizationVoltage > 0 {
 				equalizationVoltage := uint16(config.EqualizationVoltage * 100)
 				sc.writeSingle(c, 0x9006, equalizationVoltage, "equalization voltage")
