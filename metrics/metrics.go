@@ -53,9 +53,6 @@ type ControllerStatus struct {
 	BatteryMinVoltage      float32   `json:"batteryMinVoltage"`
 	DeviceTemp             float32   `json:"deviceTemp"`
 	EnergyGeneratedDaily   float32   `json:"energyGeneratedDaily"`
-	EnergyGeneratedMonthly float32   `json:"energyGeneratedMonthly"`
-	EnergyGeneratedAnnual  float32   `json:"energyGeneratedAnnually"`
-	EnergyGeneratedTotal   float32   `json:"energyGeneratedTotal"`
 	ChargingStatus		   int32     `json:"chargingStatus"`
 }
 
@@ -161,8 +158,9 @@ func (sc *SolarCollector) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		metrics, err := sc.getStatus()
 		if err != nil {
-			log.Error("failed to get metrics", err)
+			log.Error("failed to get metrics: ", err)
 			c.Status(http.StatusInternalServerError)
+			return
 		}
 
 		c.JSON(http.StatusOK, metrics)
@@ -274,11 +272,6 @@ func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedDaily),
 	)
-	ch <- prometheus.MustNewConstMetric(
-		sc.energyGeneratedMonthly,
-		prometheus.GaugeValue,
-		float64(status.EnergyGeneratedMonthly),
-	)
 
 	ch <- prometheus.MustNewConstMetric(
 		sc.chargingStatus,
@@ -290,66 +283,144 @@ func (sc *SolarCollector) collect(ch chan <- prometheus.Metric) error {
 }
 
 func (sc *SolarCollector) getStatus() (c ControllerStatus, err error) {
-	c.ArrayVoltage = sc.getValue(0x3100) / 100
-	c.ArrayCurrent = sc.getValue(0x3101) / 100
-	c.BatteryVoltage = sc.getValue(0x3104) / 100
-	c.BatterySOC = int32(sc.getValue(0x311A))
+	results, err := sc.getValueFloats(0x3100, 2)
+	if err != nil {
+		return c, err
+	}
 
-	c.BatteryMaxVoltage = sc.getValue(0x3302) / 100
-	c.BatteryMinVoltage = sc.getValue(0x3303) / 100
+	c.ArrayVoltage = results[0]
+	c.ArrayCurrent = results[0]
 
-	c.ArrayPower = sc.getValue32(0x3102) / 100
-	c.ChargingCurrent = sc.getValue(0x3105) / 100
-	c.ChargingPower = sc.getValue32(0x3106) / 100
+	c.ArrayCurrent, err = sc.getValueFloat(0x3101)
+	if err != nil {
+		return c, err
+	}
 
-	c.EnergyGeneratedDaily = sc.getValue32(0x330C) / 100
-	c.EnergyGeneratedMonthly = sc.getValue32(0x330E) / 100
-	c.EnergyGeneratedAnnual = sc.getValue32(0x3310) / 100
-	c.EnergyGeneratedTotal = sc.getValue32(0x3312) / 100
+	c.BatteryVoltage, err = sc.getValueFloat(0x3104)
+	if err != nil {
+		return c, err
+	}
 
-	controllerStatus := int32(sc.getValue(0x3201))
+	c.BatterySOC, _ = sc.getValueInt(0x311A)
+	if err != nil {
+		return c, err
+	}
+
+	results, err = sc.getValueFloats(0x3302, 2)
+	if err != nil {
+		return c, err
+	}
+
+	c.BatteryMaxVoltage = results[0]
+	c.BatteryMinVoltage = results[1]
+
+	c.ArrayPower, err = sc.getValueFloat32(0x3102)
+	if err != nil {
+		return c, err
+	}
+
+	c.ChargingCurrent, err = sc.getValueFloat(0x3105)
+	if err != nil {
+		return c, err
+	}
+
+	c.ChargingPower, err = sc.getValueFloat32(0x3106)
+	if err != nil {
+		return c, err
+	}
+
+	c.EnergyGeneratedDaily, err = sc.getValueFloat32(0x330C)
+	if err != nil {
+		return c, err
+	}
+
+	controllerStatus, err := sc.getValueInt(0x3201)
+	if err != nil {
+		return c, err
+	}
+
 	chargingStatus := (controllerStatus & 0x0C) >> 2
 	c.ChargingStatus = chargingStatus
 
-	bt := sc.getValue(0x3110)
+	tempResults, err := sc.getValueInts(0x3110, 2)
+	if err != nil {
+		return c, err
+	}
+
+	bt := tempResults[0]
+
 	if bt > 32768 {
 		bt = bt - 65536
 	}
-	c.BatteryTemp = bt / 100
+	c.BatteryTemp = float32(bt) / 100
 
-	dt := sc.getValue(0x3111)
+	dt := tempResults[1]
+
 	if dt > 32768 {
 		dt = dt - 65536
 	}
-	c.DeviceTemp = dt / 100
+	c.DeviceTemp = float32(dt) / 100
 
-	return
+	return c, nil
 }
 
-func (sc *SolarCollector) getValue(address uint16) float32 {
+func (sc *SolarCollector) getValueFloat(address uint16) (float32, error) {
 	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
-		log.Warnf("failed to get data, address: %d", address)
-		return 0 // todo
+		log.Warnf("Failed to get data, address: %d", address)
+		return 0, err
 	}
-	return float32(binary.BigEndian.Uint16(data))
+
+	return  float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
-func (sc *SolarCollector) getValue32(lowAddress uint16) float32 {
-	lowData, err := sc.modbusClient.ReadInputRegisters(lowAddress, 1)
+func (sc *SolarCollector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
+	data, err := sc.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
-		log.Warnf("failed to get data, address: %d", lowAddress)
-		return 0 // todo
+		log.Warnf("Failed to get data, address: %d", address)
+		return nil, err
 	}
 
-	highAddress := lowAddress + 1
-
-	highData, err := sc.modbusClient.ReadInputRegisters(highAddress, 1)
-	if err != nil {
-		log.Warnf("failed to get data, address: %d", highAddress)
-		return 0 // todo
+	results := make([]float32, quantity)
+	for i := 0; i < int(quantity); i++ {
+		results[i] = float32(binary.BigEndian.Uint16(data[i * 2:i * 2 + 2])) / 100
 	}
 
-	swappedData := append(highData,lowData...)
-	return float32(binary.BigEndian.Uint32(swappedData))
+	return results, nil
+}
+
+func (sc *SolarCollector) getValueInt(address uint16) (int32, error) {
+	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
+	if err != nil {
+		log.Warnf("Failed to get data, address: %d", address)
+		return 0, err
+	}
+	return int32(binary.BigEndian.Uint16(data)), nil
+}
+
+func (sc *SolarCollector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
+	data, err := sc.modbusClient.ReadInputRegisters(address, quantity)
+	if err != nil {
+		log.Warnf("Failed to get data, address: %d", address)
+		return nil, err
+	}
+
+	results := make([]int32, quantity)
+	for i := 0; i < int(quantity); i++ {
+		results[i] = int32(binary.BigEndian.Uint16(data[i * 2:i * 2 + 2]))
+	}
+
+	return results, nil
+}
+
+func (sc *SolarCollector) getValueFloat32(address uint16) (float32, error) {
+	data, err := sc.modbusClient.ReadInputRegisters(address, 2)
+
+	if err != nil {
+		log.Warnf("Failed to get data, address: %d", address)
+		return 0, err
+	}
+
+	swappedData := append(data[2:4],data[0:2]...)
+	return float32(binary.BigEndian.Uint32(swappedData)) / 100, nil
 }

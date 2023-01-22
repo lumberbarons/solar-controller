@@ -86,12 +86,6 @@ class Main extends React.Component {
           <Grid item sm={2} xs={6}>
             <Metric title="Generated (Today)" value={metrics.energyGeneratedDaily} unit="KWh" />
           </Grid>
-          <Grid item sm={2} xs={6}>
-            <Metric title="Generated (Month)" value={metrics.energyGeneratedMonthly} unit="KWh" />
-          </Grid>
-          <Grid item sm={2} xs={6}>
-            <Metric title="Generated (Year)" value={metrics.energyGeneratedAnnually} unit="KWh" />
-          </Grid>
         </Grid>
       </Box>
     );
