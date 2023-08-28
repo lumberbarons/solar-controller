@@ -1,3 +1,4 @@
 epeverController:
   serialPort: /dev/ttyXRUSB0
   httpPort: 8080
+  collectionPeriod: 60
