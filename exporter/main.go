@@ -1,7 +1,7 @@
-package metrics
+package exporter
 
 import (
-	"github.com/lumberbarons/epever-controller/collector"
+	"github.com/lumberbarons/solar-controller/epever/collector"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
@@ -15,7 +15,7 @@ const (
 )
 
 type PrometheusEndpoint struct {
-	solarCollector *collector.SolarCollector
+	solarCollector *collector.EpeverCollector
 
 	scrapeFailures prometheus.Counter
 
@@ -42,7 +42,7 @@ type PrometheusEndpoint struct {
 	Handler http.Handler
 }
 
-func NewPrometheusEndpoint(collector *collector.SolarCollector) *PrometheusEndpoint {
+func NewPrometheusEndpoint(collector *collector.EpeverCollector) *PrometheusEndpoint {
 	prometheus.MustRegister()
 
 	endpoint := &PrometheusEndpoint{

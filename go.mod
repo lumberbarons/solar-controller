@@ -1,4 +1,4 @@
-module github.com/lumberbarons/epever-controller
+module github.com/lumberbarons/solar-controller
 
 go 1.18
 

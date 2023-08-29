@@ -29,10 +29,10 @@ nfpms:
       - rpm
     contents:
       - src: package/config.yaml
-        dst: /etc/epever-controller/config.yaml
+        dst: /etc/solar-controller/config.yaml
         type: config
-      - src: package/epever-controller.service
-        dst: /etc/systemd/system/epever-controller.service
+      - src: package/solar-controller.service
+        dst: /etc/systemd/system/solar-controller.service
     scripts:
       postinstall: "package/postinstall.sh"
       postremove: "package/postremove.sh"

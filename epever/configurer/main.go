@@ -1,4 +1,4 @@
-package configuration
+package configurer
 
 import (
 	"encoding/binary"
@@ -12,17 +12,17 @@ import (
 	"time"
 )
 
-type SolarConfigurer struct {
+type EpeverConfigurer struct {
 	modbusClient modbus.Client
 }
 
-func NewSolarConfigurer(client modbus.Client) *SolarConfigurer {
-	return &SolarConfigurer{
+func NewEpeverConfigurer(client modbus.Client) *EpeverConfigurer {
+	return &EpeverConfigurer{
 		modbusClient: client,
 	}
 }
 
-type ControllerConfig struct {
+type EpeverControllerConfig struct {
 	Time                          string  `json:"time"`
 	BatteryType                   string  `json:"batteryType"`
 	BatteryCapacity               uint16  `json:"batteryCapacity"`
@@ -48,25 +48,25 @@ type ControllerConfig struct {
 	ControllerTempLowerLimit      float32 `json:"controllerTempLowerLimit"`
 }
 
-type ControllerQuery struct {
+type EpeverControllerQuery struct {
 	Register int    `json:"register"`
 	Address  string `json:"address"`
 	Result   uint16 `json:"result"`
 }
 
-func (sc *SolarConfigurer) ConfigGet() gin.HandlerFunc {
+func (sc *EpeverConfigurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		config, _ := sc.getConfig()
 		c.JSON(http.StatusOK, config)
 	}
 }
 
-func (sc *SolarConfigurer) getFloatValue(data []byte, index int) float32 {
+func (sc *EpeverConfigurer) getFloatValue(data []byte, index int) float32 {
 	offset := index * 2
 	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / 100
 }
 
-func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
+func (sc *EpeverConfigurer) getConfig() (EpeverControllerConfig, error) {
 	data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 3)
 
 	batteryType := binary.BigEndian.Uint16(data[0:2])
@@ -106,7 +106,7 @@ func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
 	controllerTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[4:6]))) / 100
 	controllerTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[6:8]))) / 100
 
-	return ControllerConfig{
+	return EpeverControllerConfig{
 		Time:                          time,
 		BatteryType:                   batteryTypeToString(batteryType),
 		BatteryCapacity:               batteryCapacity,
@@ -163,7 +163,7 @@ func batteryTypeToString(batteryType uint16) string {
 	}
 }
 
-func (sc *SolarConfigurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
+func (sc *EpeverConfigurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
 	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
 	_, err := sc.modbusClient.WriteSingleRegister(address, value)
 	if err != nil {
@@ -175,9 +175,9 @@ func (sc *SolarConfigurer) writeSingle(c *gin.Context, address uint16, value uin
 	}
 }
 
-func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
+func (sc *EpeverConfigurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var config ControllerConfig
+		var config EpeverControllerConfig
 		err := c.BindJSON(&config)
 		if err != nil {
 			log.Warn("Config patch bad json request", err)
@@ -249,9 +249,9 @@ func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 	}
 }
 
-func (sc *SolarConfigurer) QueryPost() gin.HandlerFunc {
+func (sc *EpeverConfigurer) QueryPost() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var query ControllerQuery
+		var query EpeverControllerQuery
 		err := c.BindJSON(&query)
 		if err != nil {
 			log.Warn("Query bad json request")

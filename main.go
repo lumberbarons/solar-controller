@@ -6,16 +6,13 @@ import (
 	"fmt"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/goburrow/modbus"
-	"github.com/lumberbarons/epever-controller/collector"
-	"github.com/lumberbarons/epever-controller/configuration"
-	"github.com/lumberbarons/epever-controller/metrics"
+	"github.com/lumberbarons/solar-controller/epever"
+	"github.com/lumberbarons/solar-controller/exporter"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
-	"time"
 )
 
 //go:embed site/build
@@ -27,7 +24,7 @@ var (
 )
 
 type Config struct {
-	EpeverController EpeverController `yaml:"epeverController"`
+	SolarController SolarController `yaml:"solarController"`
 }
 
 type Mqtt struct {
@@ -37,11 +34,15 @@ type Mqtt struct {
 	TopicPrefix      string `yaml:"topicPrefix"`
 }
 
-type EpeverController struct {
-	SerialPort       string `yaml:"serialPort"`
-	HttpPort         int    `yaml:"httpPort"`
-	CollectionPeriod int64  `yaml:"collectionPeriod"`
-	Mqtt             Mqtt   `yaml:"mqtt"`
+type SolarController struct {
+	HttpPort int    `yaml:"httpPort"`
+	Mqtt     Mqtt   `yaml:"mqtt"`
+	Epever   Epever`yaml:"epever"`
+}
+
+type Epever struct {
+	SerialPort  string `yaml:"serialPort"`
+	CacheExpiry int64  `yaml:"cacheExpiry"`
 }
 
 func init() {
@@ -50,7 +51,7 @@ func init() {
 }
 
 func main() {
-	log.Info("Starting epever-controller")
+	log.Info("Starting solar-controller")
 
 	flag.Parse()
 
@@ -62,34 +63,31 @@ func main() {
 
 	controllerConfig := loadConfigFile()
 
-	handler := buildHandler(controllerConfig)
-	defer handler.Close()
-
-	client := modbus.NewClient(handler)
-
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
-	solarCollector := collector.NewSolarCollector(client, controllerConfig.EpeverController.CollectionPeriod)
-	prometheusEndpoint := metrics.NewPrometheusEndpoint(solarCollector)
+	epeverController := epever.NewEpeverCollector(
+		controllerConfig.SolarController.Epever.SerialPort,
+		controllerConfig.SolarController.Epever.CacheExpiry)
+
+	defer epeverController.Close()
+
+	prometheusExporter := exporter.NewPrometheusEndpoint(epeverController.EpeverCollector)
 
 	r.GET("/collector", func(c *gin.Context) {
-		prometheusEndpoint.Handler.ServeHTTP(c.Writer, c.Request)
+		prometheusExporter.Handler.ServeHTTP(c.Writer, c.Request)
 	})
 
-	r.GET("/api/metrics", solarCollector.MetricsGet())
-
-	configurer := configuration.NewSolarConfigurer(client)
-
-	r.GET("/api/config", configurer.ConfigGet())
-	r.PATCH("/api/config", configurer.ConfigPatch())
-	r.POST("/api/query", configurer.QueryPost())
+	r.GET("/api/metrics", epeverController.EpeverCollector.MetricsGet())
+	r.GET("/api/config", epeverController.EpeverConfigurer.ConfigGet())
+	r.PATCH("/api/config", epeverController.EpeverConfigurer.ConfigPatch())
+	r.POST("/api/query", epeverController.EpeverConfigurer.QueryPost())
 
 	siteFS := EmbedFolder(site, "site/build", true)
 	r.Use(static.Serve("/", siteFS))
 
-	log.Infof("Starting server on port %v", controllerConfig.EpeverController.HttpPort)
-	err := r.Run(fmt.Sprintf(":%v", controllerConfig.EpeverController.HttpPort))
+	log.Infof("Starting server on port %v", controllerConfig.SolarController.HttpPort)
+	err := r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HttpPort))
 
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
@@ -103,7 +101,7 @@ func loadConfigFile() Config {
 
 	configFile, err := ioutil.ReadFile(*configFilePath)
 	if err != nil {
-		log.Fatalf("Failed to load configuration file: %v", err)
+		log.Fatalf("Failed to load configurer file: %v", err)
 	}
 
 	config := Config{}
@@ -116,24 +114,7 @@ func loadConfigFile() Config {
 	return config
 }
 
-func buildHandler(controllerConfig Config) *modbus.RTUClientHandler {
-	handler := modbus.NewRTUClientHandler(controllerConfig.EpeverController.SerialPort)
 
-	handler.BaudRate = 115200
-	handler.DataBits = 8
-	handler.Parity = "N"
-	handler.StopBits = 1
-	handler.SlaveId = 1
-	handler.Timeout = 2 * time.Second
-
-	err := handler.Connect()
-
-	if err != nil {
-		log.Fatalf("Failed to connect to controller port: %v", err)
-	}
-
-	return handler
-}
 
 type embedFileSystem struct {
 	http.FileSystem

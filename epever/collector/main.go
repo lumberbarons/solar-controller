@@ -10,16 +10,16 @@ import (
 	"time"
 )
 
-type SolarCollector struct {
+type EpeverCollector struct {
 	mu sync.Mutex
 	modbusClient modbus.Client
 
-	collectionPeriod    int64
-	collectionTimestamp int64
-	cachedMetrics       *ControllerStatus
+	cacheExpiry    int64
+	cacheTimestamp int64
+	cachedMetrics  *EpeverControllerStatus
 }
 
-type ControllerStatus struct {
+type EpeverControllerStatus struct {
 	Timestamp              int64     `json:"timestamp"`
 	CollectionTime         float64   `json:"collectionTime"`
 	ArrayVoltage           float32   `json:"arrayVoltage"`
@@ -37,16 +37,16 @@ type ControllerStatus struct {
 	ChargingStatus		   int32     `json:"chargingStatus"`
 }
 
-func NewSolarCollector(client modbus.Client, collectionPeriod int64) *SolarCollector {
-	collector := &SolarCollector{
+func NewEpeverCollector(client modbus.Client, cacheExpiry int64) *EpeverCollector {
+	collector := &EpeverCollector{
 		modbusClient: client,
-		collectionPeriod: collectionPeriod,
+		cacheExpiry: cacheExpiry,
 	}
 
 	return collector
 }
 
-func (sc *SolarCollector) MetricsGet() gin.HandlerFunc {
+func (sc *EpeverCollector) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		metrics, err := sc.GetStatus()
 		if err != nil {
@@ -59,11 +59,11 @@ func (sc *SolarCollector) MetricsGet() gin.HandlerFunc {
 	}
 }
 
-func (sc *SolarCollector) GetStatus() (*ControllerStatus, error) {
+func (sc *EpeverCollector) GetStatus() (*EpeverControllerStatus, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	if sc.collectionTimestamp < time.Now().Unix() - sc.collectionPeriod {
+	if sc.cacheTimestamp < time.Now().Unix() - sc.cacheExpiry {
 		log.Info("cache expired, collecting metrics")
 
 		metrics, err := sc.collectMetrics()
@@ -71,17 +71,17 @@ func (sc *SolarCollector) GetStatus() (*ControllerStatus, error) {
 			return nil, err
 		}
 
-		sc.collectionTimestamp = metrics.Timestamp
+		sc.cacheTimestamp = metrics.Timestamp
 		sc.cachedMetrics = metrics
 	}
 
 	return sc.cachedMetrics, nil
 }
 
-func (sc *SolarCollector) collectMetrics() (*ControllerStatus, error) {
+func (sc *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	startTime := time.Now()
 
-	c := &ControllerStatus{
+	c := &EpeverControllerStatus{
 		Timestamp: startTime.Unix(),
 	}
 
@@ -168,7 +168,7 @@ func (sc *SolarCollector) collectMetrics() (*ControllerStatus, error) {
 	return c, nil
 }
 
-func (sc *SolarCollector) getValueFloat(address uint16) (float32, error) {
+func (sc *EpeverCollector) getValueFloat(address uint16) (float32, error) {
 	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -178,7 +178,7 @@ func (sc *SolarCollector) getValueFloat(address uint16) (float32, error) {
 	return  float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
-func (sc *SolarCollector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
+func (sc *EpeverCollector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
 	data, err := sc.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -193,7 +193,7 @@ func (sc *SolarCollector) getValueFloats(address uint16, quantity uint16) ([]flo
 	return results, nil
 }
 
-func (sc *SolarCollector) getValueInt(address uint16) (int32, error) {
+func (sc *EpeverCollector) getValueInt(address uint16) (int32, error) {
 	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -202,7 +202,7 @@ func (sc *SolarCollector) getValueInt(address uint16) (int32, error) {
 	return int32(binary.BigEndian.Uint16(data)), nil
 }
 
-func (sc *SolarCollector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
+func (sc *EpeverCollector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
 	data, err := sc.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -217,7 +217,7 @@ func (sc *SolarCollector) getValueInts(address uint16, quantity uint16) ([]int32
 	return results, nil
 }
 
-func (sc *SolarCollector) getValueFloat32(address uint16) (float32, error) {
+func (sc *EpeverCollector) getValueFloat32(address uint16) (float32, error) {
 	data, err := sc.modbusClient.ReadInputRegisters(address, 2)
 
 	if err != nil {

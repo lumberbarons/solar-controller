@@ -1,4 +1,5 @@
-epeverController:
-  serialPort: /dev/ttyXRUSB0
+solarController:
   httpPort: 8080
-  collectionPeriod: 60
+  epever:
+    serialPort: /dev/ttyXRUSB0
+    cacheExpiry: 30

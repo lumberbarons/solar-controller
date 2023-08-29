@@ -1,4 +1,4 @@
 #!/bin/bash
 
 systemctl daemon-reload
-systemctl enable epever-controller
+systemctl enable solar-controller
