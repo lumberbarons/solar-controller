@@ -2,12 +2,17 @@ package collector
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
 	"time"
+)
+
+const (
+	topicSuffix = "epever"
 )
 
 type EpeverCollector struct {
@@ -46,9 +51,9 @@ func NewEpeverCollector(client modbus.Client, cacheExpiry int64) *EpeverCollecto
 	return collector
 }
 
-func (sc *EpeverCollector) MetricsGet() gin.HandlerFunc {
+func (e *EpeverCollector) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		metrics, err := sc.GetStatus()
+		metrics, err := e.GetStatus()
 		if err != nil {
 			log.Error("failed to get metrics: ", err)
 			c.Status(http.StatusInternalServerError)
@@ -59,33 +64,51 @@ func (sc *EpeverCollector) MetricsGet() gin.HandlerFunc {
 	}
 }
 
-func (sc *EpeverCollector) GetStatus() (*EpeverControllerStatus, error) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
+func (e *EpeverCollector) GetStatus() (*EpeverControllerStatus, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	if sc.cacheTimestamp < time.Now().Unix() - sc.cacheExpiry {
+	if e.cacheTimestamp < time.Now().Unix() - e.cacheExpiry {
 		log.Info("cache expired, collecting metrics")
 
-		metrics, err := sc.collectMetrics()
+		metrics, err := e.collectMetrics()
 		if err != nil {
 			return nil, err
 		}
 
-		sc.cacheTimestamp = metrics.Timestamp
-		sc.cachedMetrics = metrics
+		e.cacheTimestamp = metrics.Timestamp
+		e.cachedMetrics = metrics
 	}
 
-	return sc.cachedMetrics, nil
+	return e.cachedMetrics, nil
 }
 
-func (sc *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
+func (e *EpeverCollector) GetStatusString() (string, error) {
+	status, err := e.GetStatus()
+	if err != nil {
+		return "", err
+	}
+
+	b, err := json.Marshal(status)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}
+
+func (e *EpeverCollector) GetTopicSuffix() string {
+	return topicSuffix
+}
+
+func (e *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	startTime := time.Now()
 
 	c := &EpeverControllerStatus{
 		Timestamp: startTime.Unix(),
 	}
 
-	results, err := sc.getValueFloats(0x3100, 2)
+	results, err := e.getValueFloats(0x3100, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -93,22 +116,22 @@ func (sc *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	c.ArrayVoltage = results[0]
 	c.ArrayCurrent = results[0]
 
-	c.ArrayCurrent, err = sc.getValueFloat(0x3101)
+	c.ArrayCurrent, err = e.getValueFloat(0x3101)
 	if err != nil {
 		return nil, err
 	}
 
-	c.BatteryVoltage, err = sc.getValueFloat(0x3104)
+	c.BatteryVoltage, err = e.getValueFloat(0x3104)
 	if err != nil {
 		return nil, err
 	}
 
-	c.BatterySOC, _ = sc.getValueInt(0x311A)
+	c.BatterySOC, _ = e.getValueInt(0x311A)
 	if err != nil {
 		return nil, err
 	}
 
-	results, err = sc.getValueFloats(0x3302, 2)
+	results, err = e.getValueFloats(0x3302, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -116,27 +139,27 @@ func (sc *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	c.BatteryMaxVoltage = results[0]
 	c.BatteryMinVoltage = results[1]
 
-	c.ArrayPower, err = sc.getValueFloat32(0x3102)
+	c.ArrayPower, err = e.getValueFloat32(0x3102)
 	if err != nil {
 		return nil, err
 	}
 
-	c.ChargingCurrent, err = sc.getValueFloat(0x3105)
+	c.ChargingCurrent, err = e.getValueFloat(0x3105)
 	if err != nil {
 		return nil, err
 	}
 
-	c.ChargingPower, err = sc.getValueFloat32(0x3106)
+	c.ChargingPower, err = e.getValueFloat32(0x3106)
 	if err != nil {
 		return nil, err
 	}
 
-	c.EnergyGeneratedDaily, err = sc.getValueFloat32(0x330C)
+	c.EnergyGeneratedDaily, err = e.getValueFloat32(0x330C)
 	if err != nil {
 		return nil, err
 	}
 
-	controllerStatus, err := sc.getValueInt(0x3201)
+	controllerStatus, err := e.getValueInt(0x3201)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +167,7 @@ func (sc *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	chargingStatus := (controllerStatus & 0x0C) >> 2
 	c.ChargingStatus = chargingStatus
 
-	tempResults, err := sc.getValueInts(0x3110, 2)
+	tempResults, err := e.getValueInts(0x3110, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -168,8 +191,8 @@ func (sc *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	return c, nil
 }
 
-func (sc *EpeverCollector) getValueFloat(address uint16) (float32, error) {
-	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
+func (e *EpeverCollector) getValueFloat(address uint16) (float32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
 		return 0, err
@@ -178,8 +201,8 @@ func (sc *EpeverCollector) getValueFloat(address uint16) (float32, error) {
 	return  float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
-func (sc *EpeverCollector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
-	data, err := sc.modbusClient.ReadInputRegisters(address, quantity)
+func (e *EpeverCollector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
 		return nil, err
@@ -193,8 +216,8 @@ func (sc *EpeverCollector) getValueFloats(address uint16, quantity uint16) ([]fl
 	return results, nil
 }
 
-func (sc *EpeverCollector) getValueInt(address uint16) (int32, error) {
-	data, err := sc.modbusClient.ReadInputRegisters(address, 1)
+func (e *EpeverCollector) getValueInt(address uint16) (int32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
 		return 0, err
@@ -202,8 +225,8 @@ func (sc *EpeverCollector) getValueInt(address uint16) (int32, error) {
 	return int32(binary.BigEndian.Uint16(data)), nil
 }
 
-func (sc *EpeverCollector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
-	data, err := sc.modbusClient.ReadInputRegisters(address, quantity)
+func (e *EpeverCollector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
 		return nil, err
@@ -217,8 +240,8 @@ func (sc *EpeverCollector) getValueInts(address uint16, quantity uint16) ([]int3
 	return results, nil
 }
 
-func (sc *EpeverCollector) getValueFloat32(address uint16) (float32, error) {
-	data, err := sc.modbusClient.ReadInputRegisters(address, 2)
+func (e *EpeverCollector) getValueFloat32(address uint16) (float32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(address, 2)
 
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)

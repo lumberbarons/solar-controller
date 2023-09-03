@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/epever"
 	"github.com/lumberbarons/solar-controller/exporter"
+	"github.com/lumberbarons/solar-controller/publisher"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"io/fs"
@@ -27,22 +28,10 @@ type Config struct {
 	SolarController SolarController `yaml:"solarController"`
 }
 
-type Mqtt struct {
-	Host             string `yaml:"host"`
-	Username         string `yaml:"username"`
-	Password         string `yaml:"password"`
-	TopicPrefix      string `yaml:"topicPrefix"`
-}
-
 type SolarController struct {
-	HttpPort int    `yaml:"httpPort"`
-	Mqtt     Mqtt   `yaml:"mqtt"`
-	Epever   Epever`yaml:"epever"`
-}
-
-type Epever struct {
-	SerialPort  string `yaml:"serialPort"`
-	CacheExpiry int64  `yaml:"cacheExpiry"`
+	HttpPort int                         `yaml:"httpPort"`
+	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
+	Epever   epever.EpeverConfiguration  `yaml:"epever"`
 }
 
 func init() {
@@ -66,11 +55,17 @@ func main() {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
-	epeverController := epever.NewEpeverCollector(
-		controllerConfig.SolarController.Epever.SerialPort,
-		controllerConfig.SolarController.Epever.CacheExpiry)
-
+	epeverController, err := epever.NewEpeverController(controllerConfig.SolarController.Epever)
+	if err != nil {
+		log.Fatalf("failed to create epever controller: %v", err)
+	}
 	defer epeverController.Close()
+
+	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt, epeverController.EpeverCollector)
+	if err != nil {
+		log.Fatalf("failed to create publisher: %v", err)
+	}
+	defer mqttPublisher.Close()
 
 	prometheusExporter := exporter.NewPrometheusEndpoint(epeverController.EpeverCollector)
 
@@ -78,17 +73,14 @@ func main() {
 		prometheusExporter.Handler.ServeHTTP(c.Writer, c.Request)
 	})
 
-	r.GET("/api/metrics", epeverController.EpeverCollector.MetricsGet())
-	r.GET("/api/config", epeverController.EpeverConfigurer.ConfigGet())
-	r.PATCH("/api/config", epeverController.EpeverConfigurer.ConfigPatch())
-	r.POST("/api/query", epeverController.EpeverConfigurer.QueryPost())
+	epeverController.RegisterEndpoints(r)
 
 	siteFS := EmbedFolder(site, "site/build", true)
 	r.Use(static.Serve("/", siteFS))
 
 	log.Infof("Starting server on port %v", controllerConfig.SolarController.HttpPort)
-	err := r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HttpPort))
 
+	err = r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HttpPort))
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

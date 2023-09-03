@@ -1,6 +1,8 @@
 package epever
 
 import (
+	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	"github.com/lumberbarons/solar-controller/epever/collector"
 	"github.com/lumberbarons/solar-controller/epever/configurer"
@@ -8,32 +10,19 @@ import (
 	"time"
 )
 
+type EpeverConfiguration struct {
+	SerialPort  string `yaml:"serialPort"`
+	CacheExpiry int64  `yaml:"cacheExpiry"`
+}
+
 type EpeverController struct {
 	handler *modbus.RTUClientHandler
 	EpeverCollector *collector.EpeverCollector
 	EpeverConfigurer *configurer.EpeverConfigurer
 }
 
-func NewEpeverCollector(serialPort string, cacheExpiry int64) *EpeverController {
-	handler := buildHandler(serialPort)
-	client := modbus.NewClient(handler)
-
-	epeverCollector := collector.NewEpeverCollector(client, cacheExpiry)
-	epeverConfigurer := configurer.NewEpeverConfigurer(client)
-
-	return &EpeverController{
-		handler: handler,
-		EpeverCollector: epeverCollector,
-		EpeverConfigurer: epeverConfigurer,
-	}
-}
-
-func (e *EpeverController) Close() {
-	e.handler.Close()
-}
-
-func buildHandler(serialPort string) *modbus.RTUClientHandler {
-	handler := modbus.NewRTUClientHandler(serialPort)
+func NewEpeverController(config EpeverConfiguration) (*EpeverController, error) {
+	handler := modbus.NewRTUClientHandler(config.SerialPort)
 
 	handler.BaudRate = 115200
 	handler.DataBits = 8
@@ -45,8 +34,30 @@ func buildHandler(serialPort string) *modbus.RTUClientHandler {
 	err := handler.Connect()
 
 	if err != nil {
-		log.Fatalf("Failed to connect to controller port: %v", err)
+		return nil, fmt.Errorf("failed to connect to epever: %w", err)
 	}
 
-	return handler
+	client := modbus.NewClient(handler)
+
+	epeverCollector := collector.NewEpeverCollector(client, config.CacheExpiry)
+	epeverConfigurer := configurer.NewEpeverConfigurer(client)
+
+	log.Infof("connected to epever %s", config.SerialPort)
+
+	return &EpeverController{
+		handler: handler,
+		EpeverCollector: epeverCollector,
+		EpeverConfigurer: epeverConfigurer,
+	},nil
+}
+
+func (e *EpeverController) RegisterEndpoints(r *gin.Engine) {
+	r.GET("/api/epever/metrics", e.EpeverCollector.MetricsGet())
+	r.GET("/api/epever/config", e.EpeverConfigurer.ConfigGet())
+	r.PATCH("/api/epever/config", e.EpeverConfigurer.ConfigPatch())
+	r.POST("/api/epever/query", e.EpeverConfigurer.QueryPost())
+}
+
+func (e *EpeverController) Close() {
+	e.handler.Close()
 }
