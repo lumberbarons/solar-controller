@@ -15,7 +15,7 @@ class Config extends React.Component {
   }
 
   componentDidMount() {
-    axios.get(`/api/config`)
+    axios.get(`/api/epever/config`)
       .then(res => {
         let clone = JSON.parse(JSON.stringify(res.data));
         this.setState({originalConfig: clone, config: res.data});
@@ -74,7 +74,7 @@ class Config extends React.Component {
       payload.chargingLimitVoltage = parseFloat(config.chargingLimitVoltage);
     }
 
-    axios.patch(`/api/config`, payload)
+    axios.patch(`/api/epever/config`, payload)
       .then(res => {
         let clone = JSON.parse(JSON.stringify(res.data));
         this.setState({originalConfig: clone, config: res.data});

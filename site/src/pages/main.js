@@ -14,7 +14,7 @@ class Main extends React.Component {
   }
 
   componentDidMount() {
-    axios.get(`/api/metrics`)
+    axios.get(`/api/epever/metrics`)
       .then(res => {
         this.setState({metrics: res.data});
       }).catch(error => {
