@@ -2,248 +2,143 @@ package epever
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	log "github.com/sirupsen/logrus"
-)
-
-const (
-	namespace = "epever"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type PrometheusCollector struct {
-	epeverCollector *Collector
+	failures prometheus.Counter
 
-	scrapeFailures prometheus.Counter
+	panelVoltage prometheus.Gauge
+	panelCurrent prometheus.Gauge
+	panelPower   prometheus.Gauge
 
-	panelVoltage *prometheus.Desc
-	panelCurrent *prometheus.Desc
-	panelPower   *prometheus.Desc
+	chargingPower   prometheus.Gauge
+	chargingCurrent prometheus.Gauge
 
-	chargingPower   *prometheus.Desc
-	chargingCurrent *prometheus.Desc
+	batteryVoltage    prometheus.Gauge
+	batterySoc        prometheus.Gauge
+	batteryTemp       prometheus.Gauge
+	batteryMinVoltage prometheus.Gauge
+	batteryMaxVoltage prometheus.Gauge
 
-	batteryVoltage    *prometheus.Desc
-	batterySOC        *prometheus.Desc
-	batteryTemp       *prometheus.Desc
-	batteryMaxVoltage *prometheus.Desc
-	batteryMinVoltage *prometheus.Desc
+	deviceTemp prometheus.Gauge
 
-	deviceTemp *prometheus.Desc
+	energyGeneratedDaily   prometheus.Gauge
 
-	energyGeneratedDaily   *prometheus.Desc
-	energyGeneratedMonthly *prometheus.Desc
-
-	chargingStatus *prometheus.Desc
+	chargingStatus prometheus.Gauge
 }
 
-func NewPrometheusCollector(collector *Collector) *PrometheusCollector {
+func NewPrometheusCollector() *PrometheusCollector {
 	endpoint := &PrometheusCollector{
-		epeverCollector: collector,
-
-		scrapeFailures: prometheus.NewCounter(prometheus.CounterOpts{
+		failures: promauto.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
-			Name:      "controller_comm_failures_total",
-			Help:      "Number of communications errors while connecting to the solar controller.",
+			Name:      "failures",
+			Help:      "Number of errors while connecting to the epever controller.",
 		}),
-		panelVoltage: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "panel_voltage"),
-			"Solar panel voltage (V).",
-			nil,
-			nil,
-		),
-		panelCurrent: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "panel_current"),
-			"Solar panel current (A).",
-			nil,
-			nil,
-		),
-		panelPower: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "panel_power"),
-			"Solar panel power (W).",
-			nil,
-			nil,
-		),
-		chargingPower: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "charging_power"),
-			"Battery charging power (W).",
-			nil,
-			nil,
-		),
-		chargingCurrent: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "charging_current"),
-			"Battery charging current (A).",
-			nil,
-			nil,
-		),
-		chargingStatus: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "charging_status"),
-			"Charging status.",
-			nil,
-			nil,
-		),
-		batteryVoltage: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "battery_voltage"),
-			"Battery voltage (V).",
-			nil,
-			nil,
-		),
-		batterySOC: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "battery_soc"),
-			"Battery state of charge (%).",
-			nil,
-			nil,
-		),
-		batteryTemp: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "battery_temp"),
-			"Battery temperature (C).",
-			nil,
-			nil,
-		),
-		batteryMaxVoltage: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "battery_max_voltage"),
-			"Maximum battery voltage (V).",
-			nil,
-			nil,
-		),
-		batteryMinVoltage: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "battery_min_voltage"),
-			"Minimum battery voltage (V).",
-			nil,
-			nil,
-		),
 
-		deviceTemp: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "device_temp"),
-			"Controller temperature (C).",
-			nil,
-			nil,
-		),
+		panelVoltage: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "panel_voltage",
+			Help:      "Solar panel voltage (V).",
+		}),
 
-		energyGeneratedDaily: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "energy_generated_daily"),
-			"Controller calculated daily power generation, (kWh).",
-			nil,
-			nil,
-		),
-		energyGeneratedMonthly: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "energy_generated_monthly"),
-			"Controller calculated monthly power generation, (kWh).",
-			nil,
-			nil,
-		),
+		panelCurrent: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "panel_current",
+			Help:      "Solar panel current (A).",
+		}),
+
+		panelPower: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "panel_power",
+			Help:      "Solar panel power (W).",
+		}),
+
+		chargingPower: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "charging_power",
+			Help:      "Battery charging power (W).",
+		}),
+
+		chargingCurrent: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "charging_current",
+			Help:      "Battery charging current (A).",
+		}),
+
+		batteryVoltage: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "battery_voltage",
+			Help:      "Battery voltage (V).",
+		}),
+
+		batterySoc: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "battery_soc",
+			Help:      "BBattery state of charge (%).",
+		}),
+
+		batteryTemp: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "battery_temp",
+			Help:      "Battery temperature (C).",
+		}),
+
+		batteryMinVoltage: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "battery_min_voltage",
+			Help:      "Minimum battery voltage (V).",
+		}),
+
+		batteryMaxVoltage: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "battery_max_voltage",
+			Help:      "Maximum battery voltage (V).",
+		}),
+
+		deviceTemp: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "device_temp",
+			Help:      "Controller temperature (C).",
+		}),
+
+		energyGeneratedDaily: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "energy_generated_daily",
+			Help:      "Controller calculated daily power generation, (kWh).",
+		}),
+
+		chargingStatus: promauto.NewGauge(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "charging_status",
+			Help:      "Charging status.",
+		}),
 	}
 
 	return endpoint
 }
 
-func (e *PrometheusCollector) Describe(ch chan <- *prometheus.Desc) {
-	ds := []*prometheus.Desc{
-		e.panelVoltage,
-		e.panelCurrent,
-		e.panelPower,
-		e.chargingPower,
-		e.chargingCurrent,
-		e.batteryVoltage,
-		e.batterySOC,
-		e.batteryTemp,
-		e.batteryMaxVoltage,
-		e.batteryMinVoltage,
-		e.deviceTemp,
-		e.energyGeneratedDaily,
-		e.energyGeneratedMonthly,
-		e.chargingStatus,
-	}
-
-	for _, d := range ds {
-		ch <- d
-	}
+func (e *PrometheusCollector) IncrementFailures() {
+	e.failures.Inc()
 }
 
-func (e *PrometheusCollector) Collect(ch chan <- prometheus.Metric) {
-	if err := e.collect(ch); err != nil {
-		log.Printf("Error getting solar controller data: %s", err)
-		e.scrapeFailures.Inc()
-		e.scrapeFailures.Collect(ch)
-	}
+func (e *PrometheusCollector) SetMetrics(status *ControllerStatus) {
+	e.panelVoltage.Set(float64(status.ArrayVoltage))
+	e.panelCurrent.Set(float64(status.ArrayCurrent))
+	e.panelPower.Set(float64(status.ArrayPower))
 
-	return
-}
+	e.chargingPower.Set(float64(status.ChargingPower))
+	e.chargingCurrent.Set(float64(status.ChargingCurrent))
 
-func (e *PrometheusCollector) collect(ch chan <- prometheus.Metric) error {
-	status, err :=  e.epeverCollector.GetStatus()
-	if err != nil {
-		return err
-	}
+	e.batteryVoltage.Set(float64(status.BatteryVoltage))
+	e.batterySoc.Set(float64(status.BatterySOC))
+	e.batteryTemp.Set(float64(status.BatteryTemp))
+	e.batteryMinVoltage.Set(float64(status.BatteryMinVoltage))
+	e.batteryMaxVoltage.Set(float64(status.BatteryMaxVoltage))
 
-	ch <- prometheus.MustNewConstMetric(
-		e.panelVoltage,
-		prometheus.GaugeValue,
-		float64(status.ArrayVoltage),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.panelCurrent,
-		prometheus.GaugeValue,
-		float64(status.ArrayCurrent),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.panelPower,
-		prometheus.GaugeValue,
-		float64(status.ArrayPower),
-	)
+	e.deviceTemp.Set(float64(status.DeviceTemp))
 
-	ch <- prometheus.MustNewConstMetric(
-		e.chargingPower,
-		prometheus.GaugeValue,
-		float64(status.ChargingPower),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.chargingCurrent,
-		prometheus.GaugeValue,
-		float64(status.ChargingCurrent),
-	)
+	e.energyGeneratedDaily.Set(float64(status.EnergyGeneratedDaily))
 
-	ch <- prometheus.MustNewConstMetric(
-		e.batteryVoltage,
-		prometheus.GaugeValue,
-		float64(status.BatteryVoltage),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.batterySOC,
-		prometheus.GaugeValue,
-		float64(status.BatterySOC),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.batteryTemp,
-		prometheus.GaugeValue,
-		float64(status.BatteryTemp),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.batteryMinVoltage,
-		prometheus.GaugeValue,
-		float64(status.BatteryMinVoltage),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		e.batteryMaxVoltage,
-		prometheus.GaugeValue,
-		float64(status.BatteryMaxVoltage),
-	)
-
-	ch <- prometheus.MustNewConstMetric(
-		e.deviceTemp,
-		prometheus.GaugeValue,
-		float64(status.DeviceTemp),
-	)
-
-	ch <- prometheus.MustNewConstMetric(
-		e.energyGeneratedDaily,
-		prometheus.GaugeValue,
-		float64(status.EnergyGeneratedDaily),
-	)
-
-	ch <- prometheus.MustNewConstMetric(
-		e.chargingStatus,
-		prometheus.GaugeValue,
-		float64(status.ChargingStatus),
-	)
-
-	return nil
+	e.chargingStatus.Set(float64(status.ChargingStatus))
 }

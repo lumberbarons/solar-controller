@@ -2,26 +2,13 @@ package epever
 
 import (
 	"encoding/binary"
-	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"github.com/goburrow/modbus"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"sync"
 	"time"
 )
 
-const (
-	topicSuffix = "epever"
-)
-
 type Collector struct {
-	mu sync.Mutex
 	modbusClient modbus.Client
-
-	cacheExpiry    int64
-	cacheTimestamp int64
-	cachedMetrics  *ControllerStatus
 }
 
 type ControllerStatus struct {
@@ -42,66 +29,15 @@ type ControllerStatus struct {
 	ChargingStatus		   int32     `json:"chargingStatus"`
 }
 
-func NewCollector(client modbus.Client, cacheExpiry int64) *Collector {
+func NewCollector(client modbus.Client) *Collector {
 	collector := &Collector{
 		modbusClient: client,
-		cacheExpiry: cacheExpiry,
 	}
 
 	return collector
 }
 
-func (e *Collector) MetricsGet() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		metrics, err := e.GetStatus()
-		if err != nil {
-			log.Error("failed to get metrics: ", err)
-			c.Status(http.StatusInternalServerError)
-			return
-		}
-
-		c.JSON(http.StatusOK, metrics)
-	}
-}
-
 func (e *Collector) GetStatus() (*ControllerStatus, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.cacheTimestamp < time.Now().Unix() - e.cacheExpiry {
-		log.Info("epever cache expired, collecting metrics")
-
-		metrics, err := e.collectMetrics()
-		if err != nil {
-			return nil, err
-		}
-
-		e.cacheTimestamp = metrics.Timestamp
-		e.cachedMetrics = metrics
-	}
-
-	return e.cachedMetrics, nil
-}
-
-func (e *Collector) GetStatusString() (string, error) {
-	status, err := e.GetStatus()
-	if err != nil {
-		return "", err
-	}
-
-	b, err := json.Marshal(status)
-	if err != nil {
-		return "", err
-	}
-
-	return string(b), nil
-}
-
-func (e *Collector) GetTopicSuffix() string {
-	return topicSuffix
-}
-
-func (e *Collector) collectMetrics() (*ControllerStatus, error) {
 	startTime := time.Now()
 
 	c := &ControllerStatus{

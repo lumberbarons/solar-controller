@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/lumberbarons/solar-controller/common"
 	"github.com/lumberbarons/solar-controller/controllers/epever"
 	"github.com/lumberbarons/solar-controller/publisher"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -25,6 +23,11 @@ var (
 	configFilePath *string
 	debugMode  	   *bool
 )
+
+type SolarController interface {
+	RegisterEndpoints(r *gin.Engine)
+	Enabled() bool
+}
 
 type Config struct {
 	SolarController SolarControllerConfiguration `yaml:"solarController"`
@@ -62,48 +65,44 @@ func main() {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
-	// discover controllers
-	controllers := buildControllers(controllerConfig)
-
-	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt, controllers...)
+	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt)
 	if err != nil {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
 	defer mqttPublisher.Close()
 
-	registry := prometheus.NewRegistry()
-	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	controllers := buildControllers(controllerConfig, mqttPublisher)
 
+	handler := promhttp.Handler()
 	r.GET("/metrics", func(c *gin.Context) {
 		handler.ServeHTTP(c.Writer, c.Request)
 	})
 
 	for _, controller := range controllers {
-		registry.MustRegister(controller.GetPrometheusCollector())
 		controller.RegisterEndpoints(r)
 	}
 
 	siteFS := EmbedFolder(site, "site/build", true)
 	r.Use(static.Serve("/", siteFS))
 
-	log.Infof("Starting server on port %v", controllerConfig.SolarController.HttpPort)
+	log.Infof("starting server on port %v", controllerConfig.SolarController.HttpPort)
 
 	err = r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HttpPort))
 	if err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatalf("failed to start server: %v", err)
 	}
 }
 
-func buildControllers(controllerConfig Config) []common.SolarController {
-	var controllers []common.SolarController
+func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPublisher) []SolarController {
+	var controllers []SolarController
 
-	epeverController, err := epever.NewController(controllerConfig.SolarController.Epever)
+	epeverController, err := epever.NewController(controllerConfig.SolarController.Epever, mqttPublisher)
 	if err != nil {
 		log.Fatalf("failed to create epever controller: %v", err)
 	}
 	defer epeverController.Close()
 
-	if epeverController.Collector != nil {
+	if epeverController.Enabled() {
 		controllers = append(controllers, epeverController)
 	}
 
@@ -117,7 +116,7 @@ func loadConfigFile() Config {
 
 	configFile, err := ioutil.ReadFile(*configFilePath)
 	if err != nil {
-		log.Fatalf("Failed to load configurer file: %v", err)
+		log.Fatalf("failed to load configurer file: %v", err)
 	}
 
 	config := Config{}
