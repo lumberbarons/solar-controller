@@ -4,14 +4,10 @@ import (
 	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/go-co-op/gocron"
+	"github.com/lumberbarons/solar-controller/common"
 	log "github.com/sirupsen/logrus"
 	"time"
 )
-
-type SolarCollector interface {
-	GetTopicSuffix() string
-	GetStatusString() (string, error)
-}
 
 type MqttConfiguration struct {
 	Host          string `yaml:"host"`
@@ -23,11 +19,11 @@ type MqttConfiguration struct {
 
 type MqttPublisher struct {
 	client mqtt.Client
-	solarCollectors []SolarCollector
+	solarControllers []common.SolarController
 	config MqttConfiguration
 }
 
-func NewMqttPublisher(config MqttConfiguration, solarCollectors ...SolarCollector) (*MqttPublisher, error) {
+func NewMqttPublisher(config MqttConfiguration, solarControllers ...common.SolarController) (*MqttPublisher, error) {
 	if config.Host == "" {
 		log.Info("publisher disabled, no host provided")
 		return &MqttPublisher{}, nil
@@ -51,7 +47,7 @@ func NewMqttPublisher(config MqttConfiguration, solarCollectors ...SolarCollecto
 
 	log.Infof("connected to broker %s", config.Host)
 
-	publisher := &MqttPublisher{client: client, solarCollectors: solarCollectors, config: config}
+	publisher := &MqttPublisher{client: client, solarControllers: solarControllers, config: config}
 
 	log.Infof("starting periodic publisher with period of %d seconds", config.PublishPeriod)
 
@@ -68,13 +64,13 @@ func NewMqttPublisher(config MqttConfiguration, solarCollectors ...SolarCollecto
 }
 
 func (p *MqttPublisher) publish() {
-	for _, collector := range p.solarCollectors {
-		topicSuffix := collector.GetTopicSuffix()
+	for _, controller := range p.solarControllers {
+		topicSuffix := controller.GetSolarCollector().GetTopicSuffix()
 		topic := fmt.Sprintf("%s/%s", p.config.TopicPrefix, topicSuffix)
 
 		log.Infof("publishing for %s to %s", topicSuffix, topic)
 
-		payload, err := collector.GetStatusString()
+		payload, err := controller.GetSolarCollector().GetStatusString()
 		if err != nil {
 			log.Errorf("failed to get status from %s collector:  %s", topicSuffix, err)
 			continue

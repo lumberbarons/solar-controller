@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/lumberbarons/solar-controller/epever"
-	"github.com/lumberbarons/solar-controller/exporter"
+	"github.com/lumberbarons/solar-controller/common"
+	"github.com/lumberbarons/solar-controller/controllers/epever"
 	"github.com/lumberbarons/solar-controller/publisher"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"io/fs"
@@ -25,18 +27,23 @@ var (
 )
 
 type Config struct {
-	SolarController SolarController `yaml:"solarController"`
+	SolarController SolarControllerConfiguration `yaml:"solarController"`
 }
 
-type SolarController struct {
+type SolarControllerConfiguration struct {
 	HttpPort int                         `yaml:"httpPort"`
 	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
-	Epever   epever.EpeverConfiguration  `yaml:"epever"`
+	Epever   epever.Configuration        `yaml:"epever"`
 }
 
 func init() {
 	configFilePath = flag.String("config", "", "Config file path")
 	debugMode = flag.Bool("debug", false, "Debug mode")
+
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors: true,
+		FullTimestamp: true,
+	})
 }
 
 func main() {
@@ -55,25 +62,26 @@ func main() {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
-	epeverController, err := epever.NewEpeverController(controllerConfig.SolarController.Epever)
-	if err != nil {
-		log.Fatalf("failed to create epever controller: %v", err)
-	}
-	defer epeverController.Close()
+	// discover controllers
+	controllers := buildControllers(controllerConfig)
 
-	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt, epeverController.EpeverCollector)
+	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt, controllers...)
 	if err != nil {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
 	defer mqttPublisher.Close()
 
-	prometheusExporter := exporter.NewPrometheusEndpoint(epeverController.EpeverCollector)
+	registry := prometheus.NewRegistry()
+	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 
-	r.GET("/collector", func(c *gin.Context) {
-		prometheusExporter.Handler.ServeHTTP(c.Writer, c.Request)
+	r.GET("/metrics", func(c *gin.Context) {
+		handler.ServeHTTP(c.Writer, c.Request)
 	})
 
-	epeverController.RegisterEndpoints(r)
+	for _, controller := range controllers {
+		registry.MustRegister(controller.GetPrometheusCollector())
+		controller.RegisterEndpoints(r)
+	}
 
 	siteFS := EmbedFolder(site, "site/build", true)
 	r.Use(static.Serve("/", siteFS))
@@ -84,6 +92,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+func buildControllers(controllerConfig Config) []common.SolarController {
+	var controllers []common.SolarController
+
+	epeverController, err := epever.NewController(controllerConfig.SolarController.Epever)
+	if err != nil {
+		log.Fatalf("failed to create epever controller: %v", err)
+	}
+	defer epeverController.Close()
+
+	if epeverController.Collector != nil {
+		controllers = append(controllers, epeverController)
+	}
+
+	return controllers
 }
 
 func loadConfigFile() Config {
@@ -105,8 +129,6 @@ func loadConfigFile() Config {
 
 	return config
 }
-
-
 
 type embedFileSystem struct {
 	http.FileSystem

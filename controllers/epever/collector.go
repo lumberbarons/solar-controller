@@ -1,4 +1,4 @@
-package collector
+package epever
 
 import (
 	"encoding/binary"
@@ -15,16 +15,16 @@ const (
 	topicSuffix = "epever"
 )
 
-type EpeverCollector struct {
+type Collector struct {
 	mu sync.Mutex
 	modbusClient modbus.Client
 
 	cacheExpiry    int64
 	cacheTimestamp int64
-	cachedMetrics  *EpeverControllerStatus
+	cachedMetrics  *ControllerStatus
 }
 
-type EpeverControllerStatus struct {
+type ControllerStatus struct {
 	Timestamp              int64     `json:"timestamp"`
 	CollectionTime         float64   `json:"collectionTime"`
 	ArrayVoltage           float32   `json:"arrayVoltage"`
@@ -42,8 +42,8 @@ type EpeverControllerStatus struct {
 	ChargingStatus		   int32     `json:"chargingStatus"`
 }
 
-func NewEpeverCollector(client modbus.Client, cacheExpiry int64) *EpeverCollector {
-	collector := &EpeverCollector{
+func NewCollector(client modbus.Client, cacheExpiry int64) *Collector {
+	collector := &Collector{
 		modbusClient: client,
 		cacheExpiry: cacheExpiry,
 	}
@@ -51,7 +51,7 @@ func NewEpeverCollector(client modbus.Client, cacheExpiry int64) *EpeverCollecto
 	return collector
 }
 
-func (e *EpeverCollector) MetricsGet() gin.HandlerFunc {
+func (e *Collector) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		metrics, err := e.GetStatus()
 		if err != nil {
@@ -64,12 +64,12 @@ func (e *EpeverCollector) MetricsGet() gin.HandlerFunc {
 	}
 }
 
-func (e *EpeverCollector) GetStatus() (*EpeverControllerStatus, error) {
+func (e *Collector) GetStatus() (*ControllerStatus, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.cacheTimestamp < time.Now().Unix() - e.cacheExpiry {
-		log.Info("cache expired, collecting metrics")
+		log.Info("epever cache expired, collecting metrics")
 
 		metrics, err := e.collectMetrics()
 		if err != nil {
@@ -83,7 +83,7 @@ func (e *EpeverCollector) GetStatus() (*EpeverControllerStatus, error) {
 	return e.cachedMetrics, nil
 }
 
-func (e *EpeverCollector) GetStatusString() (string, error) {
+func (e *Collector) GetStatusString() (string, error) {
 	status, err := e.GetStatus()
 	if err != nil {
 		return "", err
@@ -97,14 +97,14 @@ func (e *EpeverCollector) GetStatusString() (string, error) {
 	return string(b), nil
 }
 
-func (e *EpeverCollector) GetTopicSuffix() string {
+func (e *Collector) GetTopicSuffix() string {
 	return topicSuffix
 }
 
-func (e *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
+func (e *Collector) collectMetrics() (*ControllerStatus, error) {
 	startTime := time.Now()
 
-	c := &EpeverControllerStatus{
+	c := &ControllerStatus{
 		Timestamp: startTime.Unix(),
 	}
 
@@ -191,7 +191,7 @@ func (e *EpeverCollector) collectMetrics() (*EpeverControllerStatus, error) {
 	return c, nil
 }
 
-func (e *EpeverCollector) getValueFloat(address uint16) (float32, error) {
+func (e *Collector) getValueFloat(address uint16) (float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -201,7 +201,7 @@ func (e *EpeverCollector) getValueFloat(address uint16) (float32, error) {
 	return  float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
-func (e *EpeverCollector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
+func (e *Collector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -216,7 +216,7 @@ func (e *EpeverCollector) getValueFloats(address uint16, quantity uint16) ([]flo
 	return results, nil
 }
 
-func (e *EpeverCollector) getValueInt(address uint16) (int32, error) {
+func (e *Collector) getValueInt(address uint16) (int32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -225,7 +225,7 @@ func (e *EpeverCollector) getValueInt(address uint16) (int32, error) {
 	return int32(binary.BigEndian.Uint16(data)), nil
 }
 
-func (e *EpeverCollector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
+func (e *Collector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
 		log.Warnf("Failed to get data, address: %d", address)
@@ -240,7 +240,7 @@ func (e *EpeverCollector) getValueInts(address uint16, quantity uint16) ([]int32
 	return results, nil
 }
 
-func (e *EpeverCollector) getValueFloat32(address uint16) (float32, error) {
+func (e *Collector) getValueFloat32(address uint16) (float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, 2)
 
 	if err != nil {

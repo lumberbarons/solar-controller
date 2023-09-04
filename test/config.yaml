@@ -1,11 +1,11 @@
 solarController:
   httpPort: 8080
   epever:
-    serialPort: /dev/ttys004
+    serialPort: #/dev/ttys004
     cacheExpiry: 30
   mqtt:
     host: #ssl://james.messaging.solace.cloud:8883
     username: victron
     password: Victron123$$
-    topicSuffix: solar/metrics
+    topicPrefix: solar/metrics
     publishPeriod: 5

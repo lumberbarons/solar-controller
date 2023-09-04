@@ -1,21 +1,16 @@
-package exporter
+package epever
 
 import (
-	"github.com/lumberbarons/solar-controller/epever/collector"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
-	"time"
-
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	namespace = "solar"
+	namespace = "epever"
 )
 
-type PrometheusEndpoint struct {
-	solarCollector *collector.EpeverCollector
+type PrometheusCollector struct {
+	epeverCollector *Collector
 
 	scrapeFailures prometheus.Counter
 
@@ -38,15 +33,11 @@ type PrometheusEndpoint struct {
 	energyGeneratedMonthly *prometheus.Desc
 
 	chargingStatus *prometheus.Desc
-
-	Handler http.Handler
 }
 
-func NewPrometheusEndpoint(collector *collector.EpeverCollector) *PrometheusEndpoint {
-	prometheus.MustRegister()
-
-	endpoint := &PrometheusEndpoint{
-		solarCollector: collector,
+func NewPrometheusCollector(collector *Collector) *PrometheusCollector {
+	endpoint := &PrometheusCollector{
+		epeverCollector: collector,
 
 		scrapeFailures: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
@@ -141,121 +132,115 @@ func NewPrometheusEndpoint(collector *collector.EpeverCollector) *PrometheusEndp
 		),
 	}
 
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(endpoint)
-	endpoint.Handler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
-
 	return endpoint
 }
 
-func (pe *PrometheusEndpoint) Describe(ch chan <- *prometheus.Desc) {
+func (e *PrometheusCollector) Describe(ch chan <- *prometheus.Desc) {
 	ds := []*prometheus.Desc{
-		pe.panelVoltage,
+		e.panelVoltage,
+		e.panelCurrent,
+		e.panelPower,
+		e.chargingPower,
+		e.chargingCurrent,
+		e.batteryVoltage,
+		e.batterySOC,
+		e.batteryTemp,
+		e.batteryMaxVoltage,
+		e.batteryMinVoltage,
+		e.deviceTemp,
+		e.energyGeneratedDaily,
+		e.energyGeneratedMonthly,
+		e.chargingStatus,
 	}
 
 	for _, d := range ds {
 		ch <- d
 	}
-
-	pe.scrapeFailures.Describe(ch)
 }
 
-func (pe *PrometheusEndpoint) Collect(ch chan<- prometheus.Metric) {
-	if err := pe.collect(ch); err != nil {
+func (e *PrometheusCollector) Collect(ch chan <- prometheus.Metric) {
+	if err := e.collect(ch); err != nil {
 		log.Printf("Error getting solar controller data: %s", err)
-		pe.scrapeFailures.Inc()
-		pe.scrapeFailures.Collect(ch)
+		e.scrapeFailures.Inc()
+		e.scrapeFailures.Collect(ch)
 	}
 
 	return
 }
 
-func start(s string) (string, time.Time) {
-	log.Printf("start %s", s)
-	return s, time.Now()
-}
-
-
-func end(s string, startTime time.Time) {
-	endTime := time.Now()
-	log.Printf("end %s, time: %.4f sec", s, endTime.Sub(startTime).Seconds())
-}
-
-func (pe *PrometheusEndpoint) collect(ch chan <- prometheus.Metric) error {
-	defer end(start("collector collection"))
-
-	status, err :=  pe.solarCollector.GetStatus()
+func (e *PrometheusCollector) collect(ch chan <- prometheus.Metric) error {
+	status, err :=  e.epeverCollector.GetStatus()
 	if err != nil {
 		return err
 	}
 
 	ch <- prometheus.MustNewConstMetric(
-		pe.panelVoltage,
+		e.panelVoltage,
 		prometheus.GaugeValue,
 		float64(status.ArrayVoltage),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.panelCurrent,
+		e.panelCurrent,
 		prometheus.GaugeValue,
 		float64(status.ArrayCurrent),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.panelPower,
+		e.panelPower,
 		prometheus.GaugeValue,
 		float64(status.ArrayPower),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		pe.chargingPower,
+		e.chargingPower,
 		prometheus.GaugeValue,
 		float64(status.ChargingPower),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.chargingCurrent,
+		e.chargingCurrent,
 		prometheus.GaugeValue,
 		float64(status.ChargingCurrent),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		pe.batteryVoltage,
+		e.batteryVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryVoltage),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.batterySOC,
+		e.batterySOC,
 		prometheus.GaugeValue,
 		float64(status.BatterySOC),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.batteryTemp,
+		e.batteryTemp,
 		prometheus.GaugeValue,
 		float64(status.BatteryTemp),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.batteryMinVoltage,
+		e.batteryMinVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryMinVoltage),
 	)
 	ch <- prometheus.MustNewConstMetric(
-		pe.batteryMaxVoltage,
+		e.batteryMaxVoltage,
 		prometheus.GaugeValue,
 		float64(status.BatteryMaxVoltage),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		pe.deviceTemp,
+		e.deviceTemp,
 		prometheus.GaugeValue,
 		float64(status.DeviceTemp),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		pe.energyGeneratedDaily,
+		e.energyGeneratedDaily,
 		prometheus.GaugeValue,
 		float64(status.EnergyGeneratedDaily),
 	)
 
 	ch <- prometheus.MustNewConstMetric(
-		pe.chargingStatus,
+		e.chargingStatus,
 		prometheus.GaugeValue,
 		float64(status.ChargingStatus),
 	)
