@@ -1,4 +1,4 @@
-package configuration
+package epever
 
 import (
 	"encoding/binary"
@@ -12,12 +12,12 @@ import (
 	"time"
 )
 
-type SolarConfigurer struct {
+type Configurer struct {
 	modbusClient modbus.Client
 }
 
-func NewSolarConfigurer(client modbus.Client) *SolarConfigurer {
-	return &SolarConfigurer{
+func NewConfigurer(client modbus.Client) *Configurer {
+	return &Configurer{
 		modbusClient: client,
 	}
 }
@@ -48,25 +48,25 @@ type ControllerConfig struct {
 	ControllerTempLowerLimit      float32 `json:"controllerTempLowerLimit"`
 }
 
-type ControllerQuery struct {
+type EpeverControllerQuery struct {
 	Register int    `json:"register"`
 	Address  string `json:"address"`
 	Result   uint16 `json:"result"`
 }
 
-func (sc *SolarConfigurer) ConfigGet() gin.HandlerFunc {
+func (sc *Configurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		config, _ := sc.getConfig()
 		c.JSON(http.StatusOK, config)
 	}
 }
 
-func (sc *SolarConfigurer) getFloatValue(data []byte, index int) float32 {
+func (sc *Configurer) getFloatValue(data []byte, index int) float32 {
 	offset := index * 2
 	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / 100
 }
 
-func (sc *SolarConfigurer) getConfig() (ControllerConfig, error) {
+func (sc *Configurer) getConfig() (ControllerConfig, error) {
 	data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 3)
 
 	batteryType := binary.BigEndian.Uint16(data[0:2])
@@ -163,7 +163,7 @@ func batteryTypeToString(batteryType uint16) string {
 	}
 }
 
-func (sc *SolarConfigurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
+func (sc *Configurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
 	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
 	_, err := sc.modbusClient.WriteSingleRegister(address, value)
 	if err != nil {
@@ -175,7 +175,7 @@ func (sc *SolarConfigurer) writeSingle(c *gin.Context, address uint16, value uin
 	}
 }
 
-func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
+func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var config ControllerConfig
 		err := c.BindJSON(&config)
@@ -249,9 +249,9 @@ func (sc *SolarConfigurer) ConfigPatch() gin.HandlerFunc {
 	}
 }
 
-func (sc *SolarConfigurer) QueryPost() gin.HandlerFunc {
+func (sc *Configurer) QueryPost() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var query ControllerQuery
+		var query EpeverControllerQuery
 		err := c.BindJSON(&query)
 		if err != nil {
 			log.Warn("Query bad json request")

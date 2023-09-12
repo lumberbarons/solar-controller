@@ -25,7 +25,7 @@ class Query extends React.Component {
 
   handleSubmit(event) {
     const payload = {register: parseInt(this.state.register), address: this.state.address};
-    axios.post(`/api/query`, payload)
+    axios.post(`/api/epever/query`, payload)
       .then(res => {
         let resultDecimal = res.data.result;
         let resultHex = "0x" + resultDecimal.toString(16).padStart(4, '0');

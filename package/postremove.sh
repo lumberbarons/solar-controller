@@ -1,4 +1,4 @@
 #!/bin/bash
 
-systemctl stop epever-controller
-systemctl disable epever-controller
+systemctl stop solar-controller
+systemctl disable solar-controller

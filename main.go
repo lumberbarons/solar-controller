@@ -6,17 +6,15 @@ import (
 	"fmt"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/goburrow/modbus"
-	"github.com/lumberbarons/epever-controller/configuration"
-	"github.com/lumberbarons/epever-controller/metrics"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/lumberbarons/solar-controller/controllers/epever"
+	"github.com/lumberbarons/solar-controller/controllers/victron"
+	"github.com/lumberbarons/solar-controller/publisher"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
-	"time"
 )
 
 //go:embed site/build
@@ -27,42 +25,34 @@ var (
 	debugMode  	   *bool
 )
 
-type Config struct {
-	EpeverController EpeverController `yaml:"epeverController"`
+type SolarController interface {
+	RegisterEndpoints(r *gin.Engine)
+	Enabled() bool
 }
 
-type EpeverController struct {
-	SerialPort string `yaml:"serialPort"`
-	HttpPort   int    `yaml:"httpPort"`
+type Config struct {
+	SolarController SolarControllerConfiguration `yaml:"solarController"`
+}
+
+type SolarControllerConfiguration struct {
+	HttpPort int                         `yaml:"httpPort"`
+	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
+	Epever   epever.Configuration        `yaml:"epever"`
+	Victron  victron.Configuration       `yaml:"victron"`
 }
 
 func init() {
 	configFilePath = flag.String("config", "", "Config file path")
 	debugMode = flag.Bool("debug", false, "Debug mode")
-}
 
-func loadConfigFile() Config {
-	if *configFilePath == "" {
-		log.Fatalf("Must specify config file path")
-	}
-
-	configFile, err := ioutil.ReadFile(*configFilePath)
-	if err != nil {
-		log.Fatalf("Failed to load configuration file: %v", err)
-	}
-
-	config := Config{}
-
-	err = yaml.Unmarshal(configFile, &config)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return config
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors: true,
+		FullTimestamp: true,
+	})
 }
 
 func main() {
-	log.Info("Starting epever-controller")
+	log.Info("starting solar-controller")
 
 	flag.Parse()
 
@@ -73,54 +63,82 @@ func main() {
 	}
 
 	controllerConfig := loadConfigFile()
-	handler := modbus.NewRTUClientHandler(controllerConfig.EpeverController.SerialPort)
-
-	handler.BaudRate = 115200
-	handler.DataBits = 8
-	handler.Parity = "N"
-	handler.StopBits = 1
-	handler.SlaveId = 1
-	handler.Timeout = 5 * time.Second
-
-	err := handler.Connect()
-	if err != nil {
-		log.Fatalf("Failed to connect to serial port: %v", err)
-	}
-
-	defer handler.Close()
-
-	client := modbus.NewClient(handler)
-	prometheus.MustRegister()
 
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
-	collector := metrics.NewSolarCollector(client)
+	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt)
+	if err != nil {
+		log.Fatalf("failed to create publisher: %v", err)
+	}
+	defer mqttPublisher.Close()
 
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(collector)
-	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	controllers := buildControllers(controllerConfig, mqttPublisher)
 
+	handler := promhttp.Handler()
 	r.GET("/metrics", func(c *gin.Context) {
-		h.ServeHTTP(c.Writer, c.Request)
+		handler.ServeHTTP(c.Writer, c.Request)
 	})
 
-	r.GET("/api/metrics", collector.MetricsGet())
-
-	configurer := configuration.NewSolarConfigurer(client)
-
-	r.GET("/api/config", configurer.ConfigGet())
-	r.PATCH("/api/config", configurer.ConfigPatch())
-	r.POST("/api/query", configurer.QueryPost())
+	for _, controller := range controllers {
+		controller.RegisterEndpoints(r)
+	}
 
 	siteFS := EmbedFolder(site, "site/build", true)
 	r.Use(static.Serve("/", siteFS))
 
-	err = r.Run(fmt.Sprintf(":%v", controllerConfig.EpeverController.HttpPort))
+	log.Infof("starting server on port %v", controllerConfig.SolarController.HttpPort)
 
+	err = r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HttpPort))
 	if err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatalf("failed to start server: %v", err)
 	}
+}
+
+func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPublisher) []SolarController {
+	var controllers []SolarController
+
+	epeverController, err := epever.NewController(controllerConfig.SolarController.Epever, mqttPublisher)
+	if err != nil {
+		log.Fatalf("failed to create epever controller: %v", err)
+	}
+	defer epeverController.Close()
+
+	if epeverController.Enabled() {
+		controllers = append(controllers, epeverController)
+	}
+
+	victronController, err := victron.NewController(controllerConfig.SolarController.Victron, mqttPublisher)
+	if err != nil {
+		log.Fatalf("failed to create victron controller: %v", err)
+	}
+	defer victronController.Close()
+
+	if victronController.Enabled() {
+		controllers = append(controllers, victronController)
+	}
+
+	return controllers
+}
+
+func loadConfigFile() Config {
+	if *configFilePath == "" {
+		log.Fatalf("Must specify config file path")
+	}
+
+	configFile, err := ioutil.ReadFile(*configFilePath)
+	if err != nil {
+		log.Fatalf("failed to load configurer file: %v", err)
+	}
+
+	config := Config{}
+
+	err = yaml.Unmarshal(configFile, &config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return config
 }
 
 type embedFileSystem struct {
