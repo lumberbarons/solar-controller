@@ -3,9 +3,12 @@ solarController:
   epever:
     serialPort: /dev/ttyXRUSB0
     cacheExpiry: 30
+    publishPeriod: 60
+  victron:
+    macAddress:
+    publishPeriod: 30
   mqtt:
     host:
     username:
     password:
-    topicSuffix: solar/metrics
-    publishPeriod: 60
+    topicPrefix: solar/metrics
