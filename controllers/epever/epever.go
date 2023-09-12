@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	namespace = "epever"
+	namespace = "solar" // legacy
 )
 
 type Configuration struct {
@@ -56,7 +56,6 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 
 	epeverCollector := NewCollector(client)
 	epeverConfigurer := NewConfigurer(client)
-	prometheusCollector := NewPrometheusCollector()
 
 	log.Infof("connected to epever %s", config.SerialPort)
 
@@ -64,7 +63,7 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 		handler: handler,
 		collector: epeverCollector,
 		configurer: epeverConfigurer,
-		prometheusCollector: prometheusCollector,
+		prometheusCollector: NewPrometheusCollector(),
 		mqttPublisher: mqttPublisher,
 	}
 
@@ -95,7 +94,7 @@ func (e *Controller) collectAndPublish() {
 
 	b, err := json.Marshal(status)
 	if err != nil {
-		log.Errorf("failed to collect marshall status for publishing for epever: %s", err)
+		log.Errorf("failed to marshall status for publishing for epever: %s", err)
 		return
 	}
 
@@ -113,14 +112,16 @@ func (e *Controller) RegisterEndpoints(r *gin.Engine) {
 		return
 	}
 
-	r.GET("/api/epever", func(c *gin.Context) {
+	prefix := fmt.Sprintf("/api/%s", namespace)
+
+	r.GET(prefix, func(c *gin.Context) {
 		c.JSON(http.StatusOK, "{}")
 	})
 
-	r.GET("/api/epever/metrics", e.MetricsGet())
-	r.GET("/api/epever/config", e.configurer.ConfigGet())
-	r.PATCH("/api/epever/config", e.configurer.ConfigPatch())
-	r.POST("/api/epever/query", e.configurer.QueryPost())
+	r.GET(fmt.Sprintf("%s/metrics", prefix), e.MetricsGet())
+	r.GET(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigGet())
+	r.PATCH(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigPatch())
+	r.POST(fmt.Sprintf("%s/query", prefix), e.configurer.QueryPost())
 }
 
 func (e *Controller) Enabled() bool {

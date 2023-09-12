@@ -3,8 +3,11 @@ solarController:
   epever:
     serialPort: /dev/ttys004
     publishPeriod: 5
+  victron:
+    macAddress:
+    publishPeriod: 5
   mqtt:
-    host: ssl://james.messaging.solace.cloud:8883
-    username: victron
-    password: Victron123$$
-    topicPrefix: solar/metrics
+    #host: ssl://james.messaging.solace.cloud:8883
+    #username: victron
+    #password: Victron123$$
+    #topicPrefix: solar/metrics

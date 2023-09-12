@@ -7,6 +7,7 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/controllers/epever"
+	"github.com/lumberbarons/solar-controller/controllers/victron"
 	"github.com/lumberbarons/solar-controller/publisher"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -37,6 +38,7 @@ type SolarControllerConfiguration struct {
 	HttpPort int                         `yaml:"httpPort"`
 	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
 	Epever   epever.Configuration        `yaml:"epever"`
+	Victron  victron.Configuration       `yaml:"victron"`
 }
 
 func init() {
@@ -50,7 +52,7 @@ func init() {
 }
 
 func main() {
-	log.Info("Starting solar-controller")
+	log.Info("starting solar-controller")
 
 	flag.Parse()
 
@@ -104,6 +106,16 @@ func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPubl
 
 	if epeverController.Enabled() {
 		controllers = append(controllers, epeverController)
+	}
+
+	victronController, err := victron.NewController(controllerConfig.SolarController.Victron, mqttPublisher)
+	if err != nil {
+		log.Fatalf("failed to create victron controller: %v", err)
+	}
+	defer victronController.Close()
+
+	if victronController.Enabled() {
+		controllers = append(controllers, victronController)
 	}
 
 	return controllers
