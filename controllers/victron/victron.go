@@ -21,10 +21,10 @@ type Configuration struct {
 }
 
 type Controller struct {
-	collector *Collector
-	mqttPublisher *publisher.MqttPublisher
+	collector           *Collector
+	mqttPublisher       *publisher.MqttPublisher
 	prometheusCollector *PrometheusCollector
-	lastStatus *ControllerStatus
+	lastStatus          *ControllerStatus
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
@@ -43,12 +43,12 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 	log.Infof("connected to victron %s", config.MacAddress)
 
 	controller := &Controller{
-		collector: victronCollector,
-		mqttPublisher: mqttPublisher,
+		collector:           victronCollector,
+		mqttPublisher:       mqttPublisher,
 		prometheusCollector: NewPrometheusCollector(),
 	}
 
-	_, err = s.Every(config.PublishPeriod).Seconds().WaitForSchedule().Do(controller.collectAndPublish)
+	_, err = s.Every(config.PublishPeriod).Seconds().Do(controller.collectAndPublish)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start victron publisher %w", err)
 	}

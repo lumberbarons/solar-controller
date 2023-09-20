@@ -22,7 +22,7 @@ var site embed.FS
 
 var (
 	configFilePath *string
-	debugMode  	   *bool
+	debugMode      *bool
 )
 
 type SolarController interface {

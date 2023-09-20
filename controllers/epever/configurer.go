@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/goburrow/modbus"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
@@ -13,10 +12,10 @@ import (
 )
 
 type Configurer struct {
-	modbusClient modbus.Client
+	modbusClient *ModbusClient
 }
 
-func NewConfigurer(client modbus.Client) *Configurer {
+func NewConfigurer(client *ModbusClient) *Configurer {
 	return &Configurer{
 		modbusClient: client,
 	}
@@ -48,7 +47,7 @@ type ControllerConfig struct {
 	ControllerTempLowerLimit      float32 `json:"controllerTempLowerLimit"`
 }
 
-type EpeverControllerQuery struct {
+type ControllerQuery struct {
 	Register int    `json:"register"`
 	Address  string `json:"address"`
 	Result   uint16 `json:"result"`
@@ -251,7 +250,7 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 
 func (sc *Configurer) QueryPost() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var query EpeverControllerQuery
+		var query ControllerQuery
 		err := c.BindJSON(&query)
 		if err != nil {
 			log.Warn("Query bad json request")

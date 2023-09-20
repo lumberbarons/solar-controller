@@ -23,7 +23,7 @@ type PrometheusCollector struct {
 
 	deviceTemp prometheus.Gauge
 
-	energyGeneratedDaily   prometheus.Gauge
+	energyGeneratedDaily prometheus.Gauge
 
 	chargingStatus prometheus.Gauge
 }
@@ -35,84 +35,6 @@ func NewPrometheusCollector() *PrometheusCollector {
 			Name:      "failures",
 			Help:      "Number of errors while connecting to the epever controller.",
 		}),
-
-		panelVoltage: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "panel_voltage",
-			Help:      "Solar panel voltage (V).",
-		}),
-
-		panelCurrent: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "panel_current",
-			Help:      "Solar panel current (A).",
-		}),
-
-		panelPower: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "panel_power",
-			Help:      "Solar panel power (W).",
-		}),
-
-		chargingPower: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "charging_power",
-			Help:      "Battery charging power (W).",
-		}),
-
-		chargingCurrent: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "charging_current",
-			Help:      "Battery charging current (A).",
-		}),
-
-		batteryVoltage: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "battery_voltage",
-			Help:      "Battery voltage (V).",
-		}),
-
-		batterySoc: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "battery_soc",
-			Help:      "BBattery state of charge (%).",
-		}),
-
-		batteryTemp: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "battery_temp",
-			Help:      "Battery temperature (C).",
-		}),
-
-		batteryMinVoltage: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "battery_min_voltage",
-			Help:      "Minimum battery voltage (V).",
-		}),
-
-		batteryMaxVoltage: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "battery_max_voltage",
-			Help:      "Maximum battery voltage (V).",
-		}),
-
-		deviceTemp: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "device_temp",
-			Help:      "Controller temperature (C).",
-		}),
-
-		energyGeneratedDaily: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "energy_generated_daily",
-			Help:      "Controller calculated daily power generation, (kWh).",
-		}),
-
-		chargingStatus: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "charging_status",
-			Help:      "Charging status.",
-		}),
 	}
 
 	return endpoint
@@ -122,7 +44,91 @@ func (e *PrometheusCollector) IncrementFailures() {
 	e.failures.Inc()
 }
 
+func (e *PrometheusCollector) initializeMetrics() {
+	e.panelVoltage = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "panel_voltage",
+		Help:      "Solar panel voltage (V).",
+	})
+
+	e.panelCurrent = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "panel_current",
+		Help:      "Solar panel current (A).",
+	})
+
+	e.panelPower = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "panel_power",
+		Help:      "Solar panel power (W).",
+	})
+
+	e.chargingPower = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "charging_power",
+		Help:      "Battery charging power (W).",
+	})
+
+	e.chargingCurrent = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "charging_current",
+		Help:      "Battery charging current (A).",
+	})
+
+	e.batteryVoltage = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "battery_voltage",
+		Help:      "Battery voltage (V).",
+	})
+
+	e.batterySoc = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "battery_soc",
+		Help:      "BBattery state of charge (%).",
+	})
+
+	e.batteryTemp = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "battery_temp",
+		Help:      "Battery temperature (C).",
+	})
+
+	e.batteryMinVoltage = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "battery_min_voltage",
+		Help:      "Minimum battery voltage (V).",
+	})
+
+	e.batteryMaxVoltage = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "battery_max_voltage",
+		Help:      "Maximum battery voltage (V).",
+	})
+
+	e.deviceTemp = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "device_temp",
+		Help:      "Controller temperature (C).",
+	})
+
+	e.energyGeneratedDaily = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "energy_generated_daily",
+		Help:      "Controller calculated daily power generation, (kWh).",
+	})
+
+	e.chargingStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "charging_status",
+		Help:      "Charging status.",
+	})
+}
+
 func (e *PrometheusCollector) SetMetrics(status *ControllerStatus) {
+	if e.panelVoltage == nil {
+		e.initializeMetrics()
+	}
+
 	e.panelVoltage.Set(float64(status.ArrayVoltage))
 	e.panelCurrent.Set(float64(status.ArrayCurrent))
 	e.panelPower.Set(float64(status.ArrayPower))

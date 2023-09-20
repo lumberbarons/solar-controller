@@ -22,39 +22,41 @@ func NewPrometheusCollector() *PrometheusCollector {
 			Name:      "failures",
 			Help:      "Number of errors while connecting to the victron controller.",
 		}),
-
-		consumedAh: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "consumed_ah",
-			Help:      "Consumed capacity (Ah).",
-		}),
-
-		power: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "power",
-			Help:      "Power (W).",
-		}),
-
-		voltage: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "voltage",
-			Help:      "Voltage (V).",
-		}),
-
-		current: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "curent",
-			Help:      "Current (A).",
-		}),
-
-		stateOfCharge: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "state_of_charge",
-			Help:      "State of charge (%).",
-		}),
 	}
 
 	return endpoint
+}
+
+func (e *PrometheusCollector) initializeMetrics() {
+	e.consumedAh = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "consumed_ah",
+		Help:      "Consumed capacity (Ah).",
+	})
+
+	e.power = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "power",
+		Help:      "Power (W).",
+	})
+
+	e.voltage = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "voltage",
+		Help:      "Voltage (V).",
+	})
+
+	e.current = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "curent",
+		Help:      "Current (A).",
+	})
+
+	e.stateOfCharge = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "state_of_charge",
+		Help:      "State of charge (%).",
+	})
 }
 
 func (e *PrometheusCollector) IncrementFailures() {
@@ -62,6 +64,10 @@ func (e *PrometheusCollector) IncrementFailures() {
 }
 
 func (e *PrometheusCollector) SetMetrics(status *ControllerStatus) {
+	if e.consumedAh == nil {
+		e.initializeMetrics()
+	}
+
 	e.consumedAh.Set(float64(status.ConsumedAh))
 	e.power.Set(float64(status.Power))
 	e.voltage.Set(float64(status.Voltage))

@@ -26,21 +26,21 @@ type Collector struct {
 }
 
 type ControllerStatus struct {
-	Timestamp      int64     `json:"timestamp"`
-	CollectionTime float64   `json:"collectionTime"`
-	ConsumedAh     float32   `json:"consumedAh"`
-	Power          int16     `json:"power"`
-	Voltage        float32   `json:"voltage"`
-	Current		   float32   `json:"current"`
-	StateOfCharge  float32   `json:"stateOfCharge"`
+	Timestamp      int64   `json:"timestamp"`
+	CollectionTime float64 `json:"collectionTime"`
+	ConsumedAh     float32 `json:"consumedAh"`
+	Power          int16   `json:"power"`
+	Voltage        float32 `json:"voltage"`
+	Current        float32 `json:"current"`
+	StateOfCharge  float32 `json:"stateOfCharge"`
 }
 
-var consumedAhUuid    ble.UUID
-var powerUuid         ble.UUID
-var voltageUuid       ble.UUID
-var currentUuid       ble.UUID
+var consumedAhUuid ble.UUID
+var powerUuid ble.UUID
+var voltageUuid ble.UUID
+var currentUuid ble.UUID
 var stateOfChargeUuid ble.UUID
-var keepaliveUuid     ble.UUID
+var keepaliveUuid ble.UUID
 
 func NewCollector(config Configuration, scheduler *gocron.Scheduler) (*Collector, error) {
 	consumedAhUuid, _ = ble.Parse("6597eeff-4bda-4c1e-af4b-551c4cf74769")
@@ -98,7 +98,7 @@ func connect(config Configuration) (*Collector, error) {
 	done := make(chan struct{})
 
 	go func() {
-		<- client.Disconnected()
+		<-client.Disconnected()
 		log.Println("disconnected")
 		close(done)
 	}()
@@ -189,7 +189,7 @@ func (v *Collector) disconnect() {
 		log.Println("failed to cancel connection to victron:", err)
 	}
 
-	<- v.done
+	<-v.done
 }
 
 func (v *Collector) writeKeepalive() {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
-	"github.com/goburrow/modbus"
 	"github.com/lumberbarons/solar-controller/publisher"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -22,13 +21,12 @@ type Configuration struct {
 }
 
 type Controller struct {
-	handler *modbus.RTUClientHandler
-	collector *Collector
-	configurer *Configurer
-	mqttPublisher *publisher.MqttPublisher
+	client              *ModbusClient
+	collector           *Collector
+	configurer          *Configurer
+	mqttPublisher       *publisher.MqttPublisher
 	prometheusCollector *PrometheusCollector
-
-	lastStatus *ControllerStatus
+	lastStatus          *ControllerStatus
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
@@ -37,22 +35,10 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 		return &Controller{}, nil
 	}
 
-	handler := modbus.NewRTUClientHandler(config.SerialPort)
-
-	handler.BaudRate = 115200
-	handler.DataBits = 8
-	handler.Parity = "N"
-	handler.StopBits = 1
-	handler.SlaveId = 1
-	handler.Timeout = 2 * time.Second
-
-	err := handler.Connect()
-
+	client, err := NewModbusClient(config.SerialPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to epever: %w", err)
+		return nil, err
 	}
-
-	client := modbus.NewClient(handler)
 
 	epeverCollector := NewCollector(client)
 	epeverConfigurer := NewConfigurer(client)
@@ -60,11 +46,11 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 	log.Infof("connected to epever %s", config.SerialPort)
 
 	controller := &Controller{
-		handler: handler,
-		collector: epeverCollector,
-		configurer: epeverConfigurer,
+		client:              client,
+		collector:           epeverCollector,
+		configurer:          epeverConfigurer,
 		prometheusCollector: NewPrometheusCollector(),
-		mqttPublisher: mqttPublisher,
+		mqttPublisher:       mqttPublisher,
 	}
 
 	s := gocron.NewScheduler(time.UTC)
@@ -108,7 +94,7 @@ func (e *Controller) MetricsGet() gin.HandlerFunc {
 }
 
 func (e *Controller) RegisterEndpoints(r *gin.Engine) {
-	if e.handler == nil {
+	if e.client == nil {
 		return
 	}
 
@@ -129,7 +115,7 @@ func (e *Controller) Enabled() bool {
 }
 
 func (e *Controller) Close() {
-	if e.handler != nil {
-		e.handler.Close()
+	if e.client != nil {
+		e.client.Close()
 	}
 }

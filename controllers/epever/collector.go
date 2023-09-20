@@ -2,34 +2,33 @@ package epever
 
 import (
 	"encoding/binary"
-	"github.com/goburrow/modbus"
-	log "github.com/sirupsen/logrus"
+	"fmt"
 	"time"
 )
 
 type Collector struct {
-	modbusClient modbus.Client
+	modbusClient *ModbusClient
 }
 
 type ControllerStatus struct {
-	Timestamp              int64     `json:"timestamp"`
-	CollectionTime         float64   `json:"collectionTime"`
-	ArrayVoltage           float32   `json:"arrayVoltage"`
-	ArrayCurrent           float32   `json:"arrayCurrent"`
-	ArrayPower             float32   `json:"arrayPower"`
-	ChargingCurrent		   float32   `json:"chargingCurrent"`
-	ChargingPower		   float32   `json:"chargingPower"`
-	BatteryVoltage         float32   `json:"batteryVoltage"`
-	BatterySOC             int32     `json:"batterySoc"`
-	BatteryTemp            float32   `json:"batteryTemp"`
-	BatteryMaxVoltage      float32   `json:"batteryMaxVoltage"`
-	BatteryMinVoltage      float32   `json:"batteryMinVoltage"`
-	DeviceTemp             float32   `json:"deviceTemp"`
-	EnergyGeneratedDaily   float32   `json:"energyGeneratedDaily"`
-	ChargingStatus		   int32     `json:"chargingStatus"`
+	Timestamp            int64   `json:"timestamp"`
+	CollectionTime       float64 `json:"collectionTime"`
+	ArrayVoltage         float32 `json:"arrayVoltage"`
+	ArrayCurrent         float32 `json:"arrayCurrent"`
+	ArrayPower           float32 `json:"arrayPower"`
+	ChargingCurrent      float32 `json:"chargingCurrent"`
+	ChargingPower        float32 `json:"chargingPower"`
+	BatteryVoltage       float32 `json:"batteryVoltage"`
+	BatterySOC           int32   `json:"batterySoc"`
+	BatteryTemp          float32 `json:"batteryTemp"`
+	BatteryMaxVoltage    float32 `json:"batteryMaxVoltage"`
+	BatteryMinVoltage    float32 `json:"batteryMinVoltage"`
+	DeviceTemp           float32 `json:"deviceTemp"`
+	EnergyGeneratedDaily float32 `json:"energyGeneratedDaily"`
+	ChargingStatus       int32   `json:"chargingStatus"`
 }
 
-func NewCollector(client modbus.Client) *Collector {
+func NewCollector(client *ModbusClient) *Collector {
 	collector := &Collector{
 		modbusClient: client,
 	}
@@ -122,7 +121,7 @@ func (e *Collector) GetStatus() (*ControllerStatus, error) {
 	}
 	c.DeviceTemp = float32(dt) / 100
 
-	c .CollectionTime = time.Now().Sub(startTime).Seconds()
+	c.CollectionTime = time.Now().Sub(startTime).Seconds()
 
 	return c, nil
 }
@@ -130,23 +129,21 @@ func (e *Collector) GetStatus() (*ControllerStatus, error) {
 func (e *Collector) getValueFloat(address uint16) (float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
-		log.Warnf("Failed to get data, address: %d", address)
-		return 0, err
+		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
-	return  float32(binary.BigEndian.Uint16(data)) / 100, nil
+	return float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
 func (e *Collector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
-		log.Warnf("Failed to get data, address: %d", address)
-		return nil, err
+		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
 	results := make([]float32, quantity)
 	for i := 0; i < int(quantity); i++ {
-		results[i] = float32(binary.BigEndian.Uint16(data[i * 2:i * 2 + 2])) / 100
+		results[i] = float32(binary.BigEndian.Uint16(data[i*2:i*2+2])) / 100
 	}
 
 	return results, nil
@@ -155,8 +152,7 @@ func (e *Collector) getValueFloats(address uint16, quantity uint16) ([]float32, 
 func (e *Collector) getValueInt(address uint16) (int32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, 1)
 	if err != nil {
-		log.Warnf("Failed to get data, address: %d", address)
-		return 0, err
+		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	return int32(binary.BigEndian.Uint16(data)), nil
 }
@@ -164,13 +160,12 @@ func (e *Collector) getValueInt(address uint16) (int32, error) {
 func (e *Collector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
 	if err != nil {
-		log.Warnf("Failed to get data, address: %d", address)
-		return nil, err
+		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
 	results := make([]int32, quantity)
 	for i := 0; i < int(quantity); i++ {
-		results[i] = int32(binary.BigEndian.Uint16(data[i * 2:i * 2 + 2]))
+		results[i] = int32(binary.BigEndian.Uint16(data[i*2 : i*2+2]))
 	}
 
 	return results, nil
@@ -180,10 +175,9 @@ func (e *Collector) getValueFloat32(address uint16) (float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(address, 2)
 
 	if err != nil {
-		log.Warnf("Failed to get data, address: %d", address)
-		return 0, err
+		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
-	swappedData := append(data[2:4],data[0:2]...)
+	swappedData := append(data[2:4], data[0:2]...)
 	return float32(binary.BigEndian.Uint32(swappedData)) / 100, nil
 }

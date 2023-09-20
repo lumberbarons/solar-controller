@@ -2,7 +2,6 @@ solarController:
   httpPort: 8080
   epever:
     serialPort: /dev/ttyXRUSB0
-    cacheExpiry: 30
     publishPeriod: 60
   victron:
     macAddress:
