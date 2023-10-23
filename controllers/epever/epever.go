@@ -111,7 +111,7 @@ func (e *Controller) RegisterEndpoints(r *gin.Engine) {
 }
 
 func (e *Controller) Enabled() bool {
-	return e.configurer != nil
+	return e.client != nil
 }
 
 func (e *Controller) Close() {
