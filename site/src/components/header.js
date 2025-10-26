@@ -1,58 +1,47 @@
 import React from 'react';
-import PropTypes from "prop-types";
-import { withRouter } from "react-router";
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faSun } from '@fortawesome/free-solid-svg-icons'
 
 import { Link } from "react-router-dom";
-import { withStyles } from '@material-ui/core/styles';
-import AppBar from '@material-ui/core/AppBar';
-import Toolbar from '@material-ui/core/Toolbar';
-import Typography from '@material-ui/core/Typography';
-import Button from '@material-ui/core/Button';
+import { styled } from '@mui/material/styles';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
 
-const styles = theme => ({
-  root: {
-    flexGrow: 1,
-  },
-  title: {
-    flexGrow: 1,
-  }
+const Root = styled('div')({
+  flexGrow: 1,
 });
 
-class Header extends React.Component {  
-  render() {
-    const { classes } = this.props;
+const Title = styled(Typography)({
+  flexGrow: 1,
+});
 
-    return (
-      <div className={classes.root}>
-        <AppBar position="static">
-          <Toolbar>
-            <Typography variant="h4" className={classes.title}>
-              <Link to="/" style={{ color: 'inherit', textDecoration: 'inherit'}}>
-                <FontAwesomeIcon 
-                  icon={faSun} 
-                  inverse 
-                  style={{
-                    marginRight: `0.5rem`,
-                  }}
-                />
-                Solar Controller
-              </Link>
-            </Typography>
-            <Button component={Link} to="/config" color="inherit" size="large">Config</Button>
-            <Button component={Link} to="/query" color="inherit" size="large">Query</Button>
-          </Toolbar>
+function Header() {
+
+  return (
+    <Root>
+      <AppBar position="static">
+        <Toolbar>
+          <Title variant="h4">
+            <Link to="/" style={{ color: 'inherit', textDecoration: 'inherit'}}>
+              <FontAwesomeIcon
+                icon={faSun}
+                inverse
+                style={{
+                  marginRight: `0.5rem`,
+                }}
+              />
+              Solar Controller
+            </Link>
+          </Title>
+          <Button component={Link} to="/config" color="inherit" size="large">Config</Button>
+          <Button component={Link} to="/query" color="inherit" size="large">Query</Button>
+        </Toolbar>
       </AppBar>
-      </div>
-    )
-  }
+    </Root>
+  );
 }
 
-Header.propTypes = {
-  classes: PropTypes.object.isRequired,
-  location: PropTypes.object.isRequired,
-};
-
-export default withRouter(withStyles(styles)(Header));
+export default Header;

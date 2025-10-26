@@ -1,24 +1,20 @@
 package main
 
 import (
-	"embed"
 	"flag"
 	"fmt"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/lumberbarons/solar-controller/controllers/epever"
-	"github.com/lumberbarons/solar-controller/controllers/victron"
-	"github.com/lumberbarons/solar-controller/publisher"
+	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/controllers/pijuice"
+	"github.com/lumberbarons/solar-controller/internal/controllers/victron"
+	"github.com/lumberbarons/solar-controller/internal/publisher"
+	staticfs "github.com/lumberbarons/solar-controller/internal/static"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
-	"io/fs"
 	"io/ioutil"
-	"net/http"
 )
-
-//go:embed site/build
-var site embed.FS
 
 var (
 	configFilePath *string
@@ -39,6 +35,7 @@ type SolarControllerConfiguration struct {
 	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
 	Epever   epever.Configuration        `yaml:"epever"`
 	Victron  victron.Configuration       `yaml:"victron"`
+	Pijuice  pijuice.Configuration       `yaml:"pijuice"`
 }
 
 func init() {
@@ -81,10 +78,12 @@ func main() {
 	})
 
 	for _, controller := range controllers {
-		controller.RegisterEndpoints(r)
+		if controller.Enabled() {
+			controller.RegisterEndpoints(r)
+		}
 	}
 
-	siteFS := EmbedFolder(site, "site/build", true)
+	siteFS := staticfs.GetSiteFS()
 	r.Use(static.Serve("/", siteFS))
 
 	log.Infof("starting server on port %v", controllerConfig.SolarController.HttpPort)
@@ -98,6 +97,8 @@ func main() {
 func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPublisher) []SolarController {
 	var controllers []SolarController
 
+	// epever
+
 	epeverController, err := epever.NewController(controllerConfig.SolarController.Epever, mqttPublisher)
 	if err != nil {
 		log.Fatalf("failed to create epever controller: %v", err)
@@ -108,6 +109,8 @@ func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPubl
 		controllers = append(controllers, epeverController)
 	}
 
+	// victron
+
 	victronController, err := victron.NewController(controllerConfig.SolarController.Victron, mqttPublisher)
 	if err != nil {
 		log.Fatalf("failed to create victron controller: %v", err)
@@ -116,6 +119,18 @@ func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPubl
 
 	if victronController.Enabled() {
 		controllers = append(controllers, victronController)
+	}
+
+	// pijuice
+
+	pijuiceController, err := pijuice.NewController(controllerConfig.SolarController.Pijuice, mqttPublisher)
+	if err != nil {
+		log.Fatalf("failed to create pijuice controller: %v", err)
+	}
+	defer pijuiceController.Close()
+
+	if pijuiceController.Enabled() {
+		controllers = append(controllers, pijuiceController)
 	}
 
 	return controllers
@@ -139,35 +154,4 @@ func loadConfigFile() Config {
 	}
 
 	return config
-}
-
-type embedFileSystem struct {
-	http.FileSystem
-	indexes bool
-}
-
-func (e embedFileSystem) Exists(prefix string, path string) bool {
-	f, err := e.Open(path)
-	if err != nil {
-		return false
-	}
-
-	s, _ := f.Stat()
-	if s.IsDir() && !e.indexes {
-		return false
-	}
-
-	return true
-}
-
-func EmbedFolder(fsEmbed embed.FS, targetPath string, index bool) static.ServeFileSystem {
-	subFS, err := fs.Sub(fsEmbed, targetPath)
-	if err != nil {
-		log.Fatalf("Failed to load static site: %v", err)
-	}
-
-	return embedFileSystem{
-		FileSystem: http.FS(subFS),
-		indexes:    index,
-	}
 }

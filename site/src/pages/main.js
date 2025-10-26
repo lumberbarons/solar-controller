@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import axios from 'axios';
 
-import { Grid, Box } from '@material-ui/core';
+import { Grid, Box } from '@mui/material';
 
 import Metric from "../components/metric"
 
@@ -14,7 +14,7 @@ class Main extends React.Component {
   }
 
   componentDidMount() {
-    axios.get(`/api/epever/metrics`)
+    axios.get(`/api/solar/metrics`)
       .then(res => {
         this.setState({metrics: res.data});
       }).catch(error => {

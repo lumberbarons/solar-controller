@@ -1,27 +1,28 @@
-package epever
+package pijuice
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
-	"github.com/lumberbarons/solar-controller/publisher"
-	log "github.com/sirupsen/logrus"
+	"github.com/lumberbarons/solar-controller/internal/publisher"
 	"net/http"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
-	namespace = "solar" // legacy
+	namespace = "pijuice"
 )
 
 type Configuration struct {
-	SerialPort    string `yaml:"serialPort"`
+	I2cBus        string `yaml:"i2cBus"`
+	I2cAddress    string `yaml:"i2cAddress"`
 	PublishPeriod int    `yaml:"publishPeriod"`
 }
 
 type Controller struct {
-	client              *ModbusClient
 	collector           *Collector
 	configurer          *Configurer
 	mqttPublisher       *publisher.MqttPublisher
@@ -30,25 +31,23 @@ type Controller struct {
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
-	if config.SerialPort == "" {
-		log.Info("epever disabled, no serial port provided")
+	if config.I2cAddress == "" {
+		log.Info("pijuice disabled, no i2c address provided")
 		return &Controller{}, nil
 	}
 
-	client, err := NewModbusClient(config.SerialPort)
+	pijuiceCollector, err := NewCollector(config.I2cBus, config.I2cAddress)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start pijuice hat collector %w", err)
 	}
 
-	epeverCollector := NewCollector(client)
-	epeverConfigurer := NewConfigurer(client)
+	pijuiceConfigurer := NewConfigurer()
 
-	log.Infof("connected to epever %s", config.SerialPort)
+	log.Infof("connected to pijuice, i2c address %s", config.I2cAddress)
 
 	controller := &Controller{
-		client:              client,
-		collector:           epeverCollector,
-		configurer:          epeverConfigurer,
+		collector:           pijuiceCollector,
+		configurer:          pijuiceConfigurer,
 		prometheusCollector: NewPrometheusCollector(),
 		mqttPublisher:       mqttPublisher,
 	}
@@ -57,7 +56,7 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 
 	_, err = s.Every(config.PublishPeriod).Seconds().WaitForSchedule().Do(controller.collectAndPublish)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start epever publisher %w", err)
+		return nil, fmt.Errorf("failed to start pijuice hat publisher %w", err)
 	}
 
 	s.StartAsync()
@@ -66,11 +65,11 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 }
 
 func (e *Controller) collectAndPublish() {
-	log.Info("collecting and publishing metrics for epever controller")
+	log.Info("collecting and publishing metrics for pijuice hat")
 
 	status, err := e.collector.GetStatus()
 	if err != nil {
-		log.Errorf("failed to collect metrics from epever: %s", err)
+		log.Errorf("failed to collect metrics from pijuice hat: %s", err)
 		e.prometheusCollector.IncrementFailures()
 		return
 	}
@@ -80,11 +79,13 @@ func (e *Controller) collectAndPublish() {
 
 	b, err := json.Marshal(status)
 	if err != nil {
-		log.Errorf("failed to marshall status for publishing for epever: %s", err)
+		log.Errorf("failed to marshall status for publishing for pijuice hat: %s", err)
 		return
 	}
 
 	e.mqttPublisher.Publish(namespace, string(b))
+
+	log.Info("collection done for pijuice hat")
 }
 
 func (e *Controller) MetricsGet() gin.HandlerFunc {
@@ -94,7 +95,7 @@ func (e *Controller) MetricsGet() gin.HandlerFunc {
 }
 
 func (e *Controller) RegisterEndpoints(r *gin.Engine) {
-	if e.client == nil {
+	if !e.Enabled() {
 		return
 	}
 
@@ -105,17 +106,12 @@ func (e *Controller) RegisterEndpoints(r *gin.Engine) {
 	})
 
 	r.GET(fmt.Sprintf("%s/metrics", prefix), e.MetricsGet())
-	r.GET(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigGet())
-	r.PATCH(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigPatch())
-	r.POST(fmt.Sprintf("%s/query", prefix), e.configurer.QueryPost())
 }
 
 func (e *Controller) Enabled() bool {
-	return e.client != nil
+	return false
 }
 
 func (e *Controller) Close() {
-	if e.client != nil {
-		e.client.Close()
-	}
+
 }

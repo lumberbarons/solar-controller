@@ -1,8 +1,8 @@
 import React from 'react';
 
 import axios from 'axios';
-import { Box, Grid, Container } from '@material-ui/core';
-import { FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@material-ui/core';
+import { Box, Grid, Container } from '@mui/material';
+import { FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
 
 class Config extends React.Component {
   constructor(props) {

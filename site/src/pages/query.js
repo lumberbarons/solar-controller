@@ -1,8 +1,8 @@
 import React from 'react';
 
 import axios from 'axios';
-import { Box, Grid, Container, Card, CardContent, Typography } from '@material-ui/core';
-import { FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@material-ui/core';
+import { Box, Grid, Container, Card, CardContent, Typography } from '@mui/material';
+import { FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
 
 class Query extends React.Component {
   constructor(props) {

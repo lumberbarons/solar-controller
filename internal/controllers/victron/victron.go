@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
-	"github.com/lumberbarons/solar-controller/publisher"
+	"github.com/lumberbarons/solar-controller/internal/publisher"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"time"
@@ -78,6 +78,8 @@ func (e *Controller) collectAndPublish() {
 	}
 
 	e.mqttPublisher.Publish(namespace, string(b))
+
+	log.Info("collection done for victron controller")
 }
 
 func (e *Controller) RegisterEndpoints(r *gin.Engine) {
