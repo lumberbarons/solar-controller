@@ -6,7 +6,6 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
-	"github.com/lumberbarons/solar-controller/internal/controllers/pijuice"
 	"github.com/lumberbarons/solar-controller/internal/controllers/victron"
 	"github.com/lumberbarons/solar-controller/internal/publisher"
 	staticfs "github.com/lumberbarons/solar-controller/internal/static"
@@ -35,7 +34,6 @@ type SolarControllerConfiguration struct {
 	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
 	Epever   epever.Configuration        `yaml:"epever"`
 	Victron  victron.Configuration       `yaml:"victron"`
-	Pijuice  pijuice.Configuration       `yaml:"pijuice"`
 }
 
 func init() {
@@ -119,18 +117,6 @@ func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPubl
 
 	if victronController.Enabled() {
 		controllers = append(controllers, victronController)
-	}
-
-	// pijuice
-
-	pijuiceController, err := pijuice.NewController(controllerConfig.SolarController.Pijuice, mqttPublisher)
-	if err != nil {
-		log.Fatalf("failed to create pijuice controller: %v", err)
-	}
-	defer pijuiceController.Close()
-
-	if pijuiceController.Enabled() {
-		controllers = append(controllers, pijuiceController)
 	}
 
 	return controllers

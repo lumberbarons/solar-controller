@@ -1,6 +1,7 @@
 package epever
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -55,7 +56,7 @@ type ControllerQuery struct {
 
 func (sc *Configurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		config, _ := sc.getConfig()
+		config, _ := sc.getConfig(c.Request.Context())
 		c.JSON(http.StatusOK, config)
 	}
 }
@@ -65,20 +66,20 @@ func (sc *Configurer) getFloatValue(data []byte, index int) float32 {
 	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / 100
 }
 
-func (sc *Configurer) getConfig() (ControllerConfig, error) {
-	data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 3)
+func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
+	data, _ := sc.modbusClient.ReadHoldingRegisters(ctx, 0x9000, 3)
 
 	batteryType := binary.BigEndian.Uint16(data[0:2])
 	batteryCapacity := binary.BigEndian.Uint16(data[2:4])
 	tempCompCoefficient := sc.getFloatValue(data, 2)
 
-	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9013, 3)
+	data, _ = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9013, 3)
 
 	year := int(data[4]) + 2000
 	time := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
 		data[2], data[5], year, data[3], data[0], data[1])
 
-	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9003, 12)
+	data, _ = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9003, 12)
 	overVoltDisconnectVoltage := sc.getFloatValue(data, 0)
 	chargingLimitVoltage := sc.getFloatValue(data, 1)
 	overVoltReconnectVoltage := sc.getFloatValue(data, 2)
@@ -92,14 +93,14 @@ func (sc *Configurer) getConfig() (ControllerConfig, error) {
 	lowVoltageDisconnect := sc.getFloatValue(data, 10)
 	dischargingLimitVoltage := sc.getFloatValue(data, 11)
 
-	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9016, 1)
+	data, _ = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9016, 1)
 	equalizationCycle := binary.BigEndian.Uint16(data[0:2])
 
-	data, _ = sc.modbusClient.ReadHoldingRegisters(0x906B, 2)
+	data, _ = sc.modbusClient.ReadHoldingRegisters(ctx, 0x906B, 2)
 	equalizationDuration := binary.BigEndian.Uint16(data[0:2])
 	boostDuration := binary.BigEndian.Uint16(data[2:4])
 
-	data, _ = sc.modbusClient.ReadHoldingRegisters(0x9017, 4)
+	data, _ = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9017, 4)
 	batteryTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[0:2]))) / 100
 	batteryTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[2:4]))) / 100
 	controllerTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[4:6]))) / 100
@@ -164,7 +165,7 @@ func batteryTypeToString(batteryType uint16) string {
 
 func (sc *Configurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
 	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
-	_, err := sc.modbusClient.WriteSingleRegister(address, value)
+	_, err := sc.modbusClient.WriteSingleRegister(c.Request.Context(), address, value)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to write %v of %v to controller", description, value)
 		log.Warn(errorMessage, err.Error())
@@ -191,7 +192,7 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			byte(currentTime.Day()), byte(currentTime.Hour()),
 			byte(currentTime.Year() - 2000), byte(currentTime.Month())}
 
-		_, err = sc.modbusClient.WriteMultipleRegisters(0x9013, 3, data)
+		_, err = sc.modbusClient.WriteMultipleRegisters(c.Request.Context(), 0x9013, 3, data)
 		if err != nil {
 			log.Warn("Failed to write date to controller")
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -205,7 +206,7 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 
 			userDefined = batteryType == 4
 		} else {
-			data, _ := sc.modbusClient.ReadHoldingRegisters(0x9000, 1)
+			data, _ := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), 0x9000, 1)
 			userDefined = binary.BigEndian.Uint16(data[0:2]) == 4
 		}
 
@@ -243,7 +244,7 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			}
 		}
 
-		newConfig, _ := sc.getConfig()
+		newConfig, _ := sc.getConfig(c.Request.Context())
 		c.JSON(http.StatusOK, newConfig)
 	}
 }
@@ -268,13 +269,13 @@ func (sc *Configurer) QueryPost() gin.HandlerFunc {
 
 		var result []byte
 		if query.Register == 1 {
-			result, _ = sc.modbusClient.ReadCoils(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadCoils(c.Request.Context(), uint16(address), 1)
 		} else if query.Register == 2 {
-			result, _ = sc.modbusClient.ReadDiscreteInputs(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadDiscreteInputs(c.Request.Context(), uint16(address), 1)
 		} else if query.Register == 3 {
-			result, _ = sc.modbusClient.ReadHoldingRegisters(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), uint16(address), 1)
 		} else if query.Register == 4 {
-			result, _ = sc.modbusClient.ReadInputRegisters(uint16(address), 1)
+			result, _ = sc.modbusClient.ReadInputRegisters(c.Request.Context(), uint16(address), 1)
 		} else {
 			log.Warn("Query bad register: ", query.Register)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown register"})

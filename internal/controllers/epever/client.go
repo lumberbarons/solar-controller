@@ -1,9 +1,10 @@
 package epever
 
 import (
+	"context"
 	"fmt"
 	"github.com/avast/retry-go/v4"
-	"github.com/goburrow/modbus"
+	"github.com/lumberbarons/modbus"
 	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -16,16 +17,16 @@ type ModbusClient struct {
 }
 
 const retryAttempts = 2
-const retryDelay    = 5 * time.Second
+const retryDelay = 5 * time.Second
 
 func NewModbusClient(serialPort string) (*ModbusClient, error) {
 	handler := modbus.NewRTUClientHandler(serialPort)
 
 	handler.BaudRate = 115200
 	handler.DataBits = 8
-	handler.Parity = "N"
+	handler.Parity = modbus.NoParity
 	handler.StopBits = 1
-	handler.SlaveId = 1
+	handler.SlaveID = 1
 	handler.Timeout = 5 * time.Second
 
 	err := handler.Connect()
@@ -45,7 +46,7 @@ func (c *ModbusClient) Close() {
 	}
 }
 
-func (c *ModbusClient) ReadInputRegisters(address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -54,7 +55,7 @@ func (c *ModbusClient) ReadInputRegisters(address uint16, quantity uint16) ([]by
 	err := retry.Do(
 		func() error {
 			var retryErr error
-			value, retryErr = c.client.ReadInputRegisters(address, quantity)
+			value, retryErr = c.client.ReadInputRegisters(ctx, address, quantity)
 			return retryErr
 		},
 		retry.Attempts(retryAttempts),
@@ -62,12 +63,13 @@ func (c *ModbusClient) ReadInputRegisters(address uint16, quantity uint16) ([]by
 		retry.OnRetry(func(n uint, err error) {
 			log.Warnf("ReadInputRegisters address %d retry #%d: %s\n", address, n, err)
 		}),
+		retry.Context(ctx),
 	)
 
 	return value, err
 }
 
-func (c *ModbusClient) ReadHoldingRegisters(address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -76,7 +78,7 @@ func (c *ModbusClient) ReadHoldingRegisters(address uint16, quantity uint16) ([]
 	err := retry.Do(
 		func() error {
 			var retryErr error
-			value, retryErr = c.client.ReadHoldingRegisters(address, quantity)
+			value, retryErr = c.client.ReadHoldingRegisters(ctx, address, quantity)
 			return retryErr
 		},
 		retry.Attempts(retryAttempts),
@@ -84,12 +86,13 @@ func (c *ModbusClient) ReadHoldingRegisters(address uint16, quantity uint16) ([]
 		retry.OnRetry(func(n uint, err error) {
 			log.Warnf("ReadHoldingRegisters address %d retry #%d: %s\n", address, n, err)
 		}),
+		retry.Context(ctx),
 	)
 
 	return value, err
 }
 
-func (c *ModbusClient) ReadCoils(address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadCoils(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -98,7 +101,7 @@ func (c *ModbusClient) ReadCoils(address uint16, quantity uint16) ([]byte, error
 	err := retry.Do(
 		func() error {
 			var retryErr error
-			value, retryErr = c.client.ReadCoils(address, quantity)
+			value, retryErr = c.client.ReadCoils(ctx, address, quantity)
 			return retryErr
 		},
 		retry.Attempts(retryAttempts),
@@ -106,12 +109,13 @@ func (c *ModbusClient) ReadCoils(address uint16, quantity uint16) ([]byte, error
 		retry.OnRetry(func(n uint, err error) {
 			log.Warnf("ReadCoils address %d retry #%d: %s\n", address, n, err)
 		}),
+		retry.Context(ctx),
 	)
 
 	return value, err
 }
 
-func (c *ModbusClient) ReadDiscreteInputs(address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadDiscreteInputs(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -120,7 +124,7 @@ func (c *ModbusClient) ReadDiscreteInputs(address uint16, quantity uint16) ([]by
 	err := retry.Do(
 		func() error {
 			var retryErr error
-			value, retryErr = c.client.ReadDiscreteInputs(address, quantity)
+			value, retryErr = c.client.ReadDiscreteInputs(ctx, address, quantity)
 			return retryErr
 		},
 		retry.Attempts(retryAttempts),
@@ -128,21 +132,22 @@ func (c *ModbusClient) ReadDiscreteInputs(address uint16, quantity uint16) ([]by
 		retry.OnRetry(func(n uint, err error) {
 			log.Warnf("ReadDiscreteInputs address %d retry #%d: %s\n", address, n, err)
 		}),
+		retry.Context(ctx),
 	)
 
 	return value, err
 }
 
-func (c *ModbusClient) WriteSingleRegister(address uint16, value uint16) (results []byte, err error) {
+func (c *ModbusClient) WriteSingleRegister(ctx context.Context, address uint16, value uint16) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	return c.client.WriteSingleRegister(address, value)
+	return c.client.WriteSingleRegister(ctx, address, value)
 }
 
-func (c *ModbusClient) WriteMultipleRegisters(address, quantity uint16, value []byte) (results []byte, err error) {
+func (c *ModbusClient) WriteMultipleRegisters(ctx context.Context, address, quantity uint16, value []byte) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	return c.client.WriteMultipleRegisters(address, quantity, value)
+	return c.client.WriteMultipleRegisters(ctx, address, quantity, value)
 }

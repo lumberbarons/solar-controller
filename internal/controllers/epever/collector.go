@@ -1,6 +1,7 @@
 package epever
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"time"
@@ -36,14 +37,14 @@ func NewCollector(client *ModbusClient) *Collector {
 	return collector
 }
 
-func (e *Collector) GetStatus() (*ControllerStatus, error) {
+func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	startTime := time.Now()
 
 	c := &ControllerStatus{
 		Timestamp: startTime.Unix(),
 	}
 
-	results, err := e.getValueFloats(0x3100, 2)
+	results, err := e.getValueFloats(ctx, 0x3100, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -51,22 +52,22 @@ func (e *Collector) GetStatus() (*ControllerStatus, error) {
 	c.ArrayVoltage = results[0]
 	c.ArrayCurrent = results[0]
 
-	c.ArrayCurrent, err = e.getValueFloat(0x3101)
+	c.ArrayCurrent, err = e.getValueFloat(ctx, 0x3101)
 	if err != nil {
 		return nil, err
 	}
 
-	c.BatteryVoltage, err = e.getValueFloat(0x3104)
+	c.BatteryVoltage, err = e.getValueFloat(ctx, 0x3104)
 	if err != nil {
 		return nil, err
 	}
 
-	c.BatterySOC, _ = e.getValueInt(0x311A)
+	c.BatterySOC, _ = e.getValueInt(ctx, 0x311A)
 	if err != nil {
 		return nil, err
 	}
 
-	results, err = e.getValueFloats(0x3302, 2)
+	results, err = e.getValueFloats(ctx, 0x3302, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -74,27 +75,27 @@ func (e *Collector) GetStatus() (*ControllerStatus, error) {
 	c.BatteryMaxVoltage = results[0]
 	c.BatteryMinVoltage = results[1]
 
-	c.ArrayPower, err = e.getValueFloat32(0x3102)
+	c.ArrayPower, err = e.getValueFloat32(ctx, 0x3102)
 	if err != nil {
 		return nil, err
 	}
 
-	c.ChargingCurrent, err = e.getValueFloat(0x3105)
+	c.ChargingCurrent, err = e.getValueFloat(ctx, 0x3105)
 	if err != nil {
 		return nil, err
 	}
 
-	c.ChargingPower, err = e.getValueFloat32(0x3106)
+	c.ChargingPower, err = e.getValueFloat32(ctx, 0x3106)
 	if err != nil {
 		return nil, err
 	}
 
-	c.EnergyGeneratedDaily, err = e.getValueFloat32(0x330C)
+	c.EnergyGeneratedDaily, err = e.getValueFloat32(ctx, 0x330C)
 	if err != nil {
 		return nil, err
 	}
 
-	controllerStatus, err := e.getValueInt(0x3201)
+	controllerStatus, err := e.getValueInt(ctx, 0x3201)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +103,7 @@ func (e *Collector) GetStatus() (*ControllerStatus, error) {
 	chargingStatus := (controllerStatus & 0x0C) >> 2
 	c.ChargingStatus = chargingStatus
 
-	tempResults, err := e.getValueInts(0x3110, 2)
+	tempResults, err := e.getValueInts(ctx, 0x3110, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +127,8 @@ func (e *Collector) GetStatus() (*ControllerStatus, error) {
 	return c, nil
 }
 
-func (e *Collector) getValueFloat(address uint16) (float32, error) {
-	data, err := e.modbusClient.ReadInputRegisters(address, 1)
+func (e *Collector) getValueFloat(ctx context.Context, address uint16) (float32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 1)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
@@ -135,8 +136,8 @@ func (e *Collector) getValueFloat(address uint16) (float32, error) {
 	return float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
-func (e *Collector) getValueFloats(address uint16, quantity uint16) ([]float32, error) {
-	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
+func (e *Collector) getValueFloats(ctx context.Context, address uint16, quantity uint16) ([]float32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(ctx, address, quantity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
@@ -149,16 +150,16 @@ func (e *Collector) getValueFloats(address uint16, quantity uint16) ([]float32, 
 	return results, nil
 }
 
-func (e *Collector) getValueInt(address uint16) (int32, error) {
-	data, err := e.modbusClient.ReadInputRegisters(address, 1)
+func (e *Collector) getValueInt(ctx context.Context, address uint16) (int32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 1)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	return int32(binary.BigEndian.Uint16(data)), nil
 }
 
-func (e *Collector) getValueInts(address uint16, quantity uint16) ([]int32, error) {
-	data, err := e.modbusClient.ReadInputRegisters(address, quantity)
+func (e *Collector) getValueInts(ctx context.Context, address uint16, quantity uint16) ([]int32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(ctx, address, quantity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
@@ -171,8 +172,8 @@ func (e *Collector) getValueInts(address uint16, quantity uint16) ([]int32, erro
 	return results, nil
 }
 
-func (e *Collector) getValueFloat32(address uint16) (float32, error) {
-	data, err := e.modbusClient.ReadInputRegisters(address, 2)
+func (e *Collector) getValueFloat32(ctx context.Context, address uint16) (float32, error) {
+	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 2)
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)

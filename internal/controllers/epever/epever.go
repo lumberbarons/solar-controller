@@ -1,6 +1,7 @@
 package epever
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -68,7 +69,8 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 func (e *Controller) collectAndPublish() {
 	log.Info("collecting and publishing metrics for epever controller")
 
-	status, err := e.collector.GetStatus()
+	ctx := context.Background()
+	status, err := e.collector.GetStatus(ctx)
 	if err != nil {
 		log.Errorf("failed to collect metrics from epever: %s", err)
 		e.prometheusCollector.IncrementFailures()
