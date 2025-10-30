@@ -1,11 +1,13 @@
 solarController:
   httpPort: 8080
   epever:
-    serialPort: /dev/ttys007
+    enabled: true
+    serialPort: /dev/ttys010
     publishPeriod: 5
-  #victron:
-  #  macAddress:
-  #  publishPeriod: 5
+  victron:
+    enabled: false
+    macAddress:
+    publishPeriod: 5
   #mqtt:
   #  host:
   #  username:

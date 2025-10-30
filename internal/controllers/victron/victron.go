@@ -16,6 +16,7 @@ const (
 )
 
 type Configuration struct {
+	Enabled       bool   `yaml:"enabled"`
 	MacAddress    string `yaml:"macAddress"`
 	PublishPeriod int    `yaml:"publishPeriod"`
 }
@@ -28,8 +29,13 @@ type Controller struct {
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
+	if !config.Enabled {
+		log.Info("victron disabled via configuration")
+		return &Controller{}, nil
+	}
+
 	if config.MacAddress == "" {
-		log.Info("victron disabled, no mac address provided")
+		log.Warn("victron enabled but no mac address provided")
 		return &Controller{}, nil
 	}
 

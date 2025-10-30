@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever, Victron) and battery management systems (PiJuice HAT) and publishes them via MQTT and Prometheus. It includes a React-based web UI for monitoring.
+Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever, Victron) and publishes them via MQTT and Prometheus. It includes a React-based web UI for monitoring.
 
 ## Development Commands
 
@@ -102,13 +102,13 @@ type SolarController interface {
 }
 ```
 
-Each controller (epever, victron, pijuice) follows the same structure:
+Each controller (epever, victron) follows the same structure:
 - **Controller**: Main orchestrator that manages scheduled collection/publishing
 - **Collector**: Handles device communication and metric collection
-- **Configurer**: Manages device configuration (epever, pijuice only)
+- **Configurer**: Manages device configuration (epever only)
 - **PrometheusCollector**: Exposes metrics to Prometheus
 
-Controllers are instantiated in `main.go:buildControllers()` and conditionally enabled based on configuration. If required config fields are missing, the controller returns an empty/disabled instance.
+Controllers are instantiated in `main.go:buildControllers()` and conditionally enabled based on configuration. Each controller has an `enabled` boolean field that must be set to `true` for the controller to start. If required config fields are missing (even when enabled is true), the controller returns an empty/disabled instance.
 
 ### Data Flow
 
@@ -124,7 +124,6 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
 
 - **Epever**: Modbus RTU over serial (via `goburrow/modbus`)
 - **Victron**: Bluetooth LE (via `rigado/ble`)
-- **PiJuice**: I2C bus communication
 
 ### Web Server
 
@@ -150,23 +149,21 @@ solarController:
     password: pass
     topicPrefix: solar/metrics
   epever:
+    enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
   victron:
+    enabled: true
     macAddress: AA:BB:CC:DD:EE:FF
-    publishPeriod: 30
-  pijuice:
-    i2cBus: 1
-    i2cAddress: 0x14
     publishPeriod: 30
 ```
 
-Controllers are disabled if their required config fields are empty (serialPort, macAddress, i2cAddress).
+Controllers can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration. If `enabled: true` but required fields are missing (serialPort for epever, macAddress for victron), a warning will be logged and the controller will not start.
 
 ## Project Structure
 
 - `cmd/controller/` - Main application entry point
-- `internal/controllers/` - Hardware controller implementations (epever, victron, pijuice)
+- `internal/controllers/` - Hardware controller implementations (epever, victron)
 - `internal/publisher/` - MQTT publishing functionality
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code

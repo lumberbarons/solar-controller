@@ -17,6 +17,7 @@ const (
 )
 
 type Configuration struct {
+	Enabled       bool   `yaml:"enabled"`
 	SerialPort    string `yaml:"serialPort"`
 	PublishPeriod int    `yaml:"publishPeriod"`
 }
@@ -31,8 +32,13 @@ type Controller struct {
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
+	if !config.Enabled {
+		log.Info("epever disabled via configuration")
+		return &Controller{}, nil
+	}
+
 	if config.SerialPort == "" {
-		log.Info("epever disabled, no serial port provided")
+		log.Warn("epever enabled but no serial port provided")
 		return &Controller{}, nil
 	}
 
@@ -67,7 +73,7 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 }
 
 func (e *Controller) collectAndPublish() {
-	log.Info("collecting and publishing metrics for epever controller")
+	log.Trace("collecting and publishing metrics for epever controller")
 
 	ctx := context.Background()
 	status, err := e.collector.GetStatus(ctx)
@@ -88,12 +94,16 @@ func (e *Controller) collectAndPublish() {
 
 	e.mqttPublisher.Publish(namespace, string(b))
 
-	log.Info("collection done for epever controller")
+	log.Trace("collection done for epever controller")
 }
 
 func (e *Controller) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, e.lastStatus)
+		if e.lastStatus == nil {
+			c.JSON(http.StatusNoContent, gin.H{})
+		} else {
+			c.JSON(http.StatusOK, e.lastStatus)
+		}
 	}
 }
 

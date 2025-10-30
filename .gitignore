@@ -4,3 +4,5 @@ node_modules
 site/build
 internal/static/build
 bin/
+tmp/
+build-errors.log
