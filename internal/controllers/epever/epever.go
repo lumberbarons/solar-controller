@@ -75,7 +75,9 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 func (e *Controller) collectAndPublish() {
 	log.Trace("collecting and publishing metrics for epever controller")
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	status, err := e.collector.GetStatus(ctx)
 	if err != nil {
 		log.Errorf("failed to collect metrics from epever: %s", err)

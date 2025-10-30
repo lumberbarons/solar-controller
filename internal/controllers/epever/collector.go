@@ -62,7 +62,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 
-	c.BatterySOC, _ = e.getValueInt(ctx, 0x311A)
+	c.BatterySOC, err = e.getValueInt(ctx, 0x311A)
 	if err != nil {
 		return nil, err
 	}
