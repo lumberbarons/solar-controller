@@ -32,8 +32,6 @@ function Header() {
         return 0;
       case '/config':
         return 1;
-      case '/query':
-        return 2;
       default:
         return 0;
     }
@@ -84,7 +82,6 @@ function Header() {
             >
               <Tab label="Dashboard" component={Link} to="/" />
               <Tab label="Config" component={Link} to="/config" />
-              <Tab label="Query" component={Link} to="/query" />
             </Tabs>
           </Box>
         </Toolbar>

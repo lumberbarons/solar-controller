@@ -9,6 +9,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/publisher"
 	log "github.com/sirupsen/logrus"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -28,7 +29,9 @@ type Controller struct {
 	configurer          *Configurer
 	mqttPublisher       *publisher.MqttPublisher
 	prometheusCollector *PrometheusCollector
+	scheduler           *gocron.Scheduler
 	lastStatus          *ControllerStatus
+	lastStatusMutex     sync.RWMutex
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
@@ -47,27 +50,32 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 		return nil, err
 	}
 
+	prometheusCollector := NewPrometheusCollector()
 	epeverCollector := NewCollector(client)
-	epeverConfigurer := NewConfigurer(client)
+	epeverConfigurer := NewConfigurer(client, prometheusCollector)
 
 	log.Infof("connected to epever %s", config.SerialPort)
+
+	s := gocron.NewScheduler(time.UTC)
 
 	controller := &Controller{
 		client:              client,
 		collector:           epeverCollector,
 		configurer:          epeverConfigurer,
-		prometheusCollector: NewPrometheusCollector(),
+		prometheusCollector: prometheusCollector,
 		mqttPublisher:       mqttPublisher,
+		scheduler:           s,
 	}
 
-	s := gocron.NewScheduler(time.UTC)
-
-	_, err = s.Every(config.PublishPeriod).Seconds().WaitForSchedule().Do(controller.collectAndPublish)
+	_, err = s.Every(config.PublishPeriod).Seconds().Do(controller.collectAndPublish)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start epever publisher %w", err)
 	}
 
 	s.StartAsync()
+
+	// Run initial collection immediately
+	go controller.collectAndPublish()
 
 	return controller, nil
 }
@@ -85,7 +93,10 @@ func (e *Controller) collectAndPublish() {
 		return
 	}
 
+	e.lastStatusMutex.Lock()
 	e.lastStatus = status
+	e.lastStatusMutex.Unlock()
+
 	e.prometheusCollector.SetMetrics(status)
 
 	b, err := json.Marshal(status)
@@ -101,11 +112,15 @@ func (e *Controller) collectAndPublish() {
 
 func (e *Controller) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if e.lastStatus == nil {
+		e.lastStatusMutex.RLock()
+		status := e.lastStatus
+		e.lastStatusMutex.RUnlock()
+
+		if status == nil {
 			c.JSON(http.StatusNoContent, gin.H{})
-		} else {
-			c.JSON(http.StatusOK, e.lastStatus)
+			return
 		}
+		c.JSON(http.StatusOK, status)
 	}
 }
 
@@ -133,8 +148,6 @@ func (e *Controller) RegisterEndpoints(r *gin.Engine) {
 	// Legacy endpoint (kept for backwards compatibility)
 	r.GET(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigGet())
 	r.PATCH(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigPatch())
-
-	r.POST(fmt.Sprintf("%s/query", prefix), e.configurer.QueryPost())
 }
 
 func (e *Controller) Enabled() bool {
@@ -142,6 +155,10 @@ func (e *Controller) Enabled() bool {
 }
 
 func (e *Controller) Close() {
+	if e.scheduler != nil {
+		e.scheduler.Stop()
+		log.Debug("epever scheduler stopped")
+	}
 	if e.client != nil {
 		e.client.Close()
 	}

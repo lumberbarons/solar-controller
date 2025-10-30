@@ -8,6 +8,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/publisher"
 	log "github.com/sirupsen/logrus"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type Controller struct {
 	mqttPublisher       *publisher.MqttPublisher
 	prometheusCollector *PrometheusCollector
 	lastStatus          *ControllerStatus
+	lastStatusMutex     sync.RWMutex
 }
 
 func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
@@ -61,6 +63,9 @@ func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher)
 
 	s.StartAsync()
 
+	// Run initial collection immediately
+	go controller.collectAndPublish()
+
 	return controller, nil
 }
 
@@ -74,7 +79,10 @@ func (e *Controller) collectAndPublish() {
 		return
 	}
 
+	e.lastStatusMutex.Lock()
 	e.lastStatus = status
+	e.lastStatusMutex.Unlock()
+
 	e.prometheusCollector.SetMetrics(status)
 
 	b, err := json.Marshal(status)
@@ -100,7 +108,15 @@ func (e *Controller) RegisterEndpoints(r *gin.Engine) {
 	})
 
 	r.GET(fmt.Sprintf("%s/metrics", prefix), func(c *gin.Context) {
-		c.JSON(http.StatusOK, e.lastStatus)
+		e.lastStatusMutex.RLock()
+		status := e.lastStatus
+		e.lastStatusMutex.RUnlock()
+
+		if status == nil {
+			c.JSON(http.StatusNoContent, gin.H{})
+			return
+		}
+		c.JSON(http.StatusOK, status)
 	})
 }
 

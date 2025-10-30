@@ -3,7 +3,6 @@ import { Routes, Route } from "react-router-dom";
 
 import Header from "../components/header";
 import Main from "./main";
-import Query from "./query";
 import Config from "./config";
 
 function App() {
@@ -12,7 +11,6 @@ function App() {
       <Header />
       <main>
         <Routes>
-          <Route path="/query" element={<Query />} />
           <Route path="/config" element={<Config />} />
           <Route path="/" element={<Main />} />
         </Routes>

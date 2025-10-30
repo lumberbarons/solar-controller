@@ -7,6 +7,36 @@ import (
 	"time"
 )
 
+// Modbus input register addresses (read-only status values)
+const (
+	regArrayVoltage         = 0x3100
+	regArrayCurrent         = 0x3101
+	regArrayPower           = 0x3102
+	regBatteryVoltage       = 0x3104
+	regChargingCurrent      = 0x3105
+	regChargingPower        = 0x3106
+	regBatteryTemperature   = 0x3110
+	regDeviceTemperature    = 0x3111
+	regBatterySOC           = 0x311A
+	regControllerStatus     = 0x3201
+	regBatteryMaxVoltage    = 0x3302
+	regBatteryMinVoltage    = 0x3303
+	regEnergyGeneratedDaily = 0x330C
+)
+
+// Charging status bit mask
+const (
+	chargingStatusMask  = 0x0C
+	chargingStatusShift = 2
+)
+
+// Temperature conversion constants
+const (
+	tempSignedThreshold = 32768
+	tempSignedOffset    = 65536
+	tempDivisor         = 100.0
+)
+
 type Collector struct {
 	modbusClient *ModbusClient
 }
@@ -44,85 +74,89 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		Timestamp: startTime.Unix(),
 	}
 
-	results, err := e.getValueFloats(ctx, 0x3100, 2)
+	results, err := e.getValueFloats(ctx, regArrayVoltage, 2)
 	if err != nil {
 		return nil, err
+	}
+	if len(results) < 2 {
+		return nil, fmt.Errorf("expected 2 values for array voltage/current, got %d", len(results))
 	}
 
 	c.ArrayVoltage = results[0]
 	c.ArrayCurrent = results[1]
 
-	c.ArrayCurrent, err = e.getValueFloat(ctx, 0x3101)
+	c.BatteryVoltage, err = e.getValueFloat(ctx, regBatteryVoltage)
 	if err != nil {
 		return nil, err
 	}
 
-	c.BatteryVoltage, err = e.getValueFloat(ctx, 0x3104)
+	c.BatterySOC, err = e.getValueInt(ctx, regBatterySOC)
 	if err != nil {
 		return nil, err
 	}
 
-	c.BatterySOC, err = e.getValueInt(ctx, 0x311A)
+	results, err = e.getValueFloats(ctx, regBatteryMaxVoltage, 2)
 	if err != nil {
 		return nil, err
 	}
-
-	results, err = e.getValueFloats(ctx, 0x3302, 2)
-	if err != nil {
-		return nil, err
+	if len(results) < 2 {
+		return nil, fmt.Errorf("expected 2 values for battery max/min voltage, got %d", len(results))
 	}
 
 	c.BatteryMaxVoltage = results[0]
 	c.BatteryMinVoltage = results[1]
 
-	c.ArrayPower, err = e.getValueFloat32(ctx, 0x3102)
+	c.ArrayPower, err = e.getValueFloat32(ctx, regArrayPower)
 	if err != nil {
 		return nil, err
 	}
 
-	c.ChargingCurrent, err = e.getValueFloat(ctx, 0x3105)
+	c.ChargingCurrent, err = e.getValueFloat(ctx, regChargingCurrent)
 	if err != nil {
 		return nil, err
 	}
 
-	c.ChargingPower, err = e.getValueFloat32(ctx, 0x3106)
+	c.ChargingPower, err = e.getValueFloat32(ctx, regChargingPower)
 	if err != nil {
 		return nil, err
 	}
 
-	c.EnergyGeneratedDaily, err = e.getValueFloat32(ctx, 0x330C)
+	c.EnergyGeneratedDaily, err = e.getValueFloat32(ctx, regEnergyGeneratedDaily)
 	if err != nil {
 		return nil, err
 	}
 
-	controllerStatus, err := e.getValueInt(ctx, 0x3201)
+	controllerStatus, err := e.getValueInt(ctx, regControllerStatus)
 	if err != nil {
 		return nil, err
 	}
 
-	chargingStatus := (controllerStatus & 0x0C) >> 2
+	chargingStatus := (controllerStatus & chargingStatusMask) >> chargingStatusShift
 	c.ChargingStatus = chargingStatus
 
-	tempResults, err := e.getValueInts(ctx, 0x3110, 2)
+	tempResults, err := e.getValueInts(ctx, regBatteryTemperature, 2)
 	if err != nil {
 		return nil, err
+	}
+	if len(tempResults) < 2 {
+		return nil, fmt.Errorf("expected 2 values for battery/device temperature, got %d", len(tempResults))
 	}
 
 	bt := tempResults[0]
 
-	if bt > 32768 {
-		bt = bt - 65536
+	if bt > tempSignedThreshold {
+		bt = bt - tempSignedOffset
 	}
-	c.BatteryTemp = float32(bt) / 100
+	c.BatteryTemp = float32(bt) / tempDivisor
 
 	dt := tempResults[1]
 
-	if dt > 32768 {
-		dt = dt - 65536
+	if dt > tempSignedThreshold {
+		dt = dt - tempSignedOffset
 	}
-	c.DeviceTemp = float32(dt) / 100
+	c.DeviceTemp = float32(dt) / tempDivisor
 
-	c.CollectionTime = time.Now().Sub(startTime).Seconds()
+	c.CollectionTime = time.Since(startTime).Seconds()
 
 	return c, nil
 }
@@ -177,6 +211,10 @@ func (e *Collector) getValueFloat32(ctx context.Context, address uint16) (float3
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
+	}
+
+	if len(data) < 4 {
+		return 0, fmt.Errorf("insufficient data for float32 at address %d: expected 4 bytes, got %d", address, len(data))
 	}
 
 	swappedData := append(data[2:4], data[0:2]...)

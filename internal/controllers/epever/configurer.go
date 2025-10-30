@@ -8,11 +8,44 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
+
+// Modbus holding register addresses (read-write configuration values)
+const (
+	regBatteryType                   = 0x9000
+	regBatteryCapacity               = 0x9001
+	regTempCompCoefficient           = 0x9002
+	regOverVoltDisconnect            = 0x9003
+	regChargingLimitVoltage          = 0x9004
+	regOverVoltReconnect             = 0x9005
+	regEqualizationVoltage           = 0x9006
+	regBoostVoltage                  = 0x9007
+	regFloatVoltage                  = 0x9008
+	regBoostReconnectVoltage         = 0x9009
+	regLowVoltReconnect              = 0x900A
+	regUnderVoltRecover              = 0x900B
+	regUnderVoltWarning              = 0x900C
+	regLowVoltDisconnect             = 0x900D
+	regDischargingLimitVoltage       = 0x900E
+	regRealTimeClock                 = 0x9013
+	regEqualizationChargingCycle     = 0x9016
+	regBatteryTempUpperLimit         = 0x9017
+	regBatteryTempLowerLimit         = 0x9018
+	regControllerTempUpperLimit      = 0x9019
+	regControllerTempLowerLimit      = 0x901A
+	regEqualizationChargingTime      = 0x906B
+	regBoostChargingTime             = 0x906C
+)
+
+// Battery type constants
+const (
+	batteryTypeUserDefined = 4
+)
+
+// Conversion factor for voltage values (stored as centivolt)
+const voltageDivisor = 100.0
 
 type cachedConfig struct {
 	config    *ControllerConfig
@@ -20,16 +53,18 @@ type cachedConfig struct {
 }
 
 type Configurer struct {
-	modbusClient *ModbusClient
-	cache        *cachedConfig
-	cacheMutex   sync.RWMutex
-	cacheTTL     time.Duration
+	modbusClient        *ModbusClient
+	prometheusCollector *PrometheusCollector
+	cache               *cachedConfig
+	cacheMutex          sync.RWMutex
+	cacheTTL            time.Duration
 }
 
-func NewConfigurer(client *ModbusClient) *Configurer {
+func NewConfigurer(client *ModbusClient, prometheusCollector *PrometheusCollector) *Configurer {
 	return &Configurer{
-		modbusClient: client,
-		cacheTTL:     10 * time.Minute,
+		modbusClient:        client,
+		prometheusCollector: prometheusCollector,
+		cacheTTL:            10 * time.Minute,
 	}
 }
 
@@ -88,12 +123,6 @@ type ChargingParameters struct {
 	ControllerTempLowerLimit      *float32 `json:"controllerTempLowerLimit,omitempty"`
 }
 
-type ControllerQuery struct {
-	Register int    `json:"register"`
-	Address  string `json:"address"`
-	Result   uint16 `json:"result"`
-}
-
 type TimeConfig struct {
 	Time time.Time `json:"time"`
 }
@@ -112,17 +141,22 @@ func (sc *Configurer) ConfigGet() gin.HandlerFunc {
 
 func (sc *Configurer) getFloatValue(data []byte, index int) float32 {
 	offset := index * 2
-	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / 100
+	if len(data) < offset+2 {
+		log.Warnf("getFloatValue: insufficient data at index %d (need %d bytes, have %d)", index, offset+2, len(data))
+		return 0
+	}
+	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / voltageDivisor
 }
 
 // getCachedConfig returns the cached config if valid, otherwise fetches from device
 func (sc *Configurer) getCachedConfig(ctx context.Context) (*ControllerConfig, error) {
 	sc.cacheMutex.RLock()
 	if sc.cache != nil && time.Since(sc.cache.timestamp) < sc.cacheTTL {
-		config := sc.cache.config
+		// Return a copy to prevent external modification of cached data
+		configCopy := *sc.cache.config
 		sc.cacheMutex.RUnlock()
 		log.Trace("Using cached config")
-		return config, nil
+		return &configCopy, nil
 	}
 	sc.cacheMutex.RUnlock()
 
@@ -132,10 +166,11 @@ func (sc *Configurer) getCachedConfig(ctx context.Context) (*ControllerConfig, e
 		return nil, err
 	}
 
-	// Update cache
+	// Update cache with a copy
+	configCopy := config
 	sc.cacheMutex.Lock()
 	sc.cache = &cachedConfig{
-		config:    &config,
+		config:    &configCopy,
 		timestamp: time.Now(),
 	}
 	sc.cacheMutex.Unlock()
@@ -154,9 +189,9 @@ func (sc *Configurer) invalidateCache() {
 
 func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read battery type, capacity, and temp compensation coefficient
-	data, err := sc.modbusClient.ReadHoldingRegisters(ctx, 0x9000, 3)
+	data, err := sc.modbusClient.ReadHoldingRegisters(ctx, regBatteryType, 3)
 	if err != nil {
-		return ControllerConfig{}, fmt.Errorf("failed to read battery config (0x9000): %w", err)
+		return ControllerConfig{}, fmt.Errorf("failed to read battery config (0x%X): %w", regBatteryType, err)
 	}
 
 	batteryType := binary.BigEndian.Uint16(data[0:2])
@@ -164,9 +199,12 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	tempCompCoefficient := sc.getFloatValue(data, 2)
 
 	// Read time
-	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9013, 3)
+	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regRealTimeClock, 3)
 	if err != nil {
-		return ControllerConfig{}, fmt.Errorf("failed to read time (0x9013): %w", err)
+		return ControllerConfig{}, fmt.Errorf("failed to read time (0x%X): %w", regRealTimeClock, err)
+	}
+	if len(data) < 6 {
+		return ControllerConfig{}, fmt.Errorf("insufficient time data: expected 6 bytes, got %d", len(data))
 	}
 
 	year := int(data[4]) + 2000
@@ -174,9 +212,9 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 		data[2], data[5], year, data[3], data[0], data[1])
 
 	// Read voltage parameters
-	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9003, 12)
+	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regOverVoltDisconnect, 12)
 	if err != nil {
-		return ControllerConfig{}, fmt.Errorf("failed to read voltage parameters (0x9003): %w", err)
+		return ControllerConfig{}, fmt.Errorf("failed to read voltage parameters (0x%X): %w", regOverVoltDisconnect, err)
 	}
 	overVoltDisconnectVoltage := sc.getFloatValue(data, 0)
 	chargingLimitVoltage := sc.getFloatValue(data, 1)
@@ -192,29 +230,38 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	dischargingLimitVoltage := sc.getFloatValue(data, 11)
 
 	// Read equalization cycle
-	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9016, 1)
+	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regEqualizationChargingCycle, 1)
 	if err != nil {
-		return ControllerConfig{}, fmt.Errorf("failed to read equalization cycle (0x9016): %w", err)
+		return ControllerConfig{}, fmt.Errorf("failed to read equalization cycle (0x%X): %w", regEqualizationChargingCycle, err)
+	}
+	if len(data) < 2 {
+		return ControllerConfig{}, fmt.Errorf("insufficient equalization cycle data: expected 2 bytes, got %d", len(data))
 	}
 	equalizationCycle := binary.BigEndian.Uint16(data[0:2])
 
 	// Read durations
-	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, 0x906B, 2)
+	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regEqualizationChargingTime, 2)
 	if err != nil {
-		return ControllerConfig{}, fmt.Errorf("failed to read durations (0x906B): %w", err)
+		return ControllerConfig{}, fmt.Errorf("failed to read durations (0x%X): %w", regEqualizationChargingTime, err)
+	}
+	if len(data) < 4 {
+		return ControllerConfig{}, fmt.Errorf("insufficient duration data: expected 4 bytes, got %d", len(data))
 	}
 	equalizationDuration := binary.BigEndian.Uint16(data[0:2])
 	boostDuration := binary.BigEndian.Uint16(data[2:4])
 
 	// Read temperature limits
-	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, 0x9017, 4)
+	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regBatteryTempUpperLimit, 4)
 	if err != nil {
-		return ControllerConfig{}, fmt.Errorf("failed to read temperature limits (0x9017): %w", err)
+		return ControllerConfig{}, fmt.Errorf("failed to read temperature limits (0x%X): %w", regBatteryTempUpperLimit, err)
 	}
-	batteryTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[0:2]))) / 100
-	batteryTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[2:4]))) / 100
-	controllerTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[4:6]))) / 100
-	controllerTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[6:8]))) / 100
+	if len(data) < 8 {
+		return ControllerConfig{}, fmt.Errorf("insufficient temperature data: expected 8 bytes, got %d", len(data))
+	}
+	batteryTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[0:2]))) / voltageDivisor
+	batteryTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[2:4]))) / voltageDivisor
+	controllerTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[4:6]))) / voltageDivisor
+	controllerTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[6:8]))) / voltageDivisor
 
 	return ControllerConfig{
 		Time:                          time,
@@ -279,6 +326,9 @@ func (sc *Configurer) writeSingle(c *gin.Context, address uint16, value uint16, 
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to write %v of %v to controller", description, value)
 		log.Warn(errorMessage, err.Error())
+		if sc.prometheusCollector != nil {
+			sc.prometheusCollector.IncrementWriteFailures()
+		}
 		return fmt.Errorf("%s: %w", errorMessage, err)
 	}
 	return nil
@@ -297,22 +347,22 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 		userDefined := false
 		if config.BatteryType != "" {
 			batteryType := batteryTypeToInt(config.BatteryType)
-			if err := sc.writeSingle(c, 0x9000, batteryType, "battery type"); err != nil {
+			if err := sc.writeSingle(c, regBatteryType, batteryType, "battery type"); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
 			// Invalidate cache when battery type is changed
 			sc.invalidateCache()
 
-			userDefined = batteryType == 4
+			userDefined = batteryType == batteryTypeUserDefined
 		} else {
-			data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), 0x9000, 1)
+			data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regBatteryType, 1)
 			if err != nil {
 				log.Warn("Failed to read battery type", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read battery type"})
 				return
 			}
-			userDefined = binary.BigEndian.Uint16(data[0:2]) == 4
+			userDefined = binary.BigEndian.Uint16(data[0:2]) == batteryTypeUserDefined
 		}
 
 		if userDefined {
@@ -357,61 +407,61 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 
 			// Validation passed, proceed with writes
 			if config.EqualizationCycle > 0 {
-				if err := sc.writeSingle(c, 0x9016, config.EqualizationCycle, "equalization cycle"); err != nil {
+				if err := sc.writeSingle(c, regEqualizationChargingCycle, config.EqualizationCycle, "equalization cycle"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.EqualizationDuration > 0 {
-				if err := sc.writeSingle(c, 0x906B, config.EqualizationDuration, "equalization duration"); err != nil {
+				if err := sc.writeSingle(c, regEqualizationChargingTime, config.EqualizationDuration, "equalization duration"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.ChargingLimitVoltage > 0 {
-				chargingLimitVoltage := uint16(config.ChargingLimitVoltage * 100)
-				if err := sc.writeSingle(c, 0x9004, chargingLimitVoltage, "charging limit voltage"); err != nil {
+				chargingLimitVoltage := uint16(config.ChargingLimitVoltage * voltageDivisor)
+				if err := sc.writeSingle(c, regChargingLimitVoltage, chargingLimitVoltage, "charging limit voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.EqualizationVoltage > 0 {
-				equalizationVoltage := uint16(config.EqualizationVoltage * 100)
-				if err := sc.writeSingle(c, 0x9006, equalizationVoltage, "equalization voltage"); err != nil {
+				equalizationVoltage := uint16(config.EqualizationVoltage * voltageDivisor)
+				if err := sc.writeSingle(c, regEqualizationVoltage, equalizationVoltage, "equalization voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.BoostVoltage > 0 {
-				boostVoltage := uint16(config.BoostVoltage * 100)
-				if err := sc.writeSingle(c, 0x9007, boostVoltage, "boost voltage"); err != nil {
+				boostVoltage := uint16(config.BoostVoltage * voltageDivisor)
+				if err := sc.writeSingle(c, regBoostVoltage, boostVoltage, "boost voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.BoostDuration > 0 {
-				if err := sc.writeSingle(c, 0x906C, config.BoostDuration, "boost duration"); err != nil {
+				if err := sc.writeSingle(c, regBoostChargingTime, config.BoostDuration, "boost duration"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.FloatVoltage > 0 {
-				floatVoltage := uint16(config.FloatVoltage * 100)
-				if err := sc.writeSingle(c, 0x9008, floatVoltage, "float voltage"); err != nil {
+				floatVoltage := uint16(config.FloatVoltage * voltageDivisor)
+				if err := sc.writeSingle(c, regFloatVoltage, floatVoltage, "float voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			}
 
 			if config.BoostReconnectChargingVoltage > 0 {
-				boostReconnectChargingVoltage := uint16(config.BoostReconnectChargingVoltage * 100)
-				if err := sc.writeSingle(c, 0x9009, boostReconnectChargingVoltage, "boost reconnect charging voltage"); err != nil {
+				boostReconnectChargingVoltage := uint16(config.BoostReconnectChargingVoltage * voltageDivisor)
+				if err := sc.writeSingle(c, regBoostReconnectVoltage, boostReconnectChargingVoltage, "boost reconnect charging voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -467,7 +517,7 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 			var batteryType string
 			if err := json.Unmarshal(batteryTypeRaw, &batteryType); err == nil {
 				batteryTypeInt := batteryTypeToInt(batteryType)
-				if err := sc.writeSingle(c, 0x9000, batteryTypeInt, "battery type"); err != nil {
+				if err := sc.writeSingle(c, regBatteryType, batteryTypeInt, "battery type"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -479,7 +529,7 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 		if batteryCapacityRaw, ok := rawData["batteryCapacity"]; ok {
 			var batteryCapacity uint16
 			if err := json.Unmarshal(batteryCapacityRaw, &batteryCapacity); err == nil {
-				if err := sc.writeSingle(c, 0x9001, batteryCapacity, "battery capacity"); err != nil {
+				if err := sc.writeSingle(c, regBatteryCapacity, batteryCapacity, "battery capacity"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -588,7 +638,7 @@ func (sc *Configurer) ChargingParametersGet() gin.HandlerFunc {
 func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// First check if battery type is userDefined
-		data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), 0x9000, 1)
+		data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regBatteryType, 1)
 		if err != nil {
 			log.Warn("Failed to read battery type", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read battery type"})
@@ -596,7 +646,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		}
 
 		batteryType := binary.BigEndian.Uint16(data[0:2])
-		if batteryType != 4 { // 4 = userDefined
+		if batteryType != batteryTypeUserDefined {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Charging parameters can only be modified when battery type is 'userDefined'"})
 			return
 		}
@@ -669,7 +719,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["equalizationCycle"]; ok {
 			var equalizationCycle uint16
 			if err := json.Unmarshal(val, &equalizationCycle); err == nil {
-				if err := sc.writeSingle(c, 0x9016, equalizationCycle, "equalization cycle"); err != nil {
+				if err := sc.writeSingle(c, regEqualizationChargingCycle, equalizationCycle, "equalization cycle"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -680,7 +730,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["equalizationDuration"]; ok {
 			var equalizationDuration uint16
 			if err := json.Unmarshal(val, &equalizationDuration); err == nil {
-				if err := sc.writeSingle(c, 0x906B, equalizationDuration, "equalization duration"); err != nil {
+				if err := sc.writeSingle(c, regEqualizationChargingTime, equalizationDuration, "equalization duration"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -691,7 +741,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["chargingLimitVoltage"]; ok {
 			var chargingLimitVoltage float32
 			if err := json.Unmarshal(val, &chargingLimitVoltage); err == nil {
-				if err := sc.writeSingle(c, 0x9004, uint16(chargingLimitVoltage*100), "charging limit voltage"); err != nil {
+				if err := sc.writeSingle(c, regChargingLimitVoltage, uint16(chargingLimitVoltage*voltageDivisor), "charging limit voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -702,7 +752,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["equalizationVoltage"]; ok {
 			var equalizationVoltage float32
 			if err := json.Unmarshal(val, &equalizationVoltage); err == nil {
-				if err := sc.writeSingle(c, 0x9006, uint16(equalizationVoltage*100), "equalization voltage"); err != nil {
+				if err := sc.writeSingle(c, regEqualizationVoltage, uint16(equalizationVoltage*voltageDivisor), "equalization voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -713,7 +763,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["boostVoltage"]; ok {
 			var boostVoltage float32
 			if err := json.Unmarshal(val, &boostVoltage); err == nil {
-				if err := sc.writeSingle(c, 0x9007, uint16(boostVoltage*100), "boost voltage"); err != nil {
+				if err := sc.writeSingle(c, regBoostVoltage, uint16(boostVoltage*voltageDivisor), "boost voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -724,7 +774,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["boostDuration"]; ok {
 			var boostDuration uint16
 			if err := json.Unmarshal(val, &boostDuration); err == nil {
-				if err := sc.writeSingle(c, 0x906C, boostDuration, "boost duration"); err != nil {
+				if err := sc.writeSingle(c, regBoostChargingTime, boostDuration, "boost duration"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -735,7 +785,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["floatVoltage"]; ok {
 			var floatVoltage float32
 			if err := json.Unmarshal(val, &floatVoltage); err == nil {
-				if err := sc.writeSingle(c, 0x9008, uint16(floatVoltage*100), "float voltage"); err != nil {
+				if err := sc.writeSingle(c, regFloatVoltage, uint16(floatVoltage*voltageDivisor), "float voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -746,7 +796,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["boostReconnectChargingVoltage"]; ok {
 			var boostReconnectChargingVoltage float32
 			if err := json.Unmarshal(val, &boostReconnectChargingVoltage); err == nil {
-				if err := sc.writeSingle(c, 0x9009, uint16(boostReconnectChargingVoltage*100), "boost reconnect charging voltage"); err != nil {
+				if err := sc.writeSingle(c, regBoostReconnectVoltage, uint16(boostReconnectChargingVoltage*voltageDivisor), "boost reconnect charging voltage"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -794,10 +844,15 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 // TimeGet returns the current time from the controller
 func (sc *Configurer) TimeGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), 0x9013, 3)
+		data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regRealTimeClock, 3)
 		if err != nil {
 			log.Warn("Failed to read time from controller", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read time from controller"})
+			return
+		}
+		if len(data) < 6 {
+			log.Warnf("Insufficient time data: expected 6 bytes, got %d", len(data))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Insufficient time data from controller"})
 			return
 		}
 
@@ -835,9 +890,12 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 			byte(timeConfig.Time.Month()),
 		}
 
-		_, err := sc.modbusClient.WriteMultipleRegisters(c.Request.Context(), 0x9013, 3, data)
+		_, err := sc.modbusClient.WriteMultipleRegisters(c.Request.Context(), regRealTimeClock, 3, data)
 		if err != nil {
 			log.Warn("Failed to write time to controller", err)
+			if sc.prometheusCollector != nil {
+				sc.prometheusCollector.IncrementWriteFailures()
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -846,10 +904,15 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 		sc.invalidateCache()
 
 		// Return the updated time
-		data, err = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), 0x9013, 3)
+		data, err = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regRealTimeClock, 3)
 		if err != nil {
 			log.Warn("Failed to read time from controller after write", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read time from controller"})
+			return
+		}
+		if len(data) < 6 {
+			log.Warnf("Insufficient time data after write: expected 6 bytes, got %d", len(data))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Insufficient time data from controller"})
 			return
 		}
 
@@ -866,47 +929,3 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 	}
 }
 
-func (sc *Configurer) QueryPost() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var query ControllerQuery
-		if err := c.BindJSON(&query); err != nil {
-			log.Warn("Query bad json request")
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		cleaned := strings.Replace(query.Address, "0x", "", -1)
-		address, err := strconv.ParseUint(cleaned, 16, 16)
-		if err != nil {
-			log.Warn("Query bad address: ", query.Address, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		var result []byte
-		if query.Register == 1 {
-			result, err = sc.modbusClient.ReadCoils(c.Request.Context(), uint16(address), 1)
-		} else if query.Register == 2 {
-			result, err = sc.modbusClient.ReadDiscreteInputs(c.Request.Context(), uint16(address), 1)
-		} else if query.Register == 3 {
-			result, err = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), uint16(address), 1)
-		} else if query.Register == 4 {
-			result, err = sc.modbusClient.ReadInputRegisters(c.Request.Context(), uint16(address), 1)
-		} else {
-			log.Warn("Query bad register: ", query.Register)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown register"})
-			return
-		}
-
-		if err != nil {
-			log.Warn("Query failed to read register: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to read register: %v", err)})
-			return
-		}
-
-		log.Info("Query result: ", result)
-
-		query.Result = binary.BigEndian.Uint16(result)
-		c.JSON(http.StatusOK, query)
-	}
-}
