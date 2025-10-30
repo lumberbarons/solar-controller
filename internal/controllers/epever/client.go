@@ -142,12 +142,44 @@ func (c *ModbusClient) WriteSingleRegister(ctx context.Context, address uint16, 
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	return c.client.WriteSingleRegister(ctx, address, value)
+	var result []byte
+
+	err = retry.Do(
+		func() error {
+			var retryErr error
+			result, retryErr = c.client.WriteSingleRegister(ctx, address, value)
+			return retryErr
+		},
+		retry.Attempts(retryAttempts),
+		retry.Delay(retryDelay),
+		retry.OnRetry(func(n uint, err error) {
+			log.Warnf("WriteSingleRegister address %d retry #%d: %s\n", address, n, err)
+		}),
+		retry.Context(ctx),
+	)
+
+	return result, err
 }
 
 func (c *ModbusClient) WriteMultipleRegisters(ctx context.Context, address, quantity uint16, value []byte) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	return c.client.WriteMultipleRegisters(ctx, address, quantity, value)
+	var result []byte
+
+	err = retry.Do(
+		func() error {
+			var retryErr error
+			result, retryErr = c.client.WriteMultipleRegisters(ctx, address, quantity, value)
+			return retryErr
+		},
+		retry.Attempts(retryAttempts),
+		retry.Delay(retryDelay),
+		retry.OnRetry(func(n uint, err error) {
+			log.Warnf("WriteMultipleRegisters address %d retry #%d: %s\n", address, n, err)
+		}),
+		retry.Context(ctx),
+	)
+
+	return result, err
 }

@@ -100,7 +100,12 @@ type TimeConfig struct {
 
 func (sc *Configurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		config, _ := sc.getConfig(c.Request.Context())
+		config, err := sc.getConfig(c.Request.Context())
+		if err != nil {
+			log.Warn("Failed to get config", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, config)
 	}
 }
@@ -268,16 +273,15 @@ func batteryTypeToString(batteryType uint16) string {
 	}
 }
 
-func (sc *Configurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) {
+func (sc *Configurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) error {
 	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
 	_, err := sc.modbusClient.WriteSingleRegister(c.Request.Context(), address, value)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to write %v of %v to controller", description, value)
 		log.Warn(errorMessage, err.Error())
-
-		c.JSON(http.StatusBadRequest, gin.H{"message": errorMessage})
-		return
+		return fmt.Errorf("%s: %w", errorMessage, err)
 	}
+	return nil
 }
 
 func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
@@ -293,7 +297,10 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 		userDefined := false
 		if config.BatteryType != "" {
 			batteryType := batteryTypeToInt(config.BatteryType)
-			sc.writeSingle(c, 0x9000, batteryType, "battery type")
+			if err := sc.writeSingle(c, 0x9000, batteryType, "battery type"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 			// Invalidate cache when battery type is changed
 			sc.invalidateCache()
 
@@ -350,47 +357,76 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 
 			// Validation passed, proceed with writes
 			if config.EqualizationCycle > 0 {
-				sc.writeSingle(c, 0x9016, config.EqualizationCycle, "equalization cycle")
+				if err := sc.writeSingle(c, 0x9016, config.EqualizationCycle, "equalization cycle"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.EqualizationDuration > 0 {
-				sc.writeSingle(c, 0x906B, config.EqualizationDuration, "equalization duration")
+				if err := sc.writeSingle(c, 0x906B, config.EqualizationDuration, "equalization duration"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.ChargingLimitVoltage > 0 {
 				chargingLimitVoltage := uint16(config.ChargingLimitVoltage * 100)
-				sc.writeSingle(c, 0x9004, chargingLimitVoltage, "charging limit voltage")
+				if err := sc.writeSingle(c, 0x9004, chargingLimitVoltage, "charging limit voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.EqualizationVoltage > 0 {
 				equalizationVoltage := uint16(config.EqualizationVoltage * 100)
-				sc.writeSingle(c, 0x9006, equalizationVoltage, "equalization voltage")
+				if err := sc.writeSingle(c, 0x9006, equalizationVoltage, "equalization voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.BoostVoltage > 0 {
 				boostVoltage := uint16(config.BoostVoltage * 100)
-				sc.writeSingle(c, 0x9007, boostVoltage, "boost voltage")
+				if err := sc.writeSingle(c, 0x9007, boostVoltage, "boost voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.BoostDuration > 0 {
-				sc.writeSingle(c, 0x906C, config.BoostDuration, "boost duration")
+				if err := sc.writeSingle(c, 0x906C, config.BoostDuration, "boost duration"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.FloatVoltage > 0 {
 				floatVoltage := uint16(config.FloatVoltage * 100)
-				sc.writeSingle(c, 0x9008, floatVoltage, "float voltage")
+				if err := sc.writeSingle(c, 0x9008, floatVoltage, "float voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			if config.BoostReconnectChargingVoltage > 0 {
 				boostReconnectChargingVoltage := uint16(config.BoostReconnectChargingVoltage * 100)
-				sc.writeSingle(c, 0x9009, boostReconnectChargingVoltage, "boost reconnect charging voltage")
+				if err := sc.writeSingle(c, 0x9009, boostReconnectChargingVoltage, "boost reconnect charging voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 
 			// Invalidate cache after writing charging parameters
 			sc.invalidateCache()
 		}
 
-		newConfig, _ := sc.getCachedConfig(c.Request.Context())
+		newConfig, err := sc.getCachedConfig(c.Request.Context())
+		if err != nil {
+			log.Warn("Failed to retrieve updated config after write", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Configuration updated but failed to read back"})
+			return
+		}
 		c.JSON(http.StatusOK, newConfig)
 	}
 }
@@ -431,7 +467,10 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 			var batteryType string
 			if err := json.Unmarshal(batteryTypeRaw, &batteryType); err == nil {
 				batteryTypeInt := batteryTypeToInt(batteryType)
-				sc.writeSingle(c, 0x9000, batteryTypeInt, "battery type")
+				if err := sc.writeSingle(c, 0x9000, batteryTypeInt, "battery type"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -440,7 +479,10 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 		if batteryCapacityRaw, ok := rawData["batteryCapacity"]; ok {
 			var batteryCapacity uint16
 			if err := json.Unmarshal(batteryCapacityRaw, &batteryCapacity); err == nil {
-				sc.writeSingle(c, 0x9001, batteryCapacity, "battery capacity")
+				if err := sc.writeSingle(c, 0x9001, batteryCapacity, "battery capacity"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -451,7 +493,12 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 		}
 
 		// Return updated profile (this will fetch fresh data from device)
-		config, _ := sc.getCachedConfig(c.Request.Context())
+		config, err := sc.getCachedConfig(c.Request.Context())
+		if err != nil {
+			log.Warn("Failed to retrieve updated profile after write", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Profile updated but failed to read back"})
+			return
+		}
 		profile := gin.H{
 			"batteryType":     config.BatteryType,
 			"batteryCapacity": config.BatteryCapacity,
@@ -622,7 +669,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["equalizationCycle"]; ok {
 			var equalizationCycle uint16
 			if err := json.Unmarshal(val, &equalizationCycle); err == nil {
-				sc.writeSingle(c, 0x9016, equalizationCycle, "equalization cycle")
+				if err := sc.writeSingle(c, 0x9016, equalizationCycle, "equalization cycle"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -630,7 +680,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["equalizationDuration"]; ok {
 			var equalizationDuration uint16
 			if err := json.Unmarshal(val, &equalizationDuration); err == nil {
-				sc.writeSingle(c, 0x906B, equalizationDuration, "equalization duration")
+				if err := sc.writeSingle(c, 0x906B, equalizationDuration, "equalization duration"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -638,7 +691,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["chargingLimitVoltage"]; ok {
 			var chargingLimitVoltage float32
 			if err := json.Unmarshal(val, &chargingLimitVoltage); err == nil {
-				sc.writeSingle(c, 0x9004, uint16(chargingLimitVoltage*100), "charging limit voltage")
+				if err := sc.writeSingle(c, 0x9004, uint16(chargingLimitVoltage*100), "charging limit voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -646,7 +702,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["equalizationVoltage"]; ok {
 			var equalizationVoltage float32
 			if err := json.Unmarshal(val, &equalizationVoltage); err == nil {
-				sc.writeSingle(c, 0x9006, uint16(equalizationVoltage*100), "equalization voltage")
+				if err := sc.writeSingle(c, 0x9006, uint16(equalizationVoltage*100), "equalization voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -654,7 +713,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["boostVoltage"]; ok {
 			var boostVoltage float32
 			if err := json.Unmarshal(val, &boostVoltage); err == nil {
-				sc.writeSingle(c, 0x9007, uint16(boostVoltage*100), "boost voltage")
+				if err := sc.writeSingle(c, 0x9007, uint16(boostVoltage*100), "boost voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -662,7 +724,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["boostDuration"]; ok {
 			var boostDuration uint16
 			if err := json.Unmarshal(val, &boostDuration); err == nil {
-				sc.writeSingle(c, 0x906C, boostDuration, "boost duration")
+				if err := sc.writeSingle(c, 0x906C, boostDuration, "boost duration"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -670,7 +735,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["floatVoltage"]; ok {
 			var floatVoltage float32
 			if err := json.Unmarshal(val, &floatVoltage); err == nil {
-				sc.writeSingle(c, 0x9008, uint16(floatVoltage*100), "float voltage")
+				if err := sc.writeSingle(c, 0x9008, uint16(floatVoltage*100), "float voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -678,7 +746,10 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		if val, ok := rawData["boostReconnectChargingVoltage"]; ok {
 			var boostReconnectChargingVoltage float32
 			if err := json.Unmarshal(val, &boostReconnectChargingVoltage); err == nil {
-				sc.writeSingle(c, 0x9009, uint16(boostReconnectChargingVoltage*100), "boost reconnect charging voltage")
+				if err := sc.writeSingle(c, 0x9009, uint16(boostReconnectChargingVoltage*100), "boost reconnect charging voltage"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 				writeSucceeded = true
 			}
 		}
@@ -689,7 +760,12 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		}
 
 		// Return updated parameters (this will fetch fresh data from device)
-		config, _ := sc.getCachedConfig(c.Request.Context())
+		config, err := sc.getCachedConfig(c.Request.Context())
+		if err != nil {
+			log.Warn("Failed to retrieve updated charging parameters after write", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Parameters updated but failed to read back"})
+			return
+		}
 		params := gin.H{
 			"boostDuration":                 config.BoostDuration,
 			"equalizationCycle":             config.EqualizationCycle,
@@ -765,6 +841,9 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+
+		// Invalidate cache after time write
+		sc.invalidateCache()
 
 		// Return the updated time
 		data, err = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), 0x9013, 3)
