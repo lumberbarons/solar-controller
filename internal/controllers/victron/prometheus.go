@@ -48,7 +48,7 @@ func (e *PrometheusCollector) initializeMetrics() {
 
 	e.current = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "curent",
+		Name:      "current",
 		Help:      "Current (A).",
 	})
 

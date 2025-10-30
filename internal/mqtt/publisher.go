@@ -2,9 +2,10 @@ package mqtt
 
 import (
 	"fmt"
+	"time"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type Configuration struct {
@@ -26,7 +27,6 @@ func NewPublisher(config Configuration) (*Publisher, error) {
 		return &Publisher{}, nil
 	}
 
-	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.ERROR = log.New()
 
 	opts := mqtt.NewClientOptions().
@@ -49,7 +49,7 @@ func NewPublisher(config Configuration) (*Publisher, error) {
 	return publisher, nil
 }
 
-func (p *Publisher) Publish(topicSuffix string, payload string) {
+func (p *Publisher) Publish(topicSuffix, payload string) {
 	if p.client == nil {
 		return
 	}

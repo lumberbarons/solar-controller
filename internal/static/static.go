@@ -17,13 +17,16 @@ type embedFileSystem struct {
 	indexes bool
 }
 
-func (e embedFileSystem) Exists(prefix string, path string) bool {
+func (e embedFileSystem) Exists(_, path string) bool {
 	f, err := e.Open(path)
 	if err != nil {
 		return false
 	}
 
-	s, _ := f.Stat()
+	s, err := f.Stat()
+	if err != nil {
+		return false
+	}
 	if s.IsDir() && !e.indexes {
 		return false
 	}

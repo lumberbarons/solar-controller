@@ -3,11 +3,13 @@ package epever
 import (
 	"context"
 	"fmt"
-	"github.com/avast/retry-go/v4"
-	"github.com/lumberbarons/modbus"
-	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
+
+	"github.com/avast/retry-go/v4"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/lumberbarons/modbus"
 )
 
 type ModbusClient struct {
@@ -46,7 +48,7 @@ func (c *ModbusClient) Close() {
 	}
 }
 
-func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -69,7 +71,7 @@ func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address uint16, q
 	return value, err
 }
 
-func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -92,7 +94,7 @@ func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address uint16,
 	return value, err
 }
 
-func (c *ModbusClient) ReadCoils(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadCoils(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -115,7 +117,7 @@ func (c *ModbusClient) ReadCoils(ctx context.Context, address uint16, quantity u
 	return value, err
 }
 
-func (c *ModbusClient) ReadDiscreteInputs(ctx context.Context, address uint16, quantity uint16) ([]byte, error) {
+func (c *ModbusClient) ReadDiscreteInputs(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -138,7 +140,7 @@ func (c *ModbusClient) ReadDiscreteInputs(ctx context.Context, address uint16, q
 	return value, err
 }
 
-func (c *ModbusClient) WriteSingleRegister(ctx context.Context, address uint16, value uint16) (results []byte, err error) {
+func (c *ModbusClient) WriteSingleRegister(ctx context.Context, address, value uint16) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

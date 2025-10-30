@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
@@ -12,7 +14,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
 )
 
 var (
@@ -30,7 +31,7 @@ type Config struct {
 }
 
 type SolarControllerConfiguration struct {
-	HttpPort int                   `yaml:"httpPort"`
+	HTTPPort int                   `yaml:"httpPort"`
 	Mqtt     mqtt.Configuration    `yaml:"mqtt"`
 	Epever   epever.Configuration  `yaml:"epever"`
 	Victron  victron.Configuration `yaml:"victron"`
@@ -60,15 +61,16 @@ func main() {
 	controllerConfig := loadConfigFile()
 
 	r := gin.Default()
-	r.SetTrustedProxies(nil)
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Warnf("failed to set trusted proxies: %v", err)
+	}
 
 	mqttPublisher, err := mqtt.NewPublisher(controllerConfig.SolarController.Mqtt)
 	if err != nil {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
-	defer mqttPublisher.Close()
 
-	controllers := buildControllers(controllerConfig, mqttPublisher)
+	controllers := buildControllers(&controllerConfig, mqttPublisher)
 
 	handler := promhttp.Handler()
 	r.GET("/metrics", func(c *gin.Context) {
@@ -84,15 +86,27 @@ func main() {
 	siteFS := staticfs.GetSiteFS()
 	r.Use(static.Serve("/", siteFS))
 
-	log.Infof("starting server on port %v", controllerConfig.SolarController.HttpPort)
+	log.Infof("starting server on port %v", controllerConfig.SolarController.HTTPPort)
 
-	err = r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HttpPort))
+	err = r.Run(fmt.Sprintf(":%v", controllerConfig.SolarController.HTTPPort))
+
+	// Cleanup on exit
+	mqttPublisher.Close()
+	for _, controller := range controllers {
+		if epeverCtrl, ok := controller.(*epever.Controller); ok {
+			epeverCtrl.Close()
+		}
+		if victronCtrl, ok := controller.(*victron.Controller); ok {
+			victronCtrl.Close()
+		}
+	}
+
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }
 
-func buildControllers(controllerConfig Config, mqttPublisher *mqtt.Publisher) []SolarController {
+func buildControllers(controllerConfig *Config, mqttPublisher *mqtt.Publisher) []SolarController {
 	var controllers []SolarController
 
 	// epever
@@ -101,7 +115,6 @@ func buildControllers(controllerConfig Config, mqttPublisher *mqtt.Publisher) []
 	if err != nil {
 		log.Fatalf("failed to create epever controller: %v", err)
 	}
-	defer epeverController.Close()
 
 	if epeverController.Enabled() {
 		controllers = append(controllers, epeverController)
@@ -113,7 +126,6 @@ func buildControllers(controllerConfig Config, mqttPublisher *mqtt.Publisher) []
 	if err != nil {
 		log.Fatalf("failed to create victron controller: %v", err)
 	}
-	defer victronController.Close()
 
 	if victronController.Enabled() {
 		controllers = append(controllers, victronController)
@@ -127,7 +139,7 @@ func loadConfigFile() Config {
 		log.Fatalf("Must specify config file path")
 	}
 
-	configFile, err := ioutil.ReadFile(*configFilePath)
+	configFile, err := os.ReadFile(*configFilePath)
 	if err != nil {
 		log.Fatalf("failed to load configurer file: %v", err)
 	}

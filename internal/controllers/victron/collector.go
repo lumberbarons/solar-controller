@@ -6,13 +6,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/go-co-op/gocron"
-	"github.com/rigado/ble"
-	"github.com/rigado/ble/linux"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/go-co-op/gocron"
+	"github.com/rigado/ble"
+	"github.com/rigado/ble/linux"
 	bonds "github.com/rigado/ble/linux/hci/bond"
 	log "github.com/sirupsen/logrus"
 )
@@ -35,20 +34,33 @@ type ControllerStatus struct {
 	StateOfCharge  float32 `json:"stateOfCharge"`
 }
 
-var consumedAhUuid ble.UUID
-var powerUuid ble.UUID
-var voltageUuid ble.UUID
-var currentUuid ble.UUID
-var stateOfChargeUuid ble.UUID
-var keepaliveUuid ble.UUID
+var consumedAhUUID ble.UUID
+var powerUUID ble.UUID
+var voltageUUID ble.UUID
+var currentUUID ble.UUID
+var stateOfChargeUUID ble.UUID
+var keepaliveUUID ble.UUID
 
 func NewCollector(config Configuration, scheduler *gocron.Scheduler) (*Collector, error) {
-	consumedAhUuid, _ = ble.Parse("6597eeff-4bda-4c1e-af4b-551c4cf74769")
-	powerUuid, _ = ble.Parse("6597ed8e-4bda-4c1e-af4b-551c4cf74769")
-	voltageUuid, _ = ble.Parse("6597ed8d-4bda-4c1e-af4b-551c4cf74769")
-	currentUuid, _ = ble.Parse("6597ed8c-4bda-4c1e-af4b-551c4cf74769")
-	stateOfChargeUuid, _ = ble.Parse("65970fff-4bda-4c1e-af4b-551c4cf74769")
-	keepaliveUuid, _ = ble.Parse("6597ffff-4bda-4c1e-af4b-551c4cf74769")
+	var err error
+	if consumedAhUUID, err = ble.Parse("6597eeff-4bda-4c1e-af4b-551c4cf74769"); err != nil {
+		return nil, fmt.Errorf("failed to parse consumedAh UUID: %w", err)
+	}
+	if powerUUID, err = ble.Parse("6597ed8e-4bda-4c1e-af4b-551c4cf74769"); err != nil {
+		return nil, fmt.Errorf("failed to parse power UUID: %w", err)
+	}
+	if voltageUUID, err = ble.Parse("6597ed8d-4bda-4c1e-af4b-551c4cf74769"); err != nil {
+		return nil, fmt.Errorf("failed to parse voltage UUID: %w", err)
+	}
+	if currentUUID, err = ble.Parse("6597ed8c-4bda-4c1e-af4b-551c4cf74769"); err != nil {
+		return nil, fmt.Errorf("failed to parse current UUID: %w", err)
+	}
+	if stateOfChargeUUID, err = ble.Parse("65970fff-4bda-4c1e-af4b-551c4cf74769"); err != nil {
+		return nil, fmt.Errorf("failed to parse stateOfCharge UUID: %w", err)
+	}
+	if keepaliveUUID, err = ble.Parse("6597ffff-4bda-4c1e-af4b-551c4cf74769"); err != nil {
+		return nil, fmt.Errorf("failed to parse keepalive UUID: %w", err)
+	}
 
 	victronClient, err := connect(config)
 	if err != nil {
@@ -71,7 +83,7 @@ func connect(config Configuration) (*Collector, error) {
 	log.Printf("connecting to device %s", config.MacAddress)
 
 	optid := ble.OptDeviceID(0)
-	bondFilePath := filepath.Join("bonds.json")
+	bondFilePath := "bonds.json"
 	bm := bonds.NewBondManager(bondFilePath)
 
 	optSecurity := ble.OptEnableSecurity(bm)
@@ -83,7 +95,7 @@ func connect(config Configuration) (*Collector, error) {
 	ble.SetDefaultDevice(d)
 
 	filter := func(a ble.Advertisement) bool {
-		return strings.ToUpper(a.Addr().String()) == strings.ToUpper(config.MacAddress)
+		return strings.EqualFold(a.Addr().String(), config.MacAddress)
 	}
 
 	scanDuration := 20 * time.Second
@@ -117,7 +129,10 @@ func connect(config Configuration) (*Collector, error) {
 
 	log.Println("pairing successful")
 
-	serviceUUID, _ := ble.Parse("65970000-4bda-4c1e-af4b-551c4cf74769")
+	serviceUUID, err := ble.Parse("65970000-4bda-4c1e-af4b-551c4cf74769")
+	if err != nil {
+		return victronClient, fmt.Errorf("failed to parse service UUID: %w", err)
+	}
 
 	services, err := client.DiscoverServices([]ble.UUID{serviceUUID})
 	if err != nil {
@@ -142,7 +157,7 @@ func connect(config Configuration) (*Collector, error) {
 
 	victronClient.service = service
 
-	metricCharsFilter := []ble.UUID{consumedAhUuid, powerUuid, voltageUuid, currentUuid, stateOfChargeUuid}
+	metricCharsFilter := []ble.UUID{consumedAhUUID, powerUUID, voltageUUID, currentUUID, stateOfChargeUUID}
 	metricChars, err := client.DiscoverCharacteristics(metricCharsFilter, service)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover metric characteristics: %w", err)
@@ -154,7 +169,7 @@ func connect(config Configuration) (*Collector, error) {
 
 	victronClient.metricChars = metricChars
 
-	keepaliveCharFilter := []ble.UUID{keepaliveUuid}
+	keepaliveCharFilter := []ble.UUID{keepaliveUUID}
 	keepaliveChars, err := client.DiscoverCharacteristics(keepaliveCharFilter, service)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover metric characteristics: %w", err)
@@ -166,7 +181,7 @@ func connect(config Configuration) (*Collector, error) {
 
 	var keepaliveChar *ble.Characteristic
 	for _, c := range keepaliveChars {
-		if keepaliveUuid.Equal(c.UUID) {
+		if keepaliveUUID.Equal(c.UUID) {
 			keepaliveChar = c
 			break
 		}
@@ -195,9 +210,13 @@ func (v *Collector) disconnect() {
 func (v *Collector) writeKeepalive() {
 	log.Println("victron keepalive start")
 
-	keepalive, _ := hex.DecodeString("60ea") // 60 seconds
+	keepalive, err := hex.DecodeString("60ea") // 60 seconds
+	if err != nil {
+		log.Printf("failed to decode keepalive string: %s", err)
+		return
+	}
 
-	err := v.client.WriteCharacteristic(v.keepaliveChar, keepalive, false)
+	err = v.client.WriteCharacteristic(v.keepaliveChar, keepalive, false)
 	if err != nil {
 		log.Printf("failed to write keepalive: %s", err)
 	}
@@ -218,38 +237,45 @@ func (v *Collector) GetStatus() (*ControllerStatus, error) {
 			return nil, fmt.Errorf("failed to read value from victron: %w", err)
 		}
 
-		if consumedAhUuid.Equal(c.UUID) {
+		switch {
+		case consumedAhUUID.Equal(c.UUID):
 			status.ConsumedAh = float32(readInt32(value)) * 0.1
-		} else if powerUuid.Equal(c.UUID) {
+		case powerUUID.Equal(c.UUID):
 			status.Power = readInt16(value)
-		} else if voltageUuid.Equal(c.UUID) {
+		case voltageUUID.Equal(c.UUID):
 			status.Voltage = float32(readInt16(value)) * 0.01
-		} else if currentUuid.Equal(c.UUID) {
+		case currentUUID.Equal(c.UUID):
 			status.Current = float32(readInt16(value)) * 0.001
-		} else if stateOfChargeUuid.Equal(c.UUID) {
+		case stateOfChargeUUID.Equal(c.UUID):
 			status.StateOfCharge = float32(readUnsignedInt16(value)) * 0.01
 		}
 	}
 
-	status.CollectionTime = time.Now().Sub(startTime).Seconds()
+	status.CollectionTime = time.Since(startTime).Seconds()
 
 	return status, nil
 }
 
 func readInt32(data []byte) (resp int32) {
 	buf := bytes.NewBuffer(data)
-	binary.Read(buf, binary.LittleEndian, &resp)
+	if err := binary.Read(buf, binary.LittleEndian, &resp); err != nil {
+		log.Warnf("failed to read int32: %v", err)
+	}
 	return resp
 }
 
 func readInt16(data []byte) (resp int16) {
 	buf := bytes.NewBuffer(data)
-	binary.Read(buf, binary.LittleEndian, &resp)
+	if err := binary.Read(buf, binary.LittleEndian, &resp); err != nil {
+		log.Warnf("failed to read int16: %v", err)
+	}
 	return resp
 }
 
 func readUnsignedInt16(data []byte) (resp uint16) {
 	buf := bytes.NewBuffer(data)
-	binary.Read(buf, binary.LittleEndian, &resp)
+	if err := binary.Read(buf, binary.LittleEndian, &resp); err != nil {
+		log.Warnf("failed to read uint16: %v", err)
+	}
 	return resp
 }

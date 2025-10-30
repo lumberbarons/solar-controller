@@ -5,38 +5,39 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
 
 // Modbus holding register addresses (read-write configuration values)
 const (
-	regBatteryType                   = 0x9000
-	regBatteryCapacity               = 0x9001
-	regTempCompCoefficient           = 0x9002
-	regOverVoltDisconnect            = 0x9003
-	regChargingLimitVoltage          = 0x9004
-	regOverVoltReconnect             = 0x9005
-	regEqualizationVoltage           = 0x9006
-	regBoostVoltage                  = 0x9007
-	regFloatVoltage                  = 0x9008
-	regBoostReconnectVoltage         = 0x9009
-	regLowVoltReconnect              = 0x900A
-	regUnderVoltRecover              = 0x900B
-	regUnderVoltWarning              = 0x900C
-	regLowVoltDisconnect             = 0x900D
-	regDischargingLimitVoltage       = 0x900E
-	regRealTimeClock                 = 0x9013
-	regEqualizationChargingCycle     = 0x9016
-	regBatteryTempUpperLimit         = 0x9017
-	regBatteryTempLowerLimit         = 0x9018
-	regControllerTempUpperLimit      = 0x9019
-	regControllerTempLowerLimit      = 0x901A
-	regEqualizationChargingTime      = 0x906B
-	regBoostChargingTime             = 0x906C
+	regBatteryType               = 0x9000
+	regBatteryCapacity           = 0x9001
+	regTempCompCoefficient       = 0x9002
+	regOverVoltDisconnect        = 0x9003
+	regChargingLimitVoltage      = 0x9004
+	regOverVoltReconnect         = 0x9005
+	regEqualizationVoltage       = 0x9006
+	regBoostVoltage              = 0x9007
+	regFloatVoltage              = 0x9008
+	regBoostReconnectVoltage     = 0x9009
+	regLowVoltReconnect          = 0x900A
+	regUnderVoltRecover          = 0x900B
+	regUnderVoltWarning          = 0x900C
+	regLowVoltDisconnect         = 0x900D
+	regDischargingLimitVoltage   = 0x900E
+	regRealTimeClock             = 0x9013
+	regEqualizationChargingCycle = 0x9016
+	regBatteryTempUpperLimit     = 0x9017
+	regBatteryTempLowerLimit     = 0x9018
+	regControllerTempUpperLimit  = 0x9019
+	regControllerTempLowerLimit  = 0x901A
+	regEqualizationChargingTime  = 0x906B
+	regBoostChargingTime         = 0x906C
 )
 
 // Battery type constants
@@ -208,7 +209,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	}
 
 	year := int(data[4]) + 2000
-	time := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
+	timeStr := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
 		data[2], data[5], year, data[3], data[0], data[1])
 
 	// Read voltage parameters
@@ -264,7 +265,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	controllerTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[6:8]))) / voltageDivisor
 
 	return ControllerConfig{
-		Time:                          time,
+		Time:                          timeStr,
 		BatteryType:                   batteryTypeToString(batteryType),
 		BatteryCapacity:               batteryCapacity,
 		TempCompCoefficient:           tempCompCoefficient,
@@ -320,7 +321,7 @@ func batteryTypeToString(batteryType uint16) string {
 	}
 }
 
-func (sc *Configurer) writeSingle(c *gin.Context, address uint16, value uint16, description string) error {
+func (sc *Configurer) writeSingle(c *gin.Context, address, value uint16, description string) error {
 	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
 	_, err := sc.modbusClient.WriteSingleRegister(c.Request.Context(), address, value)
 	if err != nil {
@@ -610,25 +611,25 @@ func (sc *Configurer) ChargingParametersGet() gin.HandlerFunc {
 		}
 
 		params := gin.H{
-			"boostDuration":                 config.BoostDuration,
-			"equalizationCycle":             config.EqualizationCycle,
-			"equalizationDuration":          config.EqualizationDuration,
-			"boostVoltage":                  config.BoostVoltage,
-			"boostReconnectChargingVoltage": config.BoostReconnectChargingVoltage,
-			"floatVoltage":                  config.FloatVoltage,
-			"equalizationVoltage":           config.EqualizationVoltage,
-			"chargingLimitVoltage":          config.ChargingLimitVoltage,
-			"overVoltDisconnectVoltage":     config.OverVoltDisconnectVoltage,
-			"overVoltReconnectVoltage":      config.OverVoltReconnectVoltage,
-			"lowVoltDisconnectVoltage":      config.LowVoltDisconnectVoltage,
-			"lowVoltReconnectVoltage":       config.LowVoltReconnectVoltage,
-			"underVoltWarningVoltage":       config.UnderVoltWarningVoltage,
+			"boostDuration":                    config.BoostDuration,
+			"equalizationCycle":                config.EqualizationCycle,
+			"equalizationDuration":             config.EqualizationDuration,
+			"boostVoltage":                     config.BoostVoltage,
+			"boostReconnectChargingVoltage":    config.BoostReconnectChargingVoltage,
+			"floatVoltage":                     config.FloatVoltage,
+			"equalizationVoltage":              config.EqualizationVoltage,
+			"chargingLimitVoltage":             config.ChargingLimitVoltage,
+			"overVoltDisconnectVoltage":        config.OverVoltDisconnectVoltage,
+			"overVoltReconnectVoltage":         config.OverVoltReconnectVoltage,
+			"lowVoltDisconnectVoltage":         config.LowVoltDisconnectVoltage,
+			"lowVoltReconnectVoltage":          config.LowVoltReconnectVoltage,
+			"underVoltWarningVoltage":          config.UnderVoltWarningVoltage,
 			"underVoltWarningReconnectVoltage": config.UnderVoltReconnectVoltage,
-			"dischargingLimitVoltage":       config.DischargingLimitVoltage,
-			"batteryTempUpperLimit":         config.BatteryTempUpperLimit,
-			"batteryTempLowerLimit":         config.BatteryTempLowerLimit,
-			"controllerTempUpperLimit":      config.ControllerTempUpperLimit,
-			"controllerTempLowerLimit":      config.ControllerTempLowerLimit,
+			"dischargingLimitVoltage":          config.DischargingLimitVoltage,
+			"batteryTempUpperLimit":            config.BatteryTempUpperLimit,
+			"batteryTempLowerLimit":            config.BatteryTempLowerLimit,
+			"controllerTempUpperLimit":         config.ControllerTempUpperLimit,
+			"controllerTempLowerLimit":         config.ControllerTempLowerLimit,
 		}
 		c.JSON(http.StatusOK, params)
 	}
@@ -817,25 +818,25 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 			return
 		}
 		params := gin.H{
-			"boostDuration":                 config.BoostDuration,
-			"equalizationCycle":             config.EqualizationCycle,
-			"equalizationDuration":          config.EqualizationDuration,
-			"boostVoltage":                  config.BoostVoltage,
-			"boostReconnectChargingVoltage": config.BoostReconnectChargingVoltage,
-			"floatVoltage":                  config.FloatVoltage,
-			"equalizationVoltage":           config.EqualizationVoltage,
-			"chargingLimitVoltage":          config.ChargingLimitVoltage,
-			"overVoltDisconnectVoltage":     config.OverVoltDisconnectVoltage,
-			"overVoltReconnectVoltage":      config.OverVoltReconnectVoltage,
-			"lowVoltDisconnectVoltage":      config.LowVoltDisconnectVoltage,
-			"lowVoltReconnectVoltage":       config.LowVoltReconnectVoltage,
-			"underVoltWarningVoltage":       config.UnderVoltWarningVoltage,
+			"boostDuration":                    config.BoostDuration,
+			"equalizationCycle":                config.EqualizationCycle,
+			"equalizationDuration":             config.EqualizationDuration,
+			"boostVoltage":                     config.BoostVoltage,
+			"boostReconnectChargingVoltage":    config.BoostReconnectChargingVoltage,
+			"floatVoltage":                     config.FloatVoltage,
+			"equalizationVoltage":              config.EqualizationVoltage,
+			"chargingLimitVoltage":             config.ChargingLimitVoltage,
+			"overVoltDisconnectVoltage":        config.OverVoltDisconnectVoltage,
+			"overVoltReconnectVoltage":         config.OverVoltReconnectVoltage,
+			"lowVoltDisconnectVoltage":         config.LowVoltDisconnectVoltage,
+			"lowVoltReconnectVoltage":          config.LowVoltReconnectVoltage,
+			"underVoltWarningVoltage":          config.UnderVoltWarningVoltage,
 			"underVoltWarningReconnectVoltage": config.UnderVoltReconnectVoltage,
-			"dischargingLimitVoltage":       config.DischargingLimitVoltage,
-			"batteryTempUpperLimit":         config.BatteryTempUpperLimit,
-			"batteryTempLowerLimit":         config.BatteryTempLowerLimit,
-			"controllerTempUpperLimit":      config.ControllerTempUpperLimit,
-			"controllerTempLowerLimit":      config.ControllerTempLowerLimit,
+			"dischargingLimitVoltage":          config.DischargingLimitVoltage,
+			"batteryTempUpperLimit":            config.BatteryTempUpperLimit,
+			"batteryTempLowerLimit":            config.BatteryTempLowerLimit,
+			"controllerTempUpperLimit":         config.ControllerTempUpperLimit,
+			"controllerTempLowerLimit":         config.ControllerTempLowerLimit,
 		}
 		c.JSON(http.StatusOK, params)
 	}
@@ -928,4 +929,3 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"time": controllerTime})
 	}
 }
-

@@ -145,14 +145,14 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	bt := tempResults[0]
 
 	if bt > tempSignedThreshold {
-		bt = bt - tempSignedOffset
+		bt -= tempSignedOffset
 	}
 	c.BatteryTemp = float32(bt) / tempDivisor
 
 	dt := tempResults[1]
 
 	if dt > tempSignedThreshold {
-		dt = dt - tempSignedOffset
+		dt -= tempSignedOffset
 	}
 	c.DeviceTemp = float32(dt) / tempDivisor
 
@@ -170,7 +170,7 @@ func (e *Collector) getValueFloat(ctx context.Context, address uint16) (float32,
 	return float32(binary.BigEndian.Uint16(data)) / 100, nil
 }
 
-func (e *Collector) getValueFloats(ctx context.Context, address uint16, quantity uint16) ([]float32, error) {
+func (e *Collector) getValueFloats(ctx context.Context, address, quantity uint16) ([]float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, quantity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
@@ -192,7 +192,7 @@ func (e *Collector) getValueInt(ctx context.Context, address uint16) (int32, err
 	return int32(binary.BigEndian.Uint16(data)), nil
 }
 
-func (e *Collector) getValueInts(ctx context.Context, address uint16, quantity uint16) ([]int32, error) {
+func (e *Collector) getValueInts(ctx context.Context, address, quantity uint16) ([]int32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, quantity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
@@ -217,6 +217,8 @@ func (e *Collector) getValueFloat32(ctx context.Context, address uint16) (float3
 		return 0, fmt.Errorf("insufficient data for float32 at address %d: expected 4 bytes, got %d", address, len(data))
 	}
 
-	swappedData := append(data[2:4], data[0:2]...)
+	swappedData := make([]byte, 4)
+	copy(swappedData[0:2], data[2:4])
+	copy(swappedData[2:4], data[0:2])
 	return float32(binary.BigEndian.Uint32(swappedData)) / 100, nil
 }

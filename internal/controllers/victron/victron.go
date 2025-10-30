@@ -3,13 +3,14 @@ package victron
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"sync"
-	"time"
 )
 
 const (

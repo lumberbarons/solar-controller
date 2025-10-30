@@ -112,7 +112,7 @@ func TestValidateVoltageParameters(t *testing.T) {
 				ChargingLimitVoltage:          15.0,
 				EqualizationVoltage:           14.6,
 				BoostVoltage:                  14.4,
-				FloatVoltage:                  13.2,  // Equal to boost reconnect
+				FloatVoltage:                  13.2, // Equal to boost reconnect
 				BoostReconnectChargingVoltage: 13.2,
 				UnderVoltReconnectVoltage:     12.6,
 				UnderVoltWarningVoltage:       12.0,
