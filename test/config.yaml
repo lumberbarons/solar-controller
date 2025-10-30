@@ -2,7 +2,7 @@ solarController:
   httpPort: 8080
   epever:
     enabled: true
-    serialPort: /dev/ttys010
+    serialPort: /dev/ttys007
     publishPeriod: 5
   victron:
     enabled: false

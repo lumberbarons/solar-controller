@@ -50,7 +50,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	}
 
 	c.ArrayVoltage = results[0]
-	c.ArrayCurrent = results[0]
+	c.ArrayCurrent = results[1]
 
 	c.ArrayCurrent, err = e.getValueFloat(ctx, 0x3101)
 	if err != nil {

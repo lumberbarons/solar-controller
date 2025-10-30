@@ -119,8 +119,19 @@ func (e *Controller) RegisterEndpoints(r *gin.Engine) {
 	})
 
 	r.GET(fmt.Sprintf("%s/metrics", prefix), e.MetricsGet())
+
+	// New split configuration endpoints
+	r.GET(fmt.Sprintf("%s/battery-profile", prefix), e.configurer.BatteryProfileGet())
+	r.PATCH(fmt.Sprintf("%s/battery-profile", prefix), e.configurer.BatteryProfilePatch())
+	r.GET(fmt.Sprintf("%s/charging-parameters", prefix), e.configurer.ChargingParametersGet())
+	r.PATCH(fmt.Sprintf("%s/charging-parameters", prefix), e.configurer.ChargingParametersPatch())
+	r.GET(fmt.Sprintf("%s/time", prefix), e.configurer.TimeGet())
+	r.PATCH(fmt.Sprintf("%s/time", prefix), e.configurer.TimePatch())
+
+	// Legacy endpoint (kept for backwards compatibility)
 	r.GET(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigGet())
 	r.PATCH(fmt.Sprintf("%s/config", prefix), e.configurer.ConfigPatch())
+
 	r.POST(fmt.Sprintf("%s/query", prefix), e.configurer.QueryPost())
 }
 

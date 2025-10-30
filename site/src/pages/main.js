@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import axios from 'axios';
 
-import { Grid, Box, Container, Alert, IconButton, Typography } from '@mui/material';
+import { Grid, Box, Alert, IconButton, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 import Metric from "../components/metric"
@@ -36,50 +36,7 @@ class Main extends React.Component {
   }
   
   render() {
-    if(this.state.error) {
-      return (
-        <Box sx={{ width: '100%', p: 2, backgroundColor: 'white', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Box sx={{
-            mt: 4,
-            p: 3,
-            backgroundColor: '#ffebee',
-            border: '2px solid #c62828',
-            borderRadius: 2,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-            maxWidth: 600,
-            width: '100%'
-          }}>
-            <Typography variant="h6" sx={{ color: '#c62828', fontWeight: 600, mb: 1 }}>
-              Error Loading Metrics
-            </Typography>
-            <Typography sx={{ color: '#d32f2f' }}>
-              {this.state.error}
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <IconButton
-              onClick={this.fetchMetrics}
-              disabled={this.state.loading}
-              sx={{
-                backgroundColor: 'white',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                '&:hover': {
-                  backgroundColor: '#2e7d32',
-                  color: 'white',
-                  transform: 'scale(1.1)'
-                },
-                transition: 'all 0.2s'
-              }}
-              aria-label="refresh metrics"
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Box>
-        </Box>
-      );
-    }
-
-    const metrics = this.state.metrics;
+    const metrics = this.state.metrics || {};
 
     let chargingStatus;
     switch(metrics.chargingStatus) {
@@ -102,7 +59,14 @@ class Main extends React.Component {
 
     return (
       <>
-        <Box sx={{ width: '100%', p: 2, backgroundColor: 'white', minHeight: '100vh' }}>
+        <Box sx={{ width: '100%', p: 2, pl: 4, mt: 1, backgroundColor: 'white', minHeight: 'calc(100vh - 72px)' }}>
+          {/* Error Alert */}
+          {this.state.error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {this.state.error}
+            </Alert>
+          )}
+
           {/* Solar Panel Metrics */}
           <Typography variant="h6" sx={{ mb: 1, mt: 1, fontWeight: 600, color: '#1b5e20' }}>
             Solar Panel

@@ -1,173 +1,333 @@
 import React from 'react';
 
 import axios from 'axios';
-import { Box, Grid, Container, Alert, Typography, Paper, IconButton } from '@mui/material';
+import { Box, Grid, Alert, Typography, Paper } from '@mui/material';
 import { FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
 
 class Config extends React.Component {
   constructor(props) {
     super(props);
 
-    this.state = {config: undefined, error: undefined, loading: false};
+    this.state = {
+      batteryProfile: undefined,
+      originalBatteryProfile: undefined,
+      chargingParameters: undefined,
+      originalChargingParameters: undefined,
+      loadError: undefined,
+      saveError: undefined,
+      successMessage: undefined,
+      loading: false,
+      batteryProfileSaved: false
+    };
 
-    this.handleSubmit = this.handleSubmit.bind(this);
-    this.handleInputChange = this.handleInputChange.bind(this);
+    this.handleBatteryProfileSubmit = this.handleBatteryProfileSubmit.bind(this);
+    this.handleChargingParametersSubmit = this.handleChargingParametersSubmit.bind(this);
+    this.handleBatteryProfileChange = this.handleBatteryProfileChange.bind(this);
+    this.handleChargingParametersChange = this.handleChargingParametersChange.bind(this);
     this.fetchConfig = this.fetchConfig.bind(this);
+
+    this.successTimer = null;
   }
 
   componentDidMount() {
     this.fetchConfig();
   }
 
+  componentWillUnmount() {
+    // Clear timer when component unmounts
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+    }
+  }
+
+  setSuccessMessage(message) {
+    // Clear any existing timer
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+    }
+
+    // Set the success message
+    this.setState({ successMessage: message, saveError: undefined });
+
+    // Auto-dismiss after 4 seconds
+    this.successTimer = setTimeout(() => {
+      this.setState({ successMessage: undefined });
+      this.successTimer = null;
+    }, 4000);
+  }
+
   fetchConfig() {
     this.setState({loading: true});
 
-    axios.get(`/api/solar/config`)
-      .then(res => {
-        let clone = JSON.parse(JSON.stringify(res.data));
-        this.setState({originalConfig: clone, config: res.data, error: undefined, loading: false});
+    // Fetch both battery profile and charging parameters
+    Promise.all([
+      axios.get(`/api/solar/battery-profile`),
+      axios.get(`/api/solar/charging-parameters`)
+    ])
+      .then(([profileRes, paramsRes]) => {
+        let profileClone = JSON.parse(JSON.stringify(profileRes.data));
+        let paramsClone = JSON.parse(JSON.stringify(paramsRes.data));
+        this.setState({
+          originalBatteryProfile: profileClone,
+          batteryProfile: profileRes.data,
+          originalChargingParameters: paramsClone,
+          chargingParameters: paramsRes.data,
+          loadError: undefined,
+          saveError: undefined,
+          successMessage: undefined,
+          loading: false,
+          batteryProfileSaved: profileRes.data.batteryType === 'userDefined'
+        });
       }).catch(error => {
         console.error(JSON.stringify(error));
         const errorMessage = error.response
           ? `Failed to load configuration: ${error.response.status} ${error.response.statusText}`
           : `Failed to load configuration: ${error.message}`;
-        this.setState({config: undefined, error: errorMessage, loading: false});
+        this.setState({
+          loadError: errorMessage,
+          loading: false
+        });
       });
   }
 
-  handleInputChange(event) {
+  handleBatteryProfileChange(event) {
     const value = event.target.value;
     const name = event.target.name;
 
-    let config = this.state.config;
-    config[name] = value;
+    let batteryProfile = this.state.batteryProfile;
+    batteryProfile[name] = value;
 
     this.setState({
-      config: config
+      batteryProfile: batteryProfile
     });
   }
 
-  handleSubmit(event) {
+  handleChargingParametersChange(event) {
+    const value = event.target.value;
+    const name = event.target.name;
+
+    let chargingParameters = this.state.chargingParameters;
+    chargingParameters[name] = value;
+
+    this.setState({
+      chargingParameters: chargingParameters
+    });
+  }
+
+  handleBatteryProfileSubmit(event) {
     const payload = {};
 
-    const originalConfig = this.state.originalConfig;
-    const config = this.state.config;
+    const original = this.state.originalBatteryProfile;
+    const current = this.state.batteryProfile;
 
-    if(config.batteryType !== originalConfig.batteryType) {
-      payload.batteryType = config.batteryType;
+    if(current.batteryType !== original.batteryType) {
+      payload.batteryType = current.batteryType;
     }
 
-    if(config.equalizationCycle !== originalConfig.equalizationCycle) {
-      payload.equalizationCycle = parseInt(config.equalizationCycle);
+    if(current.batteryCapacity !== original.batteryCapacity) {
+      payload.batteryCapacity = parseInt(current.batteryCapacity);
     }
 
-    if(config.equalizationVoltage !== originalConfig.equalizationVoltage) {
-      payload.equalizationVoltage = parseFloat(config.equalizationVoltage);
-    }
-
-    if(config.equalizationDuration !== originalConfig.equalizationDuration) {
-      payload.equalizationDuration = parseFloat(config.equalizationDuration);
-    }
-
-    if(config.boostVoltage !== originalConfig.boostVoltage) {
-      payload.boostVoltage = parseFloat(config.boostVoltage);
-    }
-
-    if(config.boostDuration !== originalConfig.boostDuration) {
-      payload.boostDuration = parseInt(config.boostDuration);
-    }
-
-    if(config.floatVoltage !== originalConfig.floatVoltage) {
-      payload.floatVoltage = parseFloat(config.floatVoltage);
-    }
-
-    if(config.chargingLimitVoltage !== originalConfig.chargingLimitVoltage) {
-      payload.chargingLimitVoltage = parseFloat(config.chargingLimitVoltage);
-    }
-
-    axios.patch(`/api/solar/config`, payload)
+    axios.patch(`/api/solar/battery-profile`, payload)
       .then(res => {
-        let clone = JSON.parse(JSON.stringify(res.data));
-        this.setState({originalConfig: clone, config: res.data, error: undefined});
-      }).catch(error => {
-        const errorMessage = error.response
-          ? `Failed to save configuration: ${error.response.status} ${error.response.statusText}`
-          : `Failed to save configuration: ${error.message}`;
-        this.setState({error: errorMessage});
+        let profileClone = JSON.parse(JSON.stringify(res.data));
+        const isUserDefined = res.data.batteryType === 'userDefined';
+        this.setState({
+          originalBatteryProfile: profileClone,
+          batteryProfile: res.data,
+          saveError: undefined,
+          batteryProfileSaved: isUserDefined
+        });
+        this.setSuccessMessage('Battery profile saved successfully!');
+
+        // Auto-refresh charging parameters after battery profile save
+        return axios.get(`/api/solar/charging-parameters`);
+      })
+      .then(paramsRes => {
+        let paramsClone = JSON.parse(JSON.stringify(paramsRes.data));
+        this.setState({
+          originalChargingParameters: paramsClone,
+          chargingParameters: paramsRes.data
+        });
+      })
+      .catch(error => {
+        let errorMessage;
+        if (error.response) {
+          // Check if backend returned a detailed error message
+          const backendError = error.response.data?.error;
+          if (backendError) {
+            errorMessage = `Failed to save battery profile: ${backendError}`;
+          } else {
+            errorMessage = `Failed to save battery profile: ${error.response.status} ${error.response.statusText}`;
+          }
+        } else {
+          errorMessage = `Failed to save battery profile: ${error.message}`;
+        }
+        this.setState({saveError: errorMessage, successMessage: undefined});
+        // Clear success timer on error
+        if (this.successTimer) {
+          clearTimeout(this.successTimer);
+          this.successTimer = null;
+        }
       });
 
     event.preventDefault();
   }
-  
-  render() {
-    if(this.state.error) {
-      return (
-        <Box sx={{ width: '100%', p: 2, backgroundColor: 'white', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Box sx={{
-            mt: 4,
-            p: 3,
-            backgroundColor: '#ffebee',
-            border: '2px solid #c62828',
-            borderRadius: 2,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-            maxWidth: 600,
-            width: '100%'
-          }}>
-            <Typography variant="h6" sx={{ color: '#c62828', fontWeight: 600, mb: 1 }}>
-              Error Loading Configuration
-            </Typography>
-            <Typography sx={{ color: '#d32f2f' }}>
-              {this.state.error}
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <IconButton
-              onClick={this.fetchConfig}
-              disabled={this.state.loading}
-              sx={{
-                backgroundColor: 'white',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                '&:hover': {
-                  backgroundColor: '#2e7d32',
-                  color: 'white',
-                  transform: 'scale(1.1)'
-                },
-                transition: 'all 0.2s'
-              }}
-              aria-label="refresh configuration"
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Box>
-        </Box>
-      );
+
+  handleChargingParametersSubmit(event) {
+    const payload = {};
+
+    const original = this.state.originalChargingParameters;
+    const current = this.state.chargingParameters;
+
+    // Track changes for all charging parameter fields
+    if(current.equalizationCycle !== original.equalizationCycle) {
+      payload.equalizationCycle = parseInt(current.equalizationCycle);
     }
 
-    if(this.state.config) {
-      let config = this.state.config;
+    if(current.equalizationVoltage !== original.equalizationVoltage) {
+      payload.equalizationVoltage = parseFloat(current.equalizationVoltage);
+    }
 
-      return (
-        <Box sx={{ width: '100%', p: 2, backgroundColor: 'white', minHeight: '100vh', maxWidth: 1400, mx: 'auto' }}>
+    if(current.equalizationDuration !== original.equalizationDuration) {
+      payload.equalizationDuration = parseInt(current.equalizationDuration);
+    }
+
+    if(current.boostVoltage !== original.boostVoltage) {
+      payload.boostVoltage = parseFloat(current.boostVoltage);
+    }
+
+    if(current.boostDuration !== original.boostDuration) {
+      payload.boostDuration = parseInt(current.boostDuration);
+    }
+
+    if(current.floatVoltage !== original.floatVoltage) {
+      payload.floatVoltage = parseFloat(current.floatVoltage);
+    }
+
+    if(current.chargingLimitVoltage !== original.chargingLimitVoltage) {
+      payload.chargingLimitVoltage = parseFloat(current.chargingLimitVoltage);
+    }
+
+    if(current.boostReconnectChargingVoltage !== original.boostReconnectChargingVoltage) {
+      payload.boostReconnectChargingVoltage = parseFloat(current.boostReconnectChargingVoltage);
+    }
+
+    if(current.overVoltDisconnectVoltage !== original.overVoltDisconnectVoltage) {
+      payload.overVoltDisconnectVoltage = parseFloat(current.overVoltDisconnectVoltage);
+    }
+
+    if(current.overVoltReconnectVoltage !== original.overVoltReconnectVoltage) {
+      payload.overVoltReconnectVoltage = parseFloat(current.overVoltReconnectVoltage);
+    }
+
+    if(current.lowVoltDisconnectVoltage !== original.lowVoltDisconnectVoltage) {
+      payload.lowVoltDisconnectVoltage = parseFloat(current.lowVoltDisconnectVoltage);
+    }
+
+    if(current.lowVoltReconnectVoltage !== original.lowVoltReconnectVoltage) {
+      payload.lowVoltReconnectVoltage = parseFloat(current.lowVoltReconnectVoltage);
+    }
+
+    if(current.underVoltWarningVoltage !== original.underVoltWarningVoltage) {
+      payload.underVoltWarningVoltage = parseFloat(current.underVoltWarningVoltage);
+    }
+
+    if(current.underVoltWarningReconnectVoltage !== original.underVoltWarningReconnectVoltage) {
+      payload.underVoltWarningReconnectVoltage = parseFloat(current.underVoltWarningReconnectVoltage);
+    }
+
+    if(current.dischargingLimitVoltage !== original.dischargingLimitVoltage) {
+      payload.dischargingLimitVoltage = parseFloat(current.dischargingLimitVoltage);
+    }
+
+    axios.patch(`/api/solar/charging-parameters`, payload)
+      .then(res => {
+        let paramsClone = JSON.parse(JSON.stringify(res.data));
+        this.setState({
+          originalChargingParameters: paramsClone,
+          chargingParameters: res.data,
+          saveError: undefined
+        });
+        this.setSuccessMessage('Charging parameters saved successfully!');
+      }).catch(error => {
+        let errorMessage;
+        if (error.response) {
+          // Check if backend returned a detailed error message
+          const backendError = error.response.data?.error;
+          if (backendError) {
+            errorMessage = `Failed to save charging parameters: ${backendError}`;
+          } else {
+            errorMessage = `Failed to save charging parameters: ${error.response.status} ${error.response.statusText}`;
+          }
+        } else {
+          errorMessage = `Failed to save charging parameters: ${error.message}`;
+        }
+        this.setState({saveError: errorMessage, successMessage: undefined});
+        // Clear success timer on error
+        if (this.successTimer) {
+          clearTimeout(this.successTimer);
+          this.successTimer = null;
+        }
+      });
+
+    event.preventDefault();
+  }
+
+  render() {
+    const batteryProfile = this.state.batteryProfile || { batteryType: '', batteryCapacity: '' };
+    const chargingParameters = this.state.chargingParameters || {
+      boostDuration: '', equalizationCycle: '', equalizationDuration: '',
+      boostVoltage: '', boostReconnectChargingVoltage: '', floatVoltage: '',
+      equalizationVoltage: '', chargingLimitVoltage: '', overVoltDisconnectVoltage: '',
+      overVoltReconnectVoltage: '', lowVoltDisconnectVoltage: '', lowVoltReconnectVoltage: '',
+      underVoltWarningVoltage: '', underVoltWarningReconnectVoltage: '', dischargingLimitVoltage: ''
+    };
+    const isUserDefined = batteryProfile.batteryType === 'userDefined';
+    const hasLoadError = !!this.state.loadError;
+    const hasSaveError = !!this.state.saveError;
+    const hasSuccessMessage = !!this.state.successMessage;
+    const canEditChargingParams = isUserDefined && this.state.batteryProfileSaved;
+
+    return (
+      <Box sx={{ width: '100%', p: 1.5, mt: 1, backgroundColor: 'white', minHeight: 'calc(100vh - 72px)', maxWidth: 1400, mx: 'auto' }}>
+        {/* Error Alerts */}
+        {hasLoadError && (
+          <Alert severity="error" sx={{ mb: 1, py: 0.5 }}>
+            {this.state.loadError}
+          </Alert>
+        )}
+        {hasSaveError && (
+          <Alert severity="error" sx={{ mb: 1, py: 0.5 }}>
+            {this.state.saveError}
+          </Alert>
+        )}
+        {/* Success Alert */}
+        {hasSuccessMessage && (
+          <Alert severity="success" sx={{ mb: 1, py: 0.5 }}>
+            {this.state.successMessage}
+          </Alert>
+        )}
+          {/* Battery Profile Section */}
           <Box
             component="form"
             autoComplete="off"
-            onSubmit={this.handleSubmit}
+            onSubmit={this.handleBatteryProfileSubmit}
+            sx={{ mb: 2 }}
           >
-            {/* Battery Settings */}
-            <Typography variant="h6" sx={{ mb: 1.5, mt: 1, fontWeight: 600, color: '#1b5e20' }}>
-              Battery Settings
+            <Typography variant="subtitle1" sx={{ mb: 0.75, fontWeight: 600, color: '#1b5e20' }}>
+              Battery Profile
             </Typography>
-            <Paper elevation={2} sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-              <Grid container spacing={2}>
+            <Paper elevation={2} sx={{ p: 1.5, mb: 1, borderRadius: 2 }}>
+              <Grid container spacing={1.5}>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
                     <InputLabel>Battery Type</InputLabel>
                     <Select
                       name="batteryType"
-                      value={config.batteryType}
+                      value={batteryProfile.batteryType}
                       label="Battery Type"
-                      onChange={this.handleInputChange}
+                      onChange={this.handleBatteryProfileChange}
                     >
                       <MenuItem value="sealed">Sealed</MenuItem>
                       <MenuItem value="gel">Gel</MenuItem>
@@ -182,208 +342,265 @@ class Config extends React.Component {
                     fullWidth
                     label="Battery Capacity (Ah)"
                     name="batteryCapacity"
-                    value={config.batteryCapacity}
-                    onChange={this.handleInputChange}
+                    value={batteryProfile.batteryCapacity}
+                    onChange={this.handleBatteryProfileChange}
                   />
                 </Grid>
               </Grid>
             </Paper>
 
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                size="small"
+                disabled={hasLoadError}
+                sx={{
+                  backgroundColor: '#2e7d32',
+                  '&:hover': {
+                    backgroundColor: '#1b5e20'
+                  },
+                  '&:disabled': {
+                    backgroundColor: '#9e9e9e'
+                  },
+                  px: 2,
+                  py: 0.75,
+                  fontWeight: 600
+                }}
+              >
+                Save Battery Profile
+              </Button>
+            </Box>
+          </Box>
+
+          {/* Charging Parameters Section */}
+          <Box
+            component="form"
+            autoComplete="off"
+            onSubmit={this.handleChargingParametersSubmit}
+          >
+            <Typography variant="subtitle1" sx={{ mb: 0.75, fontWeight: 600, color: '#1b5e20' }}>
+              Charging Parameters
+            </Typography>
+
+            {!canEditChargingParams && (
+              <Alert severity="info" sx={{ mb: 1, py: 0.5 }}>
+                {!isUserDefined
+                  ? "Set Battery Type to 'User Defined' and save to edit charging parameters"
+                  : "Save battery profile with 'User Defined' type to edit charging parameters"}
+              </Alert>
+            )}
+
             {/* Charging Voltage Settings */}
-            <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 600, color: '#1b5e20' }}>
+            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500, color: '#424242' }}>
               Charging Voltage Settings
             </Typography>
-            <Paper elevation={2} sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-              <Grid container spacing={2}>
+            <Paper elevation={2} sx={{ p: 1.5, mb: 1, borderRadius: 2 }}>
+              <Grid container spacing={1.5}>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Charging Limit Voltage"
                     name="chargingLimitVoltage"
-                    value={config.chargingLimitVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.chargingLimitVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Boost Voltage"
                     name="boostVoltage"
-                    value={config.boostVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.boostVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Boost Reconnect Voltage"
                     name="boostReconnectChargingVoltage"
-                    value={config.boostReconnectChargingVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.boostReconnectChargingVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Boost Duration (min)"
                     name="boostDuration"
-                    value={config.boostDuration}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.boostDuration}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Float Voltage"
                     name="floatVoltage"
-                    value={config.floatVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.floatVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Equalization Voltage"
                     name="equalizationVoltage"
-                    value={config.equalizationVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.equalizationVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Equalization Cycle (days)"
                     name="equalizationCycle"
-                    value={config.equalizationCycle}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.equalizationCycle}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Equalization Duration (min)"
                     name="equalizationDuration"
-                    value={config.equalizationDuration}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.equalizationDuration}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
               </Grid>
             </Paper>
 
             {/* Protection Voltage Settings */}
-            <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 600, color: '#1b5e20' }}>
+            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500, color: '#424242' }}>
               Protection Voltage Settings
             </Typography>
-            <Paper elevation={2} sx={{ p: 2, mb: 2, borderRadius: 2 }}>
-              <Grid container spacing={2}>
+            <Paper elevation={2} sx={{ p: 1.5, mb: 1, borderRadius: 2 }}>
+              <Grid container spacing={1.5}>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Over Volt Disconnect"
                     name="overVoltDisconnectVoltage"
-                    value={config.overVoltDisconnectVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.overVoltDisconnectVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Over Volt Reconnect"
                     name="overVoltReconnectVoltage"
-                    value={config.overVoltReconnectVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.overVoltReconnectVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Low Volt Disconnect"
                     name="lowVoltDisconnectVoltage"
-                    value={config.lowVoltDisconnectVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.lowVoltDisconnectVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Low Volt Reconnect"
                     name="lowVoltReconnectVoltage"
-                    value={config.lowVoltReconnectVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.lowVoltReconnectVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Under Volt Warning"
                     name="underVoltWarningVoltage"
-                    value={config.underVoltWarningVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.underVoltWarningVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Under Volt Reconnect"
                     name="underVoltWarningReconnectVoltage"
-                    value={config.underVoltWarningReconnectVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.underVoltWarningReconnectVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <TextField
                     required
                     fullWidth
+                    disabled={!canEditChargingParams}
                     label="Discharging Limit Voltage"
                     name="dischargingLimitVoltage"
-                    value={config.dischargingLimitVoltage}
-                    onChange={this.handleInputChange}
+                    value={chargingParameters.dischargingLimitVoltage}
+                    onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
               </Grid>
             </Paper>
 
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
                 type="submit"
                 variant="contained"
                 color="primary"
-                size="large"
+                size="small"
+                disabled={!canEditChargingParams || hasLoadError}
                 sx={{
                   backgroundColor: '#2e7d32',
                   '&:hover': {
                     backgroundColor: '#1b5e20'
                   },
-                  px: 4,
-                  py: 1.5,
+                  '&:disabled': {
+                    backgroundColor: '#9e9e9e'
+                  },
+                  px: 2,
+                  py: 0.75,
                   fontWeight: 600
                 }}
               >
-                Save Configuration
+                Save Charging Parameters
               </Button>
             </Box>
           </Box>
         </Box>
       );
-    } else {
-      return (
-        <Box></Box>
-      )
-    }
   }
 };
 
