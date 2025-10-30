@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
-	"github.com/lumberbarons/solar-controller/internal/publisher"
+	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
@@ -24,13 +24,13 @@ type Configuration struct {
 
 type Controller struct {
 	collector           *Collector
-	mqttPublisher       *publisher.MqttPublisher
+	mqttPublisher       *mqtt.Publisher
 	prometheusCollector *PrometheusCollector
 	lastStatus          *ControllerStatus
 	lastStatusMutex     sync.RWMutex
 }
 
-func NewController(config Configuration, mqttPublisher *publisher.MqttPublisher) (*Controller, error) {
+func NewController(config Configuration, mqttPublisher *mqtt.Publisher) (*Controller, error) {
 	if !config.Enabled {
 		log.Info("victron disabled via configuration")
 		return &Controller{}, nil

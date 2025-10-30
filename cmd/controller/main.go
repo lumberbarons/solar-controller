@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
 	"github.com/lumberbarons/solar-controller/internal/controllers/victron"
-	"github.com/lumberbarons/solar-controller/internal/publisher"
+	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	staticfs "github.com/lumberbarons/solar-controller/internal/static"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -30,10 +30,10 @@ type Config struct {
 }
 
 type SolarControllerConfiguration struct {
-	HttpPort int                         `yaml:"httpPort"`
-	Mqtt     publisher.MqttConfiguration `yaml:"mqtt"`
-	Epever   epever.Configuration        `yaml:"epever"`
-	Victron  victron.Configuration       `yaml:"victron"`
+	HttpPort int                   `yaml:"httpPort"`
+	Mqtt     mqtt.Configuration    `yaml:"mqtt"`
+	Epever   epever.Configuration  `yaml:"epever"`
+	Victron  victron.Configuration `yaml:"victron"`
 }
 
 func init() {
@@ -62,7 +62,7 @@ func main() {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 
-	mqttPublisher, err := publisher.NewMqttPublisher(controllerConfig.SolarController.Mqtt)
+	mqttPublisher, err := mqtt.NewPublisher(controllerConfig.SolarController.Mqtt)
 	if err != nil {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
@@ -92,7 +92,7 @@ func main() {
 	}
 }
 
-func buildControllers(controllerConfig Config, mqttPublisher *publisher.MqttPublisher) []SolarController {
+func buildControllers(controllerConfig Config, mqttPublisher *mqtt.Publisher) []SolarController {
 	var controllers []SolarController
 
 	// epever
