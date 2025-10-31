@@ -6,7 +6,6 @@
 # Build artifacts
 bin/
 site/build/
-internal/static/build/
 dist/
 
 # Dependencies
