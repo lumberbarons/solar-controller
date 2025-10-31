@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
+	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	log "github.com/sirupsen/logrus"
 )
@@ -25,17 +26,57 @@ type Configuration struct {
 }
 
 type Controller struct {
-	client              *ModbusClient
+	client              controllers.ModbusClient
 	collector           *Collector
 	configurer          *Configurer
-	mqttPublisher       *mqtt.Publisher
-	prometheusCollector *PrometheusCollector
+	mqttPublisher       controllers.MessagePublisher
+	prometheusCollector controllers.MetricsCollector
 	scheduler           *gocron.Scheduler
 	lastStatus          *ControllerStatus
 	lastStatusMutex     sync.RWMutex
 }
 
-func NewController(config Configuration, mqttPublisher *mqtt.Publisher) (*Controller, error) {
+// NewController creates a new Epever controller with dependency injection for testing.
+// For production use, call NewControllerFromConfig instead.
+func NewController(
+	client controllers.ModbusClient,
+	collector *Collector,
+	configurer *Configurer,
+	mqttPublisher controllers.MessagePublisher,
+	prometheusCollector controllers.MetricsCollector,
+	publishPeriod int,
+) (*Controller, error) {
+	if client == nil {
+		return &Controller{}, nil
+	}
+
+	s := gocron.NewScheduler(time.UTC)
+
+	controller := &Controller{
+		client:              client,
+		collector:           collector,
+		configurer:          configurer,
+		prometheusCollector: prometheusCollector,
+		mqttPublisher:       mqttPublisher,
+		scheduler:           s,
+	}
+
+	_, err := s.Every(publishPeriod).Seconds().Do(controller.collectAndPublish)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start epever publisher %w", err)
+	}
+
+	s.StartAsync()
+
+	// Run initial collection immediately
+	go controller.collectAndPublish()
+
+	return controller, nil
+}
+
+// NewControllerFromConfig creates a new Epever controller from configuration.
+// This is the production entry point that creates all concrete dependencies.
+func NewControllerFromConfig(config Configuration, mqttPublisher *mqtt.Publisher) (*Controller, error) {
 	if !config.Enabled {
 		log.Info("epever disabled via configuration")
 		return &Controller{}, nil
@@ -57,28 +98,14 @@ func NewController(config Configuration, mqttPublisher *mqtt.Publisher) (*Contro
 
 	log.Infof("connected to epever %s", config.SerialPort)
 
-	s := gocron.NewScheduler(time.UTC)
-
-	controller := &Controller{
-		client:              client,
-		collector:           epeverCollector,
-		configurer:          epeverConfigurer,
-		prometheusCollector: prometheusCollector,
-		mqttPublisher:       mqttPublisher,
-		scheduler:           s,
-	}
-
-	_, err = s.Every(config.PublishPeriod).Seconds().Do(controller.collectAndPublish)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start epever publisher %w", err)
-	}
-
-	s.StartAsync()
-
-	// Run initial collection immediately
-	go controller.collectAndPublish()
-
-	return controller, nil
+	return NewController(
+		client,
+		epeverCollector,
+		epeverConfigurer,
+		mqttPublisher,
+		prometheusCollector,
+		config.PublishPeriod,
+	)
 }
 
 func (e *Controller) collectAndPublish() {

@@ -185,3 +185,26 @@ func (c *ModbusClient) WriteMultipleRegisters(ctx context.Context, address, quan
 
 	return result, err
 }
+
+func (c *ModbusClient) WriteSingleCoil(ctx context.Context, address, value uint16) (results []byte, err error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	var result []byte
+
+	err = retry.Do(
+		func() error {
+			var retryErr error
+			result, retryErr = c.client.WriteSingleCoil(ctx, address, value)
+			return retryErr
+		},
+		retry.Attempts(retryAttempts),
+		retry.Delay(retryDelay),
+		retry.OnRetry(func(n uint, err error) {
+			log.Warnf("WriteSingleCoil address %d retry #%d: %s\n", address, n, err)
+		}),
+		retry.Context(ctx),
+	)
+
+	return result, err
+}

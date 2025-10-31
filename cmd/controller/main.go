@@ -7,13 +7,12 @@ import (
 
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
+	"github.com/lumberbarons/solar-controller/internal/config"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
-	"github.com/lumberbarons/solar-controller/internal/controllers/victron"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	staticfs "github.com/lumberbarons/solar-controller/internal/static"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -24,17 +23,6 @@ var (
 type SolarController interface {
 	RegisterEndpoints(r *gin.Engine)
 	Enabled() bool
-}
-
-type Config struct {
-	SolarController SolarControllerConfiguration `yaml:"solarController"`
-}
-
-type SolarControllerConfiguration struct {
-	HTTPPort int                   `yaml:"httpPort"`
-	Mqtt     mqtt.Configuration    `yaml:"mqtt"`
-	Epever   epever.Configuration  `yaml:"epever"`
-	Victron  victron.Configuration `yaml:"victron"`
 }
 
 func init() {
@@ -96,9 +84,6 @@ func main() {
 		if epeverCtrl, ok := controller.(*epever.Controller); ok {
 			epeverCtrl.Close()
 		}
-		if victronCtrl, ok := controller.(*victron.Controller); ok {
-			victronCtrl.Close()
-		}
 	}
 
 	if err != nil {
@@ -106,12 +91,10 @@ func main() {
 	}
 }
 
-func buildControllers(controllerConfig *Config, mqttPublisher *mqtt.Publisher) []SolarController {
+func buildControllers(controllerConfig *config.Config, mqttPublisher *mqtt.Publisher) []SolarController {
 	var controllers []SolarController
 
-	// epever
-
-	epeverController, err := epever.NewController(controllerConfig.SolarController.Epever, mqttPublisher)
+	epeverController, err := epever.NewControllerFromConfig(controllerConfig.SolarController.Epever, mqttPublisher)
 	if err != nil {
 		log.Fatalf("failed to create epever controller: %v", err)
 	}
@@ -120,21 +103,10 @@ func buildControllers(controllerConfig *Config, mqttPublisher *mqtt.Publisher) [
 		controllers = append(controllers, epeverController)
 	}
 
-	// victron
-
-	victronController, err := victron.NewController(controllerConfig.SolarController.Victron, mqttPublisher)
-	if err != nil {
-		log.Fatalf("failed to create victron controller: %v", err)
-	}
-
-	if victronController.Enabled() {
-		controllers = append(controllers, victronController)
-	}
-
 	return controllers
 }
 
-func loadConfigFile() Config {
+func loadConfigFile() config.Config {
 	if *configFilePath == "" {
 		log.Fatalf("Must specify config file path")
 	}
@@ -144,12 +116,10 @@ func loadConfigFile() Config {
 		log.Fatalf("failed to load configurer file: %v", err)
 	}
 
-	config := Config{}
-
-	err = yaml.Unmarshal(configFile, &config)
+	cfg, err := config.Load(configFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to load configuration: %v", err)
 	}
 
-	return config
+	return cfg
 }

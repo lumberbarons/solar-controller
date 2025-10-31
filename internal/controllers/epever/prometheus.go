@@ -137,7 +137,12 @@ func (e *PrometheusCollector) initializeMetrics() {
 	})
 }
 
-func (e *PrometheusCollector) SetMetrics(status *ControllerStatus) {
+func (e *PrometheusCollector) SetMetrics(statusInterface interface{}) {
+	status, ok := statusInterface.(*ControllerStatus)
+	if !ok {
+		return
+	}
+
 	e.panelVoltage.Set(float64(status.ArrayVoltage))
 	e.panelCurrent.Set(float64(status.ArrayCurrent))
 	e.panelPower.Set(float64(status.ArrayPower))

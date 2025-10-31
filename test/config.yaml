@@ -4,10 +4,6 @@ solarController:
     enabled: true
     serialPort: /dev/ttys007
     publishPeriod: 5
-  victron:
-    enabled: false
-    macAddress:
-    publishPeriod: 5
   #mqtt:
   #  host:
   #  username:

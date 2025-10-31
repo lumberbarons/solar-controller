@@ -1,11 +1,9 @@
 solarController:
   httpPort: 8080
   epever:
+    enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
-  victron:
-    macAddress:
-    publishPeriod: 30
   mqtt:
     host:
     username:

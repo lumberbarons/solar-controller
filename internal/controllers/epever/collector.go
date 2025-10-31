@@ -2,9 +2,11 @@ package epever
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"time"
+
+	"github.com/lumberbarons/solar-controller/internal/controllers"
+	"github.com/lumberbarons/solar-controller/internal/controllers/epever/parser"
 )
 
 // Modbus input register addresses (read-only status values)
@@ -30,15 +32,9 @@ const (
 	chargingStatusShift = 2
 )
 
-// Temperature conversion constants
-const (
-	tempSignedThreshold = 32768
-	tempSignedOffset    = 65536
-	tempDivisor         = 100.0
-)
 
 type Collector struct {
-	modbusClient *ModbusClient
+	modbusClient controllers.ModbusClient
 }
 
 type ControllerStatus struct {
@@ -59,7 +55,7 @@ type ControllerStatus struct {
 	ChargingStatus       int32   `json:"chargingStatus"`
 }
 
-func NewCollector(client *ModbusClient) *Collector {
+func NewCollector(client controllers.ModbusClient) *Collector {
 	collector := &Collector{
 		modbusClient: client,
 	}
@@ -134,27 +130,15 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	chargingStatus := (controllerStatus & chargingStatusMask) >> chargingStatusShift
 	c.ChargingStatus = chargingStatus
 
-	tempResults, err := e.getValueInts(ctx, regBatteryTemperature, 2)
+	tempData, err := e.modbusClient.ReadInputRegisters(ctx, regBatteryTemperature, 2)
 	if err != nil {
-		return nil, err
-	}
-	if len(tempResults) < 2 {
-		return nil, fmt.Errorf("expected 2 values for battery/device temperature, got %d", len(tempResults))
+		return nil, fmt.Errorf("failed to read temperature data: %w", err)
 	}
 
-	bt := tempResults[0]
-
-	if bt > tempSignedThreshold {
-		bt -= tempSignedOffset
+	c.BatteryTemp, c.DeviceTemp, err = parser.ParseTemperatures(tempData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse temperatures: %w", err)
 	}
-	c.BatteryTemp = float32(bt) / tempDivisor
-
-	dt := tempResults[1]
-
-	if dt > tempSignedThreshold {
-		dt -= tempSignedOffset
-	}
-	c.DeviceTemp = float32(dt) / tempDivisor
 
 	c.CollectionTime = time.Since(startTime).Seconds()
 
@@ -167,7 +151,7 @@ func (e *Collector) getValueFloat(ctx context.Context, address uint16) (float32,
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
-	return float32(binary.BigEndian.Uint16(data)) / 100, nil
+	return parser.ParseFloat(data)
 }
 
 func (e *Collector) getValueFloats(ctx context.Context, address, quantity uint16) ([]float32, error) {
@@ -176,12 +160,7 @@ func (e *Collector) getValueFloats(ctx context.Context, address, quantity uint16
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
-	results := make([]float32, quantity)
-	for i := 0; i < int(quantity); i++ {
-		results[i] = float32(binary.BigEndian.Uint16(data[i*2:i*2+2])) / 100
-	}
-
-	return results, nil
+	return parser.ParseFloats(data, int(quantity))
 }
 
 func (e *Collector) getValueInt(ctx context.Context, address uint16) (int32, error) {
@@ -189,7 +168,7 @@ func (e *Collector) getValueInt(ctx context.Context, address uint16) (int32, err
 	if err != nil {
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
-	return int32(binary.BigEndian.Uint16(data)), nil
+	return parser.ParseInt(data)
 }
 
 func (e *Collector) getValueInts(ctx context.Context, address, quantity uint16) ([]int32, error) {
@@ -198,27 +177,14 @@ func (e *Collector) getValueInts(ctx context.Context, address, quantity uint16) 
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
-	results := make([]int32, quantity)
-	for i := 0; i < int(quantity); i++ {
-		results[i] = int32(binary.BigEndian.Uint16(data[i*2 : i*2+2]))
-	}
-
-	return results, nil
+	return parser.ParseInts(data, int(quantity))
 }
 
 func (e *Collector) getValueFloat32(ctx context.Context, address uint16) (float32, error) {
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 2)
-
 	if err != nil {
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 
-	if len(data) < 4 {
-		return 0, fmt.Errorf("insufficient data for float32 at address %d: expected 4 bytes, got %d", address, len(data))
-	}
-
-	swappedData := make([]byte, 4)
-	copy(swappedData[0:2], data[2:4])
-	copy(swappedData[2:4], data[0:2])
-	return float32(binary.BigEndian.Uint32(swappedData)) / 100, nil
+	return parser.ParseFloat32(data)
 }
