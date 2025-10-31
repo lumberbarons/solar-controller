@@ -31,16 +31,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install frontend dependencies
-        working-directory: ./site
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: ./site
-        run: npm run build
-
       - name: Get Go dependencies
         run: go mod download
+
+      - name: Build frontend
+        run: make build-frontend
 
       - name: Run Go tests
         run: go test -v -race -cover ./...
@@ -71,8 +66,7 @@ jobs:
         run: npm run lint
 
       - name: Build frontend
-        working-directory: ./site
-        run: npm run build
+        run: make build-frontend
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8

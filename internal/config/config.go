@@ -42,10 +42,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid HTTP port: %d (must be 1-65535)", c.SolarController.HTTPPort)
 	}
 
-	// Validate MQTT configuration if host is provided
-	if c.SolarController.Mqtt.Host != "" {
+	// Validate MQTT configuration if enabled
+	if c.SolarController.Mqtt.Enabled {
+		if c.SolarController.Mqtt.Host == "" {
+			return fmt.Errorf("MQTT host is required when MQTT is enabled")
+		}
 		if c.SolarController.Mqtt.TopicPrefix == "" {
-			return fmt.Errorf("MQTT topic prefix is required when MQTT host is specified")
+			return fmt.Errorf("MQTT topic prefix is required when MQTT is enabled")
 		}
 	}
 

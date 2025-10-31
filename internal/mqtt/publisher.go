@@ -9,6 +9,7 @@ import (
 )
 
 type Configuration struct {
+	Enabled       bool   `yaml:"enabled"`
 	Host          string `yaml:"host"`
 	Username      string `yaml:"username"`
 	Password      string `yaml:"password"`
@@ -22,8 +23,13 @@ type Publisher struct {
 }
 
 func NewPublisher(config Configuration) (*Publisher, error) {
+	if !config.Enabled {
+		log.Info("MQTT publisher disabled via configuration")
+		return &Publisher{}, nil
+	}
+
 	if config.Host == "" {
-		log.Info("publisher disabled, no host provided")
+		log.Warn("MQTT enabled but no host provided, publisher disabled")
 		return &Publisher{}, nil
 	}
 

@@ -5,6 +5,7 @@ solarController:
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
   mqtt:
+    enabled: false
     host:
     username:
     password:

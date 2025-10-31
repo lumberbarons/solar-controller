@@ -6,3 +6,4 @@ internal/static/build
 bin/
 tmp/
 build-errors.log
+config.yaml

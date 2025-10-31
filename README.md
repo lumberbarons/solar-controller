@@ -1,6 +1,6 @@
 # solar-controller
 
-A Go-based service that collects metrics from solar power equipment (Epever, Victron) and publishes them via MQTT and Prometheus. It includes a React-based web UI for monitoring.
+A Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT and Prometheus. It includes a React-based web UI for monitoring.
 
 ## Features
 
@@ -15,7 +15,7 @@ A Go-based service that collects metrics from solar power equipment (Epever, Vic
 
 ### Prerequisites
 
-- Go 1.x or later
+- Go 1.24.0 or later
 - Node.js and npm (for frontend development)
 - Make (recommended)
 
@@ -126,6 +126,7 @@ Create a YAML configuration file with the following structure:
 solarController:
   httpPort: 8080
   mqtt:
+    enabled: true
     host: mqtt://broker:1883
     username: user
     password: pass
@@ -134,21 +135,23 @@ solarController:
     enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
-  victron:
-    enabled: true
-    macAddress: AA:BB:CC:DD:EE:FF
-    publishPeriod: 30
 ```
 
 ### Enabling/Disabling Controllers
 
-Each controller (epever, victron) has an `enabled` boolean field that controls whether it runs:
+Each controller (epever) has an `enabled` boolean field that controls whether it runs:
 
 - Set `enabled: true` to activate the controller
 - Set `enabled: false` to disable the controller
-- If `enabled: true` but required fields are missing (serialPort for epever, macAddress for victron), a warning will be logged and the controller will not start
+- If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start
 
-MQTT publishing is optional - if no host is configured, the application will run without MQTT support.
+### Enabling/Disabling MQTT
+
+MQTT publishing has an `enabled` boolean field that controls whether it runs:
+
+- Set `enabled: true` to activate MQTT publishing
+- Set `enabled: false` to disable MQTT publishing
+- If `enabled: true` but required fields are missing (host or topicPrefix), configuration validation will fail
 
 ## Architecture
 
@@ -163,16 +166,15 @@ type SolarController interface {
 }
 ```
 
-Each controller (epever, victron) follows the same structure:
+Each controller follows the same structure:
 - **Controller**: Main orchestrator that manages scheduled collection/publishing
 - **Collector**: Handles device communication and metric collection
-- **Configurer**: Manages device configuration (epever only)
+- **Configurer**: Manages device configuration
 - **PrometheusCollector**: Exposes metrics to Prometheus
 
 ### Communication Protocols
 
-- **Epever**: Modbus RTU over serial (via `goburrow/modbus`)
-- **Victron**: Bluetooth LE (via `rigado/ble`)
+- **Epever**: Modbus RTU over serial (via `lumberbarons/modbus`)
 
 ### API Endpoints
 
@@ -184,8 +186,8 @@ Each controller (epever, victron) follows the same structure:
 ## Project Structure
 
 - `cmd/controller/` - Main application entry point
-- `internal/controllers/` - Hardware controller implementations (epever, victron)
-- `internal/publisher/` - MQTT publishing functionality
+- `internal/controllers/` - Hardware controller implementations (epever)
+- `internal/mqtt/` - MQTT publishing functionality
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
 - `package/` - Packaging files for system packages (deb, rpm, etc.)

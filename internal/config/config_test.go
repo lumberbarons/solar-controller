@@ -19,6 +19,7 @@ func TestLoad(t *testing.T) {
 solarController:
   httpPort: 8080
   mqtt:
+    enabled: true
     host: mqtt://localhost:1883
     username: user
     password: pass
@@ -32,6 +33,9 @@ solarController:
 			check: func(t *testing.T, c Config) {
 				if c.SolarController.HTTPPort != 8080 {
 					t.Errorf("HTTPPort = %d, want 8080", c.SolarController.HTTPPort)
+				}
+				if !c.SolarController.Mqtt.Enabled {
+					t.Error("MQTT should be enabled")
 				}
 				if c.SolarController.Mqtt.Host != "mqtt://localhost:1883" {
 					t.Errorf("MQTT Host = %s, want mqtt://localhost:1883", c.SolarController.Mqtt.Host)
@@ -116,11 +120,27 @@ solarController:
 			errMsg:  "invalid HTTP port",
 		},
 		{
-			name: "MQTT host specified but no topic prefix",
+			name: "MQTT enabled but no host",
 			yaml: `
 solarController:
   httpPort: 8080
   mqtt:
+    enabled: true
+    host: ""
+    topicPrefix: solar/metrics
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "MQTT host is required",
+		},
+		{
+			name: "MQTT enabled but no topic prefix",
+			yaml: `
+solarController:
+  httpPort: 8080
+  mqtt:
+    enabled: true
     host: mqtt://localhost:1883
     topicPrefix: ""
   epever:
@@ -128,6 +148,18 @@ solarController:
 `,
 			wantErr: true,
 			errMsg:  "MQTT topic prefix is required",
+		},
+		{
+			name: "MQTT disabled - no validation errors",
+			yaml: `
+solarController:
+  httpPort: 8080
+  mqtt:
+    enabled: false
+  epever:
+    enabled: false
+`,
+			wantErr: false,
 		},
 		{
 			name: "epever enabled but no serial port",
@@ -174,6 +206,7 @@ solarController:
 solarController:
   httpPort: 8080
   mqtt:
+    enabled: true
     host: mqtt://broker.example.com:1883
     username: solaruser
     password: secretpassword
@@ -183,6 +216,9 @@ solarController:
 `,
 			wantErr: false,
 			check: func(t *testing.T, c Config) {
+				if !c.SolarController.Mqtt.Enabled {
+					t.Error("MQTT should be enabled")
+				}
 				if c.SolarController.Mqtt.Username != "solaruser" {
 					t.Errorf("MQTT Username = %s, want solaruser", c.SolarController.Mqtt.Username)
 				}
