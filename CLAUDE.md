@@ -173,3 +173,5 @@ The controller can be explicitly enabled or disabled via the `enabled` boolean f
 - MQTT publishing is optional - if no host is configured, MqttPublisher returns an empty/no-op instance
 - The application uses structured logging via `logrus`
 - All controllers register their own HTTP endpoints via `RegisterEndpoints()`
+- Always add unit tests for new code
+- Alaways run linters after code changes

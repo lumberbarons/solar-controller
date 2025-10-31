@@ -602,6 +602,6 @@ class Config extends React.Component {
         </Box>
       );
   }
-};
+}
 
 export default Config
