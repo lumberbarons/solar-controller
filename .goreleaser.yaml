@@ -1,6 +1,9 @@
+version: 2
+
 before:
   hooks:
     - go mod tidy
+
 builds:
   - main: ./cmd/controller
     env:
@@ -11,19 +14,122 @@ builds:
     goarch:
       - amd64
       - arm64
+
 archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
 checksum:
   name_template: 'checksums.txt'
+
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
+
 changelog:
   sort: asc
   filters:
     exclude:
       - '^docs:'
       - '^test:'
+
+release:
+  github:
+    owner: lumberbarons
+    name: solar-controller
+  header: |
+    ## Installation Instructions
+
+    ### Binary Installation
+
+    Download the appropriate archive for your platform from the assets below and extract it:
+
+    ```bash
+    # Linux x86_64
+    tar -xzf solar-controller_Linux_x86_64.tar.gz
+
+    # Linux ARM64
+    tar -xzf solar-controller_Linux_arm64.tar.gz
+
+    # macOS x86_64 (Intel)
+    tar -xzf solar-controller_Darwin_x86_64.tar.gz
+
+    # macOS ARM64 (Apple Silicon)
+    tar -xzf solar-controller_Darwin_arm64.tar.gz
+    ```
+
+    Then run the binary with your configuration file:
+
+    ```bash
+    ./solar-controller -config /path/to/config.yaml
+    ```
+
+    ### Package Manager Installation
+
+    **Debian/Ubuntu:**
+    ```bash
+    sudo dpkg -i solar-controller_*_amd64.deb
+    # or for ARM64
+    sudo dpkg -i solar-controller_*_arm64.deb
+    ```
+
+    **Red Hat/CentOS/Fedora:**
+    ```bash
+    sudo rpm -i solar-controller_*.x86_64.rpm
+    # or for ARM64
+    sudo rpm -i solar-controller_*.aarch64.rpm
+    ```
+
+    **Alpine Linux:**
+    ```bash
+    sudo apk add --allow-untrusted solar-controller_*.apk
+    ```
+
+    Package installations include systemd service configuration. Edit `/etc/solar-controller/config.yaml` and then:
+    ```bash
+    sudo systemctl enable solar-controller
+    sudo systemctl start solar-controller
+    ```
+
+    ### Docker
+
+    Docker images are published to GitHub Container Registry:
+
+    ```bash
+    # Pull the latest version
+    docker pull ghcr.io/lumberbarons/solar-controller:latest
+
+    # Or pull a specific version
+    docker pull ghcr.io/lumberbarons/solar-controller:{{ .Tag }}
+
+    # Run with configuration file mounted
+    docker run -d \
+      --name solar-controller \
+      --device=/dev/ttyXRUSB0:/dev/ttyXRUSB0 \
+      -v /path/to/config.yaml:/etc/solar-controller/config.yaml:ro \
+      -p 8080:8080 \
+      ghcr.io/lumberbarons/solar-controller:latest \
+      -config /etc/solar-controller/config.yaml
+    ```
+
+    **Note:** Adjust `--device` flag to match your serial device path.
+
+    ### Configuration
+
+    See the [example configuration](https://github.com/lumberbarons/solar-controller/blob/main/package/config.yaml) for all available options.
+
 nfpms:
   - id: default
+    description: Solar power equipment monitoring service with MQTT and Prometheus support
+    license: MIT
     formats:
       - apk
       - deb
