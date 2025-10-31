@@ -31,7 +31,7 @@ COPY internal/ internal/
 
 # Copy frontend build artifacts from previous stage
 COPY --from=build-frontend /app/site/build internal/static/build
-g
+
 # Build with optimizations for smaller binary
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
