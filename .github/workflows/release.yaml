@@ -125,7 +125,7 @@ jobs:
           retention-days: 1
 
   docker-arm64:
-    runs-on: ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     needs: build-site
     outputs:
       image-name: ${{ steps.build.outputs.imageid }}
