@@ -153,6 +153,55 @@ MQTT publishing has an `enabled` boolean field that controls whether it runs:
 - Set `enabled: false` to disable MQTT publishing
 - If `enabled: true` but required fields are missing (host or topicPrefix), configuration validation will fail
 
+## Testing
+
+### Testing with Modbus Simulator
+
+You can test the solar controller without physical hardware using the Modbus simulator from the [lumberbarons/modbus](https://github.com/lumberbarons/modbus) project.
+
+#### Prerequisites
+
+1. Clone and build the modbus simulator:
+   ```bash
+   git clone https://github.com/lumberbarons/modbus.git
+   cd modbus
+   go build -o bin/modbus-simulator ./cmd/simulator
+   ```
+
+#### Running the Simulator
+
+1. Start the Modbus simulator with the solar charger configuration:
+   ```bash
+   ./bin/modbus-simulator --config /path/to/solar-controller/testdata/simulator/epever.json --mode rtu --baud 115200
+   ```
+
+2. Configure solar-controller to use the virtual port created by the simulator:
+   ```yaml
+   solarController:
+     httpPort: 8080
+     mqtt:
+       enabled: false
+     epever:
+       enabled: true
+       serialPort: /dev/ttys003  # the virtual port in the simulator's logs
+       publishPeriod: 60
+   ```
+
+3. Run solar-controller:
+   ```bash
+   ./bin/solar-controller -config config.yaml
+   ```
+
+The simulator provides realistic Epever solar charge controller data including:
+
+- PV voltage, current, and power readings
+- Battery voltage, power, temperature, and state of charge
+- Load voltage, current, and power
+- Equipment temperature
+- Battery configuration parameters (type, capacity, voltage thresholds)
+
+You can modify `testdata/simulator/solar-charger.json` to simulate different device states and values.
+
 ## Architecture
 
 ### Controller Pattern

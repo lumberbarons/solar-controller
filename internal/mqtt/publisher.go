@@ -22,7 +22,7 @@ type Publisher struct {
 	config Configuration
 }
 
-func NewPublisher(config Configuration) (*Publisher, error) {
+func NewPublisher(config *Configuration) (*Publisher, error) {
 	if !config.Enabled {
 		log.Info("MQTT publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -50,7 +50,7 @@ func NewPublisher(config Configuration) (*Publisher, error) {
 
 	log.Infof("connected to broker %s", config.Host)
 
-	publisher := &Publisher{client: client, config: config}
+	publisher := &Publisher{client: client, config: *config}
 
 	return publisher, nil
 }

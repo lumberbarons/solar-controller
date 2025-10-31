@@ -234,4 +234,3 @@ func (m *MockPublisher) Close() {
 	m.Closed = true
 	m.MockMessagePublisher.Close()
 }
-

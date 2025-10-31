@@ -12,7 +12,7 @@ func TestCollector_GetStatus(t *testing.T) {
 
 	t.Run("successful status collection", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				// Return realistic test data based on the address and quantity
 				switch address {
 				case regArrayVoltage: // Array voltage and current (2 registers)
@@ -95,7 +95,7 @@ func TestCollector_GetStatus(t *testing.T) {
 
 	t.Run("modbus read failure for array voltage", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				if address == regArrayVoltage {
 					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
 				}
@@ -113,7 +113,7 @@ func TestCollector_GetStatus(t *testing.T) {
 
 	t.Run("modbus read failure for temperature", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				if address == regBatteryTemperature {
 					return nil, &testingpkg.ModbusTestError{Message: "device disconnected"}
 				}
@@ -155,7 +155,7 @@ func TestCollector_GetStatus(t *testing.T) {
 
 	t.Run("negative temperature handling", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				switch address {
 				case regArrayVoltage:
 					return testingpkg.CreateModbusResponse(1850, 520), nil
@@ -201,7 +201,7 @@ func TestCollector_GetStatus(t *testing.T) {
 
 	t.Run("insufficient data from modbus", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, _, _ uint16) ([]byte, error) {
 				// Return insufficient data (1 byte instead of expected 2+ bytes)
 				return []byte{0x00}, nil
 			},

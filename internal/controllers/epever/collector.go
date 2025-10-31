@@ -32,7 +32,6 @@ const (
 	chargingStatusShift = 2
 )
 
-
 type Collector struct {
 	modbusClient controllers.ModbusClient
 }
@@ -169,15 +168,6 @@ func (e *Collector) getValueInt(ctx context.Context, address uint16) (int32, err
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	return parser.ParseInt(data)
-}
-
-func (e *Collector) getValueInts(ctx context.Context, address, quantity uint16) ([]int32, error) {
-	data, err := e.modbusClient.ReadInputRegisters(ctx, address, quantity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
-	}
-
-	return parser.ParseInts(data, int(quantity))
 }
 
 func (e *Collector) getValueFloat32(ctx context.Context, address uint16) (float32, error) {

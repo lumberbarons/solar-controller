@@ -55,10 +55,10 @@ func (c *Config) Validate() error {
 	// Validate Epever configuration if enabled
 	if c.SolarController.Epever.Enabled {
 		if c.SolarController.Epever.SerialPort == "" {
-			return fmt.Errorf("Epever serial port is required when Epever is enabled")
+			return fmt.Errorf("epever serial port is required when Epever is enabled")
 		}
 		if c.SolarController.Epever.PublishPeriod <= 0 {
-			return fmt.Errorf("Epever publish period must be positive")
+			return fmt.Errorf("epever publish period must be positive")
 		}
 	}
 

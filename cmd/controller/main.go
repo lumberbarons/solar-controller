@@ -39,7 +39,7 @@ func main() {
 
 	controllerConfig := loadConfigFile()
 
-	mqttPublisher, err := mqtt.NewPublisher(controllerConfig.SolarController.Mqtt)
+	mqttPublisher, err := mqtt.NewPublisher(&controllerConfig.SolarController.Mqtt)
 	if err != nil {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
@@ -48,10 +48,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create application: %v", err)
 	}
-	defer application.Close()
+	defer func() {
+		if err := application.Close(); err != nil {
+			log.Errorf("failed to close application: %v", err)
+		}
+	}()
 
 	if err := application.Run(); err != nil {
-		log.Fatalf("failed to start server: %v", err)
+		log.Errorf("failed to start server: %v", err)
 	}
 }
 

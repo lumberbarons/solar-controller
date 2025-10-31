@@ -49,7 +49,7 @@ func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublish
 
 // buildControllers initializes all solar equipment controllers based on configuration.
 func (a *Application) buildControllers() error {
-	var controllers []controllers.SolarController
+	var ctrlList []controllers.SolarController
 
 	// Initialize Epever controller
 	epeverController, err := epever.NewControllerFromConfig(a.config.SolarController.Epever, a.mqtt)
@@ -58,10 +58,10 @@ func (a *Application) buildControllers() error {
 	}
 
 	if epeverController.Enabled() {
-		controllers = append(controllers, epeverController)
+		ctrlList = append(ctrlList, epeverController)
 	}
 
-	a.controllers = controllers
+	a.controllers = ctrlList
 	return nil
 }
 

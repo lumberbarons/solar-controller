@@ -14,7 +14,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 	t.Run("cache miss - fetches from device", func(t *testing.T) {
 		callCount := 0
 		mockClient := &testingpkg.MockModbusClient{
-			ReadHoldingRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				// Return minimal valid data for getConfig()
 				switch address {
@@ -75,7 +75,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 	t.Run("cache hit - no device fetch", func(t *testing.T) {
 		callCount := 0
 		mockClient := &testingpkg.MockModbusClient{
-			ReadHoldingRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
 				case regBatteryType:
@@ -149,7 +149,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 	t.Run("cache expiration - refetches after TTL", func(t *testing.T) {
 		callCount := 0
 		mockClient := &testingpkg.MockModbusClient{
-			ReadHoldingRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
 				case regBatteryType:
@@ -211,7 +211,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 	t.Run("cache invalidation", func(t *testing.T) {
 		callCount := 0
 		mockClient := &testingpkg.MockModbusClient{
-			ReadHoldingRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
 				case regBatteryType:
@@ -270,7 +270,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("modbus error propagates", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadHoldingRegistersFunc: func(ctx context.Context, address, quantity uint16) ([]byte, error) {
+			ReadHoldingRegistersFunc: func(_ context.Context, _, _ uint16) ([]byte, error) {
 				return nil, &testingpkg.ModbusTestError{Message: "device timeout"}
 			},
 		}

@@ -228,8 +228,8 @@ solarController:
 			},
 		},
 		{
-			name: "empty configuration",
-			yaml: ``,
+			name:    "empty configuration",
+			yaml:    ``,
 			wantErr: true,
 			errMsg:  "invalid HTTP port",
 		},

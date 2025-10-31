@@ -67,4 +67,3 @@ type MetricsCollector interface {
 	// The status parameter should be a pointer to a controller-specific status struct.
 	SetMetrics(status interface{})
 }
-
