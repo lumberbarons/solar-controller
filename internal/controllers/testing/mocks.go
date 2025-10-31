@@ -219,3 +219,19 @@ func (m *MockMetricsCollector) SetMetrics(status interface{}) {
 	}
 }
 
+// NewMockPublisher creates a new MockMessagePublisher with a Closed tracking field.
+func NewMockPublisher() *MockPublisher {
+	return &MockPublisher{}
+}
+
+// MockPublisher extends MockMessagePublisher with a Closed field for testing.
+type MockPublisher struct {
+	MockMessagePublisher
+	Closed bool
+}
+
+func (m *MockPublisher) Close() {
+	m.Closed = true
+	m.MockMessagePublisher.Close()
+}
+

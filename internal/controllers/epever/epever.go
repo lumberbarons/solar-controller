@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
 	"github.com/lumberbarons/solar-controller/internal/controllers"
-	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -76,7 +75,7 @@ func NewController(
 
 // NewControllerFromConfig creates a new Epever controller from configuration.
 // This is the production entry point that creates all concrete dependencies.
-func NewControllerFromConfig(config Configuration, mqttPublisher *mqtt.Publisher) (*Controller, error) {
+func NewControllerFromConfig(config Configuration, mqttPublisher controllers.MessagePublisher) (*Controller, error) {
 	if !config.Enabled {
 		log.Info("epever disabled via configuration")
 		return &Controller{}, nil
@@ -182,7 +181,7 @@ func (e *Controller) Enabled() bool {
 	return e.client != nil
 }
 
-func (e *Controller) Close() {
+func (e *Controller) Close() error {
 	if e.scheduler != nil {
 		e.scheduler.Stop()
 		log.Debug("epever scheduler stopped")
@@ -190,4 +189,5 @@ func (e *Controller) Close() {
 	if e.client != nil {
 		e.client.Close()
 	}
+	return nil
 }
