@@ -172,7 +172,7 @@ solarController:
     publishPeriod: 60
 `,
 			wantErr: true,
-			errMsg:  "Epever serial port is required",
+			errMsg:  "epever serial port is required",
 		},
 		{
 			name: "epever enabled but invalid publish period",
@@ -185,7 +185,7 @@ solarController:
     publishPeriod: 0
 `,
 			wantErr: true,
-			errMsg:  "Epever publish period must be positive",
+			errMsg:  "epever publish period must be positive",
 		},
 		{
 			name: "epever enabled but negative publish period",
@@ -198,7 +198,7 @@ solarController:
     publishPeriod: -10
 `,
 			wantErr: true,
-			errMsg:  "Epever publish period must be positive",
+			errMsg:  "epever publish period must be positive",
 		},
 		{
 			name: "MQTT configuration valid with all fields",
