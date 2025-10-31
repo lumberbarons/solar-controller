@@ -1,1 +1,41 @@
-site/node_modules
+# Git files
+.git
+.github
+.gitignore
+
+# Build artifacts
+bin/
+site/build/
+internal/static/build/
+dist/
+
+# Dependencies
+node_modules/
+site/node_modules/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Development files
+.air.toml
+.DS_Store
+
+# Documentation (excluding README)
+docs/
+*.md
+!README.md
+
+# Test files
+*_test.go
+
+# CI/CD configuration files
+.golangci.yml
+.goreleaser.yaml
+
+# Temporary files
+*.log
+*.tmp
