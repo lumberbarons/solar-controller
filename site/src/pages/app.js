@@ -1,46 +1,22 @@
 import React from "react";
-import { Switch, Route } from "react-router-dom";
-import { withRouter } from "react-router";
-import PropTypes from "prop-types"
+import { Routes, Route } from "react-router-dom";
 
 import Header from "../components/header";
 import Main from "./main";
-import Query from "./query";
 import Config from "./config";
 
-class App extends React.Component {
-  render() {
-    return (
-      <div>
-        <Header />
-        <div
-          style={{
-            margin: `0 auto`,
-            padding: `1.0rem 1.0875rem 1.0rem`,
-          }}
-        >
-          <main>
-            <Switch>
-              <Route path="/query">
-                <Query />
-              </Route>
-              <Route path="/config">
-                <Config />
-              </Route>
-              <Route path="/">
-                <Main />
-              </Route>
-          </Switch>
-          </main>
-        </div>
-      </div>
-    );
-  }
+function App() {
+  return (
+    <div style={{ width: '100%', overflow: 'hidden' }}>
+      <Header />
+      <main>
+        <Routes>
+          <Route path="/config" element={<Config />} />
+          <Route path="/" element={<Main />} />
+        </Routes>
+      </main>
+    </div>
+  );
 }
 
-App.propTypes = {
-  history: PropTypes.object.isRequired,
-  location: PropTypes.object.isRequired,
-};
-
-export default withRouter(App)
+export default App;

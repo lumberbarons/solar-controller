@@ -1,13 +1,15 @@
-package publisher
+package mqtt
 
 import (
 	"fmt"
+	"time"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
-type MqttConfiguration struct {
+type Configuration struct {
+	Enabled       bool   `yaml:"enabled"`
 	Host          string `yaml:"host"`
 	Username      string `yaml:"username"`
 	Password      string `yaml:"password"`
@@ -15,18 +17,22 @@ type MqttConfiguration struct {
 	PublishPeriod int    `yaml:"publishPeriod"`
 }
 
-type MqttPublisher struct {
+type Publisher struct {
 	client mqtt.Client
-	config MqttConfiguration
+	config Configuration
 }
 
-func NewMqttPublisher(config MqttConfiguration) (*MqttPublisher, error) {
-	if config.Host == "" {
-		log.Info("publisher disabled, no host provided")
-		return &MqttPublisher{}, nil
+func NewPublisher(config *Configuration) (*Publisher, error) {
+	if !config.Enabled {
+		log.Info("MQTT publisher disabled via configuration")
+		return &Publisher{}, nil
 	}
 
-	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
+	if config.Host == "" {
+		log.Warn("MQTT enabled but no host provided, publisher disabled")
+		return &Publisher{}, nil
+	}
+
 	mqtt.ERROR = log.New()
 
 	opts := mqtt.NewClientOptions().
@@ -44,12 +50,12 @@ func NewMqttPublisher(config MqttConfiguration) (*MqttPublisher, error) {
 
 	log.Infof("connected to broker %s", config.Host)
 
-	publisher := &MqttPublisher{client: client, config: config}
+	publisher := &Publisher{client: client, config: *config}
 
 	return publisher, nil
 }
 
-func (p *MqttPublisher) Publish(topicSuffix string, payload string) {
+func (p *Publisher) Publish(topicSuffix, payload string) {
 	if p.client == nil {
 		return
 	}
@@ -60,12 +66,12 @@ func (p *MqttPublisher) Publish(topicSuffix string, payload string) {
 
 	token := p.client.Publish(topic, 0, false, payload)
 	if !token.WaitTimeout(5 * time.Second) {
-		log.Error("timeout waiting for publish for %s collector", topicSuffix)
+		log.Errorf("timeout waiting for publish for %s collector", topicSuffix)
 	} else if token.Error() != nil {
 		log.Errorf("failed to publish: %s", token.Error())
 	}
 }
 
-func (p *MqttPublisher) Close() {
+func (p *Publisher) Close() {
 	p.client.Disconnect(250)
 }

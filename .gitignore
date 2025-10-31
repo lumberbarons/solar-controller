@@ -2,3 +2,8 @@
 node_modules
 .DS_Store
 site/build
+internal/static/build
+bin/
+tmp/
+build-errors.log
+config.yaml

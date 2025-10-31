@@ -6,7 +6,8 @@ import (
 )
 
 type PrometheusCollector struct {
-	failures prometheus.Counter
+	failures      prometheus.Counter
+	writeFailures prometheus.Counter
 
 	panelVoltage prometheus.Gauge
 	panelCurrent prometheus.Gauge
@@ -32,16 +33,28 @@ func NewPrometheusCollector() *PrometheusCollector {
 	endpoint := &PrometheusCollector{
 		failures: promauto.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
-			Name:      "failures",
-			Help:      "Number of errors while connecting to the epever controller.",
+			Name:      "read_failures",
+			Help:      "Number of errors while reading from the epever controller.",
+		}),
+		writeFailures: promauto.NewCounter(prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "write_failures",
+			Help:      "Number of errors while writing to the epever controller.",
 		}),
 	}
+
+	// Initialize all metrics immediately to avoid race conditions
+	endpoint.initializeMetrics()
 
 	return endpoint
 }
 
 func (e *PrometheusCollector) IncrementFailures() {
 	e.failures.Inc()
+}
+
+func (e *PrometheusCollector) IncrementWriteFailures() {
+	e.writeFailures.Inc()
 }
 
 func (e *PrometheusCollector) initializeMetrics() {
@@ -84,7 +97,7 @@ func (e *PrometheusCollector) initializeMetrics() {
 	e.batterySoc = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "battery_soc",
-		Help:      "BBattery state of charge (%).",
+		Help:      "Battery state of charge (%).",
 	})
 
 	e.batteryTemp = promauto.NewGauge(prometheus.GaugeOpts{
@@ -124,9 +137,10 @@ func (e *PrometheusCollector) initializeMetrics() {
 	})
 }
 
-func (e *PrometheusCollector) SetMetrics(status *ControllerStatus) {
-	if e.panelVoltage == nil {
-		e.initializeMetrics()
+func (e *PrometheusCollector) SetMetrics(statusInterface interface{}) {
+	status, ok := statusInterface.(*ControllerStatus)
+	if !ok {
+		return
 	}
 
 	e.panelVoltage.Set(float64(status.ArrayVoltage))
