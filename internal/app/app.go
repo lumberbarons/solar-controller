@@ -83,6 +83,12 @@ func (a *Application) setupRoutes() {
 	// Serve static frontend (React app)
 	siteFS := staticfs.GetSiteFS()
 	a.router.Use(static.Serve("/", siteFS))
+
+	// SPA fallback: serve index.html for any route that doesn't match
+	// This allows React Router to handle client-side routing
+	a.router.NoRoute(func(c *gin.Context) {
+		c.FileFromFS("/", siteFS)
+	})
 }
 
 // Run starts the HTTP server and blocks until it exits.

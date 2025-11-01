@@ -55,6 +55,53 @@ solarController:
 			},
 		},
 		{
+			name: "debug mode enabled in config",
+			yaml: `
+solarController:
+  httpPort: 8080
+  debug: true
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if !c.SolarController.Debug {
+					t.Error("Debug should be enabled")
+				}
+			},
+		},
+		{
+			name: "debug mode disabled in config",
+			yaml: `
+solarController:
+  httpPort: 8080
+  debug: false
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.Debug {
+					t.Error("Debug should be disabled")
+				}
+			},
+		},
+		{
+			name: "debug mode not specified defaults to false",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.Debug {
+					t.Error("Debug should default to false when not specified")
+				}
+			},
+		},
+		{
 			name: "minimal valid configuration (epever disabled)",
 			yaml: `
 solarController:

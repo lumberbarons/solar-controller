@@ -43,7 +43,7 @@ const (
 
 // Battery type constants
 const (
-	batteryTypeUserDefined = 4
+	batteryTypeUserDefined = 0
 )
 
 // Conversion factor for voltage values (stored as centivolt)
@@ -306,29 +306,29 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 
 func batteryTypeToInt(batteryType string) uint16 {
 	switch batteryType {
+	case "userDefined":
+		return 0
 	case "sealed":
 		return 1
 	case "gel":
 		return 2
 	case "flooded":
 		return 3
-	case "userDefined":
-		return 4
 	default:
-		return 0
+		return 4
 	}
 }
 
 func batteryTypeToString(batteryType uint16) string {
 	switch batteryType {
+	case 0:
+		return "userDefined"
 	case 1:
 		return "sealed"
 	case 2:
 		return "gel"
 	case 3:
 		return "flooded"
-	case 4:
-		return "userDefined"
 	default:
 		return "unknown"
 	}

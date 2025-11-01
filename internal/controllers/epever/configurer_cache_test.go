@@ -19,7 +19,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 				// Return minimal valid data for getConfig()
 				switch address {
 				case regBatteryType: // Battery type, capacity, temp comp (3 registers)
-					return testingpkg.CreateModbusResponse(4, 100, 3), nil
+					return testingpkg.CreateModbusResponse(0, 100, 3), nil
 				case regRealTimeClock: // Time (3 registers, 6 bytes)
 					return []byte{0, 0, 1, 12, 25, 1}, nil // HH:MM, Month, Hour, Year-2000, Day
 				case regOverVoltDisconnect: // Voltage parameters (12 registers)

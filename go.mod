@@ -10,7 +10,7 @@ require (
 	github.com/gin-contrib/static v1.1.5
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-co-op/gocron v1.37.0
-	github.com/lumberbarons/modbus v0.3.0
+	github.com/lumberbarons/modbus v0.5.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1

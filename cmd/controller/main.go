@@ -31,13 +31,18 @@ func main() {
 
 	flag.Parse()
 
-	if *debugMode {
+	controllerConfig := loadConfigFile()
+
+	// Command line flag takes precedence over config file
+	debugEnabled := *debugMode || controllerConfig.SolarController.Debug
+
+	if debugEnabled {
 		log.SetLevel(log.DebugLevel)
+		log.Debug("debug mode enabled")
 	} else {
+		log.SetLevel(log.InfoLevel)
 		gin.SetMode(gin.ReleaseMode)
 	}
-
-	controllerConfig := loadConfigFile()
 
 	mqttPublisher, err := mqtt.NewPublisher(&controllerConfig.SolarController.Mqtt)
 	if err != nil {
