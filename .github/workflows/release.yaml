@@ -100,7 +100,7 @@ jobs:
 
       - name: Build and push amd64 image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
@@ -157,7 +157,7 @@ jobs:
 
       - name: Build and push arm64 image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/arm64
