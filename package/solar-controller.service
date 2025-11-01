@@ -6,6 +6,9 @@ Type=simple
 Restart=always
 RestartSec=5s
 ExecStart=/usr/bin/solar-controller --config /etc/solar-controller/config.yaml
+StandardOutput=append:/var/log/solar-controller.log
+StandardError=append:/var/log/solar-controller.log
+SyslogIdentifier=solar-controller
 
 [Install]
 WantedBy=multi-user.target

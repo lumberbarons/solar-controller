@@ -225,12 +225,65 @@ Each controller follows the same structure:
 
 - **Epever**: Modbus RTU over serial (via `lumberbarons/modbus`)
 
+#### Modbus Communication Reliability
+
+The controller implements inter-request delays to prevent device lockups:
+
+- **Configuration reads** (holding registers): 75-100ms delays between operations
+- **Metrics collection** (input registers): 50ms delays between operations
+- **Write operations**: 150ms delay after each write, plus 500ms settling time before read-back
+- All modbus operations are serialized through a mutex to prevent concurrent access
+
+These delays ensure the Epever device has adequate time to process EEPROM operations and prevent communication lockups, especially when reading configuration data or writing multiple parameters.
+
 ### API Endpoints
 
-- `/metrics` - Prometheus metrics
-- `/api/{controller}/metrics` - JSON metrics for each controller
-- `/api/{controller}/config` - Configuration endpoints (GET/PATCH)
-- `/*` - Embedded React SPA
+#### Monitoring Endpoints
+- `GET /metrics` - Prometheus metrics export
+- `GET /api/solar/metrics` - JSON metrics for Epever controller (current status)
+
+#### Configuration Endpoints
+- `GET /api/solar/battery-profile` - Get battery type and capacity
+- `PATCH /api/solar/battery-profile` - Update battery type and/or capacity
+- `GET /api/solar/charging-parameters` - Get all charging parameters (voltages, durations, temperature limits)
+- `PATCH /api/solar/charging-parameters` - Update charging parameters (only when battery type is 'userDefined')
+- `GET /api/solar/time` - Get controller's current time
+- `PATCH /api/solar/time` - Set controller's time
+
+#### Legacy Endpoints (for backwards compatibility)
+- `GET /api/solar/config` - Get all configuration settings
+- `PATCH /api/solar/config` - Update configuration settings
+
+#### Frontend
+- `/*` - Embedded React SPA for web-based monitoring
+
+### API Usage Examples
+
+#### Get current metrics
+```bash
+curl http://localhost:8080/api/solar/metrics
+```
+
+#### Get battery profile
+```bash
+curl http://localhost:8080/api/solar/battery-profile
+```
+
+#### Update battery type
+```bash
+curl -X PATCH http://localhost:8080/api/solar/battery-profile \
+  -H "Content-Type: application/json" \
+  -d '{"batteryType": "userDefined"}'
+```
+
+#### Update charging parameters
+```bash
+curl -X PATCH http://localhost:8080/api/solar/charging-parameters \
+  -H "Content-Type: application/json" \
+  -d '{"boostVoltage": 14.4, "floatVoltage": 13.8}'
+```
+
+**Note**: Charging parameters can only be modified when battery type is set to 'userDefined'. The API validates voltage relationships to ensure safe charging parameters.
 
 ## Project Structure
 
