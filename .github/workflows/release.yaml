@@ -29,7 +29,7 @@ jobs:
         run: make build-frontend
 
       - name: Upload site build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: site-build
           path: internal/static/build
@@ -117,7 +117,7 @@ jobs:
           touch /tmp/digests/${digest#sha256:}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: digests-amd64
           path: /tmp/digests/*
@@ -174,7 +174,7 @@ jobs:
           touch /tmp/digests/${digest#sha256:}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: digests-arm64
           path: /tmp/digests/*
