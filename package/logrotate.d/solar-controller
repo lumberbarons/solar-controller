@@ -1,0 +1,12 @@
+/var/log/solar-controller.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    postrotate
+        systemctl reload-or-restart solar-controller > /dev/null 2>&1 || true
+    endscript
+}

@@ -140,6 +140,8 @@ nfpms:
         type: config
       - src: package/solar-controller.service
         dst: /etc/systemd/system/solar-controller.service
+      - src: package/logrotate.d/solar-controller
+        dst: /etc/logrotate.d/solar-controller
     scripts:
       postinstall: "package/postinstall.sh"
       postremove: "package/postremove.sh"

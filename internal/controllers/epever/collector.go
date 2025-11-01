@@ -76,6 +76,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	if len(results) < 2 {
 		return nil, fmt.Errorf("expected 2 values for array voltage/current, got %d", len(results))
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	c.ArrayVoltage = results[0]
 	c.ArrayCurrent = results[1]
@@ -84,11 +85,13 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	c.BatterySOC, err = e.getValueInt(ctx, regBatterySOC)
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	results, err = e.getValueFloats(ctx, regBatteryMaxVoltage, 2)
 	if err != nil {
@@ -97,6 +100,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	if len(results) < 2 {
 		return nil, fmt.Errorf("expected 2 values for battery max/min voltage, got %d", len(results))
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	c.BatteryMaxVoltage = results[0]
 	c.BatteryMinVoltage = results[1]
@@ -105,26 +109,31 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	c.ChargingCurrent, err = e.getValueFloat(ctx, regChargingCurrent)
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	c.ChargingPower, err = e.getValueFloat32(ctx, regChargingPower)
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	c.EnergyGeneratedDaily, err = e.getValueFloat32(ctx, regEnergyGeneratedDaily)
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	controllerStatus, err := e.getValueInt(ctx, regControllerStatus)
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
 
 	chargingStatus := (controllerStatus & chargingStatusMask) >> chargingStatusShift
 	c.ChargingStatus = chargingStatus
@@ -133,6 +142,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read temperature data: %w", err)
 	}
+	// No delay needed after final read
 
 	c.BatteryTemp, c.DeviceTemp, err = parser.ParseTemperatures(tempData)
 	if err != nil {

@@ -190,11 +190,15 @@ func (sc *Configurer) invalidateCache() {
 }
 
 func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
+	startTime := time.Now()
+	log.Debug("Starting config read from device")
+
 	// Read battery type, capacity, and temp compensation coefficient
 	data, err := sc.modbusClient.ReadHoldingRegisters(ctx, regBatteryType, 3)
 	if err != nil {
 		return ControllerConfig{}, fmt.Errorf("failed to read battery config (0x%X): %w", regBatteryType, err)
 	}
+	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
 
 	batteryType := binary.BigEndian.Uint16(data[0:2])
 	batteryCapacity := binary.BigEndian.Uint16(data[2:4])
@@ -205,6 +209,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	if err != nil {
 		return ControllerConfig{}, fmt.Errorf("failed to read time (0x%X): %w", regRealTimeClock, err)
 	}
+	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
 	if len(data) < 6 {
 		return ControllerConfig{}, fmt.Errorf("insufficient time data: expected 6 bytes, got %d", len(data))
 	}
@@ -213,11 +218,12 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	timeStr := fmt.Sprintf("%d-%d-%d %02d:%02d:%02d",
 		data[2], data[5], year, data[3], data[0], data[1])
 
-	// Read voltage parameters
+	// Read voltage parameters (largest read - 12 registers)
 	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regOverVoltDisconnect, 12)
 	if err != nil {
 		return ControllerConfig{}, fmt.Errorf("failed to read voltage parameters (0x%X): %w", regOverVoltDisconnect, err)
 	}
+	time.Sleep(100 * time.Millisecond) // Extra delay after large read
 	overVoltDisconnectVoltage := sc.getFloatValue(data, 0)
 	chargingLimitVoltage := sc.getFloatValue(data, 1)
 	overVoltReconnectVoltage := sc.getFloatValue(data, 2)
@@ -236,6 +242,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	if err != nil {
 		return ControllerConfig{}, fmt.Errorf("failed to read equalization cycle (0x%X): %w", regEqualizationChargingCycle, err)
 	}
+	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
 	if len(data) < 2 {
 		return ControllerConfig{}, fmt.Errorf("insufficient equalization cycle data: expected 2 bytes, got %d", len(data))
 	}
@@ -246,6 +253,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	if err != nil {
 		return ControllerConfig{}, fmt.Errorf("failed to read durations (0x%X): %w", regEqualizationChargingTime, err)
 	}
+	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
 	if len(data) < 4 {
 		return ControllerConfig{}, fmt.Errorf("insufficient duration data: expected 4 bytes, got %d", len(data))
 	}
@@ -257,6 +265,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	if err != nil {
 		return ControllerConfig{}, fmt.Errorf("failed to read temperature limits (0x%X): %w", regBatteryTempUpperLimit, err)
 	}
+	// No delay needed after final read
 	if len(data) < 8 {
 		return ControllerConfig{}, fmt.Errorf("insufficient temperature data: expected 8 bytes, got %d", len(data))
 	}
@@ -264,6 +273,9 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	batteryTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[2:4]))) / voltageDivisor
 	controllerTempUpperLimit := float32(int16(binary.BigEndian.Uint16(data[4:6]))) / voltageDivisor
 	controllerTempLowerLimit := float32(int16(binary.BigEndian.Uint16(data[6:8]))) / voltageDivisor
+
+	elapsed := time.Since(startTime)
+	log.Debugf("Config read completed in %v", elapsed)
 
 	return ControllerConfig{
 		Time:                          timeStr,
@@ -333,6 +345,8 @@ func (sc *Configurer) writeSingle(c *gin.Context, address, value uint16, descrip
 		}
 		return fmt.Errorf("%s: %w", errorMessage, err)
 	}
+	// Allow device time to commit write to EEPROM before next operation
+	time.Sleep(150 * time.Millisecond)
 	return nil
 }
 
@@ -471,6 +485,8 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 
 			// Invalidate cache after writing charging parameters
 			sc.invalidateCache()
+			// Allow device time to fully commit all changes to EEPROM before reading back
+			time.Sleep(500 * time.Millisecond)
 		}
 
 		newConfig, err := sc.getCachedConfig(c.Request.Context())
@@ -542,6 +558,8 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 		// Invalidate cache after successful write
 		if writeSucceeded {
 			sc.invalidateCache()
+			// Allow device time to fully commit all changes to EEPROM before reading back
+			time.Sleep(500 * time.Millisecond)
 		}
 
 		// Return updated profile (this will fetch fresh data from device)
@@ -809,6 +827,8 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		// Invalidate cache after successful write
 		if writeSucceeded {
 			sc.invalidateCache()
+			// Allow device time to fully commit all changes to EEPROM before reading back
+			time.Sleep(500 * time.Millisecond)
 		}
 
 		// Return updated parameters (this will fetch fresh data from device)
@@ -904,6 +924,8 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 
 		// Invalidate cache after time write
 		sc.invalidateCache()
+		// Allow device time to fully commit changes to EEPROM before reading back
+		time.Sleep(500 * time.Millisecond)
 
 		// Return the updated time
 		data, err = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regRealTimeClock, 3)
