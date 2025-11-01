@@ -11,6 +11,9 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 ### Using Make (Recommended)
 
 ```bash
+# Show available make targets
+make help
+
 # Build everything (frontend + backend)
 make build
 
@@ -19,6 +22,9 @@ make build-frontend
 
 # Build only backend (Go binary)
 make build-backend
+
+# Build backend for Linux ARM64
+make build-linux-arm64
 
 # Run tests
 make test
@@ -122,7 +128,11 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
 
 ### Communication Protocols
 
-- **Epever**: Modbus RTU over serial (via `goburrow/modbus`)
+- **Epever**: Modbus RTU over serial (via `lumberbarons/modbus`)
+  - Per-read timeout: 3 seconds
+  - Retry attempts: 2 with 1-second delay between retries
+  - Collection overlap prevention via mutex guard
+  - 50ms delays between metric reads to prevent device lockups
 
 ### Web Server
 
@@ -132,6 +142,7 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
   - `/api/{controller}/metrics` - JSON metrics for each controller
   - `/api/{controller}/config` - Configuration endpoints (GET/PATCH)
   - `/*` - Embedded React SPA (via `//go:embed site/build`)
+- **SPA Support**: NoRoute handler serves index.html for client-side routing (React Router)
 
 The React frontend is embedded into the binary at build time and served statically by Gin. The frontend build artifacts are copied from `site/build` to `internal/static/build` during the build process, where they're embedded using `//go:embed`.
 
@@ -142,6 +153,7 @@ YAML-based configuration with the following structure:
 ```yaml
 solarController:
   httpPort: 8080
+  debug: false  # Enable debug logging (can also use -debug flag)
   mqtt:
     host: mqtt://broker:1883
     username: user
@@ -154,6 +166,8 @@ solarController:
 ```
 
 The controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration. If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start.
+
+Debug mode can be enabled via the `debug` configuration field or the `-debug` command-line flag. The command-line flag takes precedence over the config file setting.
 
 ## Project Structure
 

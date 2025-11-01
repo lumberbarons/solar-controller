@@ -38,6 +38,9 @@ make build
 #### Using Make (Recommended)
 
 ```bash
+# Show available make targets
+make help
+
 # Build everything (frontend + backend)
 make build
 
@@ -46,6 +49,9 @@ make build-frontend
 
 # Build only backend (Go binary)
 make build-backend
+
+# Build backend for Linux ARM64
+make build-linux-arm64
 
 # Run tests
 make test
@@ -125,6 +131,7 @@ Create a YAML configuration file with the following structure:
 ```yaml
 solarController:
   httpPort: 8080
+  debug: false  # Enable debug logging (can also use -debug flag)
   mqtt:
     enabled: true
     host: mqtt://broker:1883
@@ -152,6 +159,15 @@ MQTT publishing has an `enabled` boolean field that controls whether it runs:
 - Set `enabled: true` to activate MQTT publishing
 - Set `enabled: false` to disable MQTT publishing
 - If `enabled: true` but required fields are missing (host or topicPrefix), configuration validation will fail
+
+### Debug Mode
+
+Debug mode can be enabled in two ways:
+
+- **Config file**: Set `debug: true` in the configuration file
+- **Command-line flag**: Use the `-debug` flag when running the application
+
+The command-line flag takes precedence over the config file setting. When debug mode is enabled, the application will output detailed logging information including modbus register reads, collection timing, and operational details.
 
 ## Testing
 
@@ -227,14 +243,21 @@ Each controller follows the same structure:
 
 #### Modbus Communication Reliability
 
-The controller implements inter-request delays to prevent device lockups:
+The controller implements several strategies to ensure reliable communication with solar charge controllers:
 
+**Timeouts and Retries:**
+- **Per-read timeout**: 3 seconds for each individual register read operation
+- **Retry attempts**: Up to 2 attempts with 1-second delay between retries
+- **Collection timeout**: 30-second overall timeout for the entire collection cycle
+- **Collection overlap prevention**: A mutex guard prevents overlapping collection cycles if a previous collection is still running
+
+**Inter-request Delays:**
 - **Configuration reads** (holding registers): 75-100ms delays between operations
 - **Metrics collection** (input registers): 50ms delays between operations
 - **Write operations**: 150ms delay after each write, plus 500ms settling time before read-back
 - All modbus operations are serialized through a mutex to prevent concurrent access
 
-These delays ensure the Epever device has adequate time to process EEPROM operations and prevent communication lockups, especially when reading configuration data or writing multiple parameters.
+These delays and timeouts ensure the Epever device has adequate time to process EEPROM operations and prevent communication lockups, especially when reading configuration data or writing multiple parameters.
 
 ### API Endpoints
 
@@ -275,6 +298,8 @@ curl -X PATCH http://localhost:8080/api/solar/battery-profile \
   -H "Content-Type: application/json" \
   -d '{"batteryType": "userDefined"}'
 ```
+
+**Valid battery types**: `userDefined`, `sealed`, `gel`, `flooded`
 
 #### Update charging parameters
 ```bash

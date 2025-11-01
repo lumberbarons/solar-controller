@@ -14,6 +14,7 @@ type Config struct {
 
 type SolarControllerConfiguration struct {
 	HTTPPort int                  `yaml:"httpPort"`
+	Debug    bool                 `yaml:"debug"`
 	Mqtt     mqtt.Configuration   `yaml:"mqtt"`
 	Epever   epever.Configuration `yaml:"epever"`
 }

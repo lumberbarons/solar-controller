@@ -19,7 +19,8 @@ type ModbusClient struct {
 }
 
 const retryAttempts = 2
-const retryDelay = 5 * time.Second
+const retryDelay = 1 * time.Second
+const perReadTimeout = 3 * time.Second
 
 func NewModbusClient(serialPort string) (*ModbusClient, error) {
 	handler := modbus.NewRTUClientHandler(serialPort)
@@ -52,12 +53,16 @@ func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address, quantity
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	// Create a timeout context for this specific read operation
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	defer cancel()
+
 	var value []byte
 
 	err := retry.Do(
 		func() error {
 			var retryErr error
-			value, retryErr = c.client.ReadInputRegisters(ctx, address, quantity)
+			value, retryErr = c.client.ReadInputRegisters(readCtx, address, quantity)
 			return retryErr
 		},
 		retry.Attempts(retryAttempts),
@@ -65,7 +70,7 @@ func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address, quantity
 		retry.OnRetry(func(n uint, err error) {
 			log.Warnf("ReadInputRegisters address %d retry #%d: %s\n", address, n, err)
 		}),
-		retry.Context(ctx),
+		retry.Context(readCtx),
 	)
 
 	return value, err
@@ -75,12 +80,16 @@ func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address, quanti
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	// Create a timeout context for this specific read operation
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	defer cancel()
+
 	var value []byte
 
 	err := retry.Do(
 		func() error {
 			var retryErr error
-			value, retryErr = c.client.ReadHoldingRegisters(ctx, address, quantity)
+			value, retryErr = c.client.ReadHoldingRegisters(readCtx, address, quantity)
 			return retryErr
 		},
 		retry.Attempts(retryAttempts),
@@ -88,7 +97,7 @@ func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address, quanti
 		retry.OnRetry(func(n uint, err error) {
 			log.Warnf("ReadHoldingRegisters address %d retry #%d: %s\n", address, n, err)
 		}),
-		retry.Context(ctx),
+		retry.Context(readCtx),
 	)
 
 	return value, err

@@ -33,6 +33,8 @@ type Controller struct {
 	scheduler           *gocron.Scheduler
 	lastStatus          *ControllerStatus
 	lastStatusMutex     sync.RWMutex
+	collectInProgress   bool
+	collectMutex        sync.Mutex
 }
 
 // NewController creates a new Epever controller with dependency injection for testing.
@@ -108,7 +110,24 @@ func NewControllerFromConfig(config Configuration, mqttPublisher controllers.Mes
 }
 
 func (e *Controller) collectAndPublish() {
-	log.Trace("collecting and publishing metrics for epever controller")
+	// Check if a collection is already in progress
+	e.collectMutex.Lock()
+	if e.collectInProgress {
+		log.Warn("collection already in progress for epever controller, skipping this collection cycle")
+		e.collectMutex.Unlock()
+		return
+	}
+	e.collectInProgress = true
+	e.collectMutex.Unlock()
+
+	// Ensure we clear the flag when done
+	defer func() {
+		e.collectMutex.Lock()
+		e.collectInProgress = false
+		e.collectMutex.Unlock()
+	}()
+
+	log.Debug("collecting and publishing metrics for epever controller")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -134,7 +153,7 @@ func (e *Controller) collectAndPublish() {
 
 	e.mqttPublisher.Publish(namespace, string(b))
 
-	log.Trace("collection done for epever controller")
+	log.Debug("collection done for epever controller")
 }
 
 func (e *Controller) MetricsGet() gin.HandlerFunc {

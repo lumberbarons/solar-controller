@@ -1,5 +1,6 @@
 solarController:
   httpPort: 8080
+  debug: false
   epever:
     enabled: true
     serialPort: /dev/ttyXRUSB0

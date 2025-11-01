@@ -89,6 +89,56 @@ func TestApplication_Close(t *testing.T) {
 	assert.True(t, mockPublisher.Closed)
 }
 
+func TestApplication_SPAFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	mockPublisher := controllertesting.NewMockPublisher()
+
+	app, err := NewApplication(cfg, mockPublisher)
+	require.NoError(t, err)
+	defer app.Close()
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "root path",
+			path: "/",
+		},
+		{
+			name: "config path",
+			path: "/config",
+		},
+		{
+			name: "arbitrary SPA route",
+			path: "/some/nested/route",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", tt.path, nil)
+			app.Router().ServeHTTP(w, req)
+
+			// All SPA routes should return 200 and serve index.html
+			assert.Equal(t, http.StatusOK, w.Code)
+			// The response should be HTML (index.html), not JSON
+			assert.NotContains(t, w.Header().Get("Content-Type"), "application/json")
+		})
+	}
+}
+
 func TestApplication_ControllerRegistration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -133,9 +183,14 @@ func TestApplication_ControllerRegistration(t *testing.T) {
 			app.Router().ServeHTTP(w, req)
 
 			if tt.expectEndpoint {
+				// Endpoint should return JSON metrics
 				assert.NotEqual(t, http.StatusNotFound, w.Code)
+				assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
 			} else {
-				assert.Equal(t, http.StatusNotFound, w.Code)
+				// With NoRoute handler, unmatched routes return 200 with index.html (SPA fallback)
+				// We verify the endpoint doesn't exist by checking it returns HTML, not JSON
+				assert.Equal(t, http.StatusOK, w.Code)
+				assert.NotContains(t, w.Header().Get("Content-Type"), "application/json")
 			}
 		})
 	}
