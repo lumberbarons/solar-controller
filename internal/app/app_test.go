@@ -13,6 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// getTestVersionInfo returns version info for testing
+func getTestVersionInfo() VersionInfo {
+	return VersionInfo{
+		Version:   "test",
+		BuildTime: "2025-01-01T00:00:00Z",
+		GitCommit: "test123",
+	}
+}
+
 func TestNewApplication(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -27,7 +36,7 @@ func TestNewApplication(t *testing.T) {
 
 	mockPublisher := controllertesting.NewMockPublisher()
 
-	app, err := NewApplication(cfg, mockPublisher)
+	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
 	require.NotNil(t, app)
 	defer app.Close()
@@ -51,7 +60,7 @@ func TestApplication_MetricsEndpoint(t *testing.T) {
 
 	mockPublisher := controllertesting.NewMockPublisher()
 
-	app, err := NewApplication(cfg, mockPublisher)
+	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
 	defer app.Close()
 
@@ -62,6 +71,37 @@ func TestApplication_MetricsEndpoint(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "# HELP")
+}
+
+func TestApplication_InfoEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	mockPublisher := controllertesting.NewMockPublisher()
+	versionInfo := getTestVersionInfo()
+
+	app, err := NewApplication(cfg, mockPublisher, versionInfo)
+	require.NoError(t, err)
+	defer app.Close()
+
+	// Test that /api/info endpoint returns version information
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/info", nil)
+	app.Router().ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
+	assert.Contains(t, w.Body.String(), versionInfo.Version)
+	assert.Contains(t, w.Body.String(), versionInfo.BuildTime)
+	assert.Contains(t, w.Body.String(), versionInfo.GitCommit)
 }
 
 func TestApplication_Close(t *testing.T) {
@@ -78,7 +118,7 @@ func TestApplication_Close(t *testing.T) {
 
 	mockPublisher := controllertesting.NewMockPublisher()
 
-	app, err := NewApplication(cfg, mockPublisher)
+	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
 
 	// Should not error when closing
@@ -103,7 +143,7 @@ func TestApplication_SPAFallback(t *testing.T) {
 
 	mockPublisher := controllertesting.NewMockPublisher()
 
-	app, err := NewApplication(cfg, mockPublisher)
+	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
 	defer app.Close()
 
@@ -173,7 +213,7 @@ func TestApplication_ControllerRegistration(t *testing.T) {
 
 			mockPublisher := controllertesting.NewMockPublisher()
 
-			app, err := NewApplication(cfg, mockPublisher)
+			app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 			require.NoError(t, err)
 			defer app.Close()
 

@@ -176,14 +176,23 @@ type MockMetricsCollector struct {
 	mu sync.RWMutex
 
 	// Function fields that can be set to customize behavior in tests
-	IncrementFailuresFunc      func()
-	IncrementWriteFailuresFunc func()
-	SetMetricsFunc             func(status interface{})
+	IncrementFailuresFunc        func()
+	IncrementWriteFailuresFunc   func()
+	IncrementRegisterFailureFunc func(address uint16, registerType string)
+	SetMetricsFunc               func(status interface{})
 
 	// Call tracking
-	FailuresCount      int
-	WriteFailuresCount int
-	SetMetricsCalls    []interface{}
+	FailuresCount        int
+	WriteFailuresCount   int
+	RegisterFailureCount int
+	RegisterFailures     []RegisterFailureCall
+	SetMetricsCalls      []interface{}
+}
+
+// RegisterFailureCall tracks individual register failure calls
+type RegisterFailureCall struct {
+	Address      uint16
+	RegisterType string
 }
 
 // Verify MockMetricsCollector implements MetricsCollector
@@ -206,6 +215,20 @@ func (m *MockMetricsCollector) IncrementWriteFailures() {
 
 	if m.IncrementWriteFailuresFunc != nil {
 		m.IncrementWriteFailuresFunc()
+	}
+}
+
+func (m *MockMetricsCollector) IncrementRegisterFailure(address uint16, registerType string) {
+	m.mu.Lock()
+	m.RegisterFailureCount++
+	m.RegisterFailures = append(m.RegisterFailures, RegisterFailureCall{
+		Address:      address,
+		RegisterType: registerType,
+	})
+	m.mu.Unlock()
+
+	if m.IncrementRegisterFailureFunc != nil {
+		m.IncrementRegisterFailureFunc(address, registerType)
 	}
 }
 

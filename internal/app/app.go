@@ -20,14 +20,23 @@ type Application struct {
 	router      *gin.Engine
 	mqtt        controllers.MessagePublisher
 	controllers []controllers.SolarController
+	version     VersionInfo
+}
+
+// VersionInfo holds version metadata about the application.
+type VersionInfo struct {
+	Version   string `json:"version"`
+	BuildTime string `json:"buildTime"`
+	GitCommit string `json:"gitCommit"`
 }
 
 // NewApplication creates and initializes a new Application instance.
 // It sets up the HTTP router, initializes controllers, and registers endpoints.
-func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublisher) (*Application, error) {
+func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublisher, version VersionInfo) (*Application, error) {
 	app := &Application{
-		config: cfg,
-		mqtt:   mqttPublisher,
+		config:  cfg,
+		mqtt:    mqttPublisher,
+		version: version,
 	}
 
 	// Initialize router
@@ -71,6 +80,11 @@ func (a *Application) setupRoutes() {
 	handler := promhttp.Handler()
 	a.router.GET("/metrics", func(c *gin.Context) {
 		handler.ServeHTTP(c.Writer, c.Request)
+	})
+
+	// Version info endpoint
+	a.router.GET("/api/info", func(c *gin.Context) {
+		c.JSON(200, a.version)
 	})
 
 	// Register controller-specific endpoints

@@ -1,13 +1,16 @@
 package epever
 
 import (
+	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type PrometheusCollector struct {
-	failures      prometheus.Counter
-	writeFailures prometheus.Counter
+	failures             prometheus.Counter
+	writeFailures        prometheus.Counter
+	registerReadFailures *prometheus.CounterVec
 
 	panelVoltage prometheus.Gauge
 	panelCurrent prometheus.Gauge
@@ -16,11 +19,9 @@ type PrometheusCollector struct {
 	chargingPower   prometheus.Gauge
 	chargingCurrent prometheus.Gauge
 
-	batteryVoltage    prometheus.Gauge
-	batterySoc        prometheus.Gauge
-	batteryTemp       prometheus.Gauge
-	batteryMinVoltage prometheus.Gauge
-	batteryMaxVoltage prometheus.Gauge
+	batteryVoltage prometheus.Gauge
+	batterySoc     prometheus.Gauge
+	batteryTemp    prometheus.Gauge
 
 	deviceTemp prometheus.Gauge
 
@@ -41,6 +42,14 @@ func NewPrometheusCollector() *PrometheusCollector {
 			Name:      "write_failures",
 			Help:      "Number of errors while writing to the epever controller.",
 		}),
+		registerReadFailures: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "register_read_failures_total",
+				Help:      "Modbus register read failures by address and type.",
+			},
+			[]string{"address", "register_type"},
+		),
 	}
 
 	// Initialize all metrics immediately to avoid race conditions
@@ -55,6 +64,13 @@ func (e *PrometheusCollector) IncrementFailures() {
 
 func (e *PrometheusCollector) IncrementWriteFailures() {
 	e.writeFailures.Inc()
+}
+
+func (e *PrometheusCollector) IncrementRegisterFailure(address uint16, registerType string) {
+	e.registerReadFailures.WithLabelValues(
+		fmt.Sprintf("0x%04X", address),
+		registerType,
+	).Inc()
 }
 
 func (e *PrometheusCollector) initializeMetrics() {
@@ -106,18 +122,6 @@ func (e *PrometheusCollector) initializeMetrics() {
 		Help:      "Battery temperature (C).",
 	})
 
-	e.batteryMinVoltage = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "battery_min_voltage",
-		Help:      "Minimum battery voltage (V).",
-	})
-
-	e.batteryMaxVoltage = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "battery_max_voltage",
-		Help:      "Maximum battery voltage (V).",
-	})
-
 	e.deviceTemp = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "device_temp",
@@ -153,8 +157,6 @@ func (e *PrometheusCollector) SetMetrics(statusInterface interface{}) {
 	e.batteryVoltage.Set(float64(status.BatteryVoltage))
 	e.batterySoc.Set(float64(status.BatterySOC))
 	e.batteryTemp.Set(float64(status.BatteryTemp))
-	e.batteryMinVoltage.Set(float64(status.BatteryMinVoltage))
-	e.batteryMaxVoltage.Set(float64(status.BatteryMaxVoltage))
 
 	e.deviceTemp.Set(float64(status.DeviceTemp))
 

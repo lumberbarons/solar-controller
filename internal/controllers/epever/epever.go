@@ -94,7 +94,7 @@ func NewControllerFromConfig(config Configuration, mqttPublisher controllers.Mes
 	}
 
 	prometheusCollector := NewPrometheusCollector()
-	epeverCollector := NewCollector(client)
+	epeverCollector := NewCollector(client, prometheusCollector)
 	epeverConfigurer := NewConfigurer(client, prometheusCollector)
 
 	log.Infof("connected to epever %s", config.SerialPort)

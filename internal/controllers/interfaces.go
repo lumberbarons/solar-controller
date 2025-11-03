@@ -63,6 +63,9 @@ type MetricsCollector interface {
 	// IncrementWriteFailures increments the write failure counter (if supported).
 	IncrementWriteFailures()
 
+	// IncrementRegisterFailure increments the register-specific failure counter.
+	IncrementRegisterFailure(address uint16, registerType string)
+
 	// SetMetrics updates all metrics based on the provided status.
 	// The status parameter should be a pointer to a controller-specific status struct.
 	SetMetrics(status interface{})

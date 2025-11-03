@@ -19,8 +19,8 @@ type ModbusClient struct {
 }
 
 const retryAttempts = 2
-const retryDelay = 1 * time.Second
-const perReadTimeout = 3 * time.Second
+const retryDelay = 2 * time.Second
+const perReadTimeout = 5 * time.Second
 
 func NewModbusClient(serialPort string) (*ModbusClient, error) {
 	handler := modbus.NewRTUClientHandler(serialPort)

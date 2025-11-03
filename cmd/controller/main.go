@@ -14,6 +14,11 @@ import (
 var (
 	configFilePath *string
 	debugMode      *bool
+
+	// Version information injected at build time via ldflags
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
 )
 
 func init() {
@@ -27,7 +32,7 @@ func init() {
 }
 
 func main() {
-	log.Info("starting solar-controller")
+	log.Infof("starting solar-controller version %s (commit: %s, built: %s)", Version, GitCommit, BuildTime)
 
 	flag.Parse()
 
@@ -49,7 +54,13 @@ func main() {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
 
-	application, err := app.NewApplication(&controllerConfig, mqttPublisher)
+	versionInfo := app.VersionInfo{
+		Version:   Version,
+		BuildTime: BuildTime,
+		GitCommit: GitCommit,
+	}
+
+	application, err := app.NewApplication(&controllerConfig, mqttPublisher, versionInfo)
 	if err != nil {
 		log.Fatalf("failed to create application: %v", err)
 	}

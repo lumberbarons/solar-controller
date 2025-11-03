@@ -196,6 +196,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read battery type, capacity, and temp compensation coefficient
 	data, err := sc.modbusClient.ReadHoldingRegisters(ctx, regBatteryType, 3)
 	if err != nil {
+		sc.prometheusCollector.IncrementRegisterFailure(regBatteryType, "holding")
 		return ControllerConfig{}, fmt.Errorf("failed to read battery config (0x%X): %w", regBatteryType, err)
 	}
 	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
@@ -207,6 +208,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read time
 	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regRealTimeClock, 3)
 	if err != nil {
+		sc.prometheusCollector.IncrementRegisterFailure(regRealTimeClock, "holding")
 		return ControllerConfig{}, fmt.Errorf("failed to read time (0x%X): %w", regRealTimeClock, err)
 	}
 	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
@@ -221,6 +223,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read voltage parameters (largest read - 12 registers)
 	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regOverVoltDisconnect, 12)
 	if err != nil {
+		sc.prometheusCollector.IncrementRegisterFailure(regOverVoltDisconnect, "holding")
 		return ControllerConfig{}, fmt.Errorf("failed to read voltage parameters (0x%X): %w", regOverVoltDisconnect, err)
 	}
 	time.Sleep(100 * time.Millisecond) // Extra delay after large read
@@ -240,6 +243,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read equalization cycle
 	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regEqualizationChargingCycle, 1)
 	if err != nil {
+		sc.prometheusCollector.IncrementRegisterFailure(regEqualizationChargingCycle, "holding")
 		return ControllerConfig{}, fmt.Errorf("failed to read equalization cycle (0x%X): %w", regEqualizationChargingCycle, err)
 	}
 	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
@@ -251,6 +255,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read durations
 	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regEqualizationChargingTime, 2)
 	if err != nil {
+		sc.prometheusCollector.IncrementRegisterFailure(regEqualizationChargingTime, "holding")
 		return ControllerConfig{}, fmt.Errorf("failed to read durations (0x%X): %w", regEqualizationChargingTime, err)
 	}
 	time.Sleep(75 * time.Millisecond) // Allow device to recover before next read
@@ -263,6 +268,7 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	// Read temperature limits
 	data, err = sc.modbusClient.ReadHoldingRegisters(ctx, regBatteryTempUpperLimit, 4)
 	if err != nil {
+		sc.prometheusCollector.IncrementRegisterFailure(regBatteryTempUpperLimit, "holding")
 		return ControllerConfig{}, fmt.Errorf("failed to read temperature limits (0x%X): %w", regBatteryTempUpperLimit, err)
 	}
 	// No delay needed after final read
@@ -336,7 +342,11 @@ func batteryTypeToString(batteryType uint16) string {
 
 func (sc *Configurer) writeSingle(c *gin.Context, address, value uint16, description string) error {
 	log.Info(fmt.Sprintf("Setting %v of %v to controller", description, value))
-	_, err := sc.modbusClient.WriteSingleRegister(c.Request.Context(), address, value)
+	// Convert uint16 value to byte array (BigEndian) for WriteMultipleRegisters
+	// Function code 0x10 is required per Epever documentation for all Holding Register writes
+	bytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(bytes, value)
+	_, err := sc.modbusClient.WriteMultipleRegisters(c.Request.Context(), address, 1, bytes)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Failed to write %v of %v to controller", description, value)
 		log.Warn(errorMessage, err.Error())

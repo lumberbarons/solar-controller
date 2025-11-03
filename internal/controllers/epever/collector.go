@@ -22,8 +22,6 @@ const (
 	regDeviceTemperature    = 0x3111
 	regBatterySOC           = 0x311A
 	regControllerStatus     = 0x3201
-	regBatteryMaxVoltage    = 0x3302
-	regBatteryMinVoltage    = 0x3303
 	regEnergyGeneratedDaily = 0x330C
 )
 
@@ -34,7 +32,8 @@ const (
 )
 
 type Collector struct {
-	modbusClient controllers.ModbusClient
+	modbusClient        controllers.ModbusClient
+	prometheusCollector controllers.MetricsCollector
 }
 
 type ControllerStatus struct {
@@ -48,16 +47,15 @@ type ControllerStatus struct {
 	BatteryVoltage       float32 `json:"batteryVoltage"`
 	BatterySOC           int32   `json:"batterySoc"`
 	BatteryTemp          float32 `json:"batteryTemp"`
-	BatteryMaxVoltage    float32 `json:"batteryMaxVoltage"`
-	BatteryMinVoltage    float32 `json:"batteryMinVoltage"`
 	DeviceTemp           float32 `json:"deviceTemp"`
 	EnergyGeneratedDaily float32 `json:"energyGeneratedDaily"`
 	ChargingStatus       int32   `json:"chargingStatus"`
 }
 
-func NewCollector(client controllers.ModbusClient) *Collector {
+func NewCollector(client controllers.ModbusClient, prometheusCollector controllers.MetricsCollector) *Collector {
 	collector := &Collector{
-		modbusClient: client,
+		modbusClient:        client,
+		prometheusCollector: prometheusCollector,
 	}
 
 	return collector
@@ -81,7 +79,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, fmt.Errorf("expected 2 values for array voltage/current, got %d", len(results))
 	}
 	log.Debugf("Array voltage: %.2fV, Array current: %.2fA", results[0], results[1])
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	c.ArrayVoltage = results[0]
 	c.ArrayCurrent = results[1]
@@ -93,7 +91,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 	log.Debugf("Battery voltage: %.2fV", c.BatteryVoltage)
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	log.Debugf("Reading battery SOC from register 0x%04X", regBatterySOC)
 	c.BatterySOC, err = e.getValueInt(ctx, regBatterySOC)
@@ -102,22 +100,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 	log.Debugf("Battery SOC: %d%%", c.BatterySOC)
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
-
-	log.Debugf("Reading battery max/min voltage from register 0x%04X", regBatteryMaxVoltage)
-	results, err = e.getValueFloats(ctx, regBatteryMaxVoltage, 2)
-	if err != nil {
-		log.Debugf("Failed to read battery max/min voltage: %v", err)
-		return nil, err
-	}
-	if len(results) < 2 {
-		return nil, fmt.Errorf("expected 2 values for battery max/min voltage, got %d", len(results))
-	}
-	log.Debugf("Battery max voltage: %.2fV, Battery min voltage: %.2fV", results[0], results[1])
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
-
-	c.BatteryMaxVoltage = results[0]
-	c.BatteryMinVoltage = results[1]
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	log.Debugf("Reading array power from register 0x%04X", regArrayPower)
 	c.ArrayPower, err = e.getValueFloat32(ctx, regArrayPower)
@@ -126,7 +109,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 	log.Debugf("Array power: %.2fW", c.ArrayPower)
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	log.Debugf("Reading charging current from register 0x%04X", regChargingCurrent)
 	c.ChargingCurrent, err = e.getValueFloat(ctx, regChargingCurrent)
@@ -135,7 +118,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 	log.Debugf("Charging current: %.2fA", c.ChargingCurrent)
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	log.Debugf("Reading charging power from register 0x%04X", regChargingPower)
 	c.ChargingPower, err = e.getValueFloat32(ctx, regChargingPower)
@@ -144,7 +127,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 	log.Debugf("Charging power: %.2fW", c.ChargingPower)
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	log.Debugf("Reading energy generated daily from register 0x%04X", regEnergyGeneratedDaily)
 	c.EnergyGeneratedDaily, err = e.getValueFloat32(ctx, regEnergyGeneratedDaily)
@@ -153,7 +136,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		return nil, err
 	}
 	log.Debugf("Energy generated daily: %.2fkWh", c.EnergyGeneratedDaily)
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	log.Debugf("Reading controller status from register 0x%04X", regControllerStatus)
 	controllerStatus, err := e.getValueInt(ctx, regControllerStatus)
@@ -161,7 +144,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 		log.Debugf("Failed to read controller status: %v", err)
 		return nil, err
 	}
-	time.Sleep(50 * time.Millisecond) // Allow device to recover before next read
+	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
 
 	chargingStatus := (controllerStatus & chargingStatusMask) >> chargingStatusShift
 	c.ChargingStatus = chargingStatus
@@ -171,6 +154,7 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	tempData, err := e.modbusClient.ReadInputRegisters(ctx, regBatteryTemperature, 2)
 	if err != nil {
 		log.Debugf("Failed to read temperature data: %v", err)
+		e.prometheusCollector.IncrementRegisterFailure(regBatteryTemperature, "input")
 		return nil, fmt.Errorf("failed to read temperature data: %w", err)
 	}
 	// No delay needed after final read
@@ -193,6 +177,7 @@ func (e *Collector) getValueFloat(ctx context.Context, address uint16) (float32,
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 1)
 	if err != nil {
 		log.Debugf("ReadInputRegisters failed for 0x%04X: %v", address, err)
+		e.prometheusCollector.IncrementRegisterFailure(address, "input")
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	log.Debugf("ReadInputRegisters 0x%04X returned %d bytes: %v", address, len(data), data)
@@ -205,6 +190,7 @@ func (e *Collector) getValueFloats(ctx context.Context, address, quantity uint16
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, quantity)
 	if err != nil {
 		log.Debugf("ReadInputRegisters failed for 0x%04X: %v", address, err)
+		e.prometheusCollector.IncrementRegisterFailure(address, "input")
 		return nil, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	log.Debugf("ReadInputRegisters 0x%04X returned %d bytes: %v", address, len(data), data)
@@ -217,6 +203,7 @@ func (e *Collector) getValueInt(ctx context.Context, address uint16) (int32, err
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 1)
 	if err != nil {
 		log.Debugf("ReadInputRegisters failed for 0x%04X: %v", address, err)
+		e.prometheusCollector.IncrementRegisterFailure(address, "input")
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	log.Debugf("ReadInputRegisters 0x%04X returned %d bytes: %v", address, len(data), data)
@@ -228,6 +215,7 @@ func (e *Collector) getValueFloat32(ctx context.Context, address uint16) (float3
 	data, err := e.modbusClient.ReadInputRegisters(ctx, address, 2)
 	if err != nil {
 		log.Debugf("ReadInputRegisters failed for 0x%04X: %v", address, err)
+		e.prometheusCollector.IncrementRegisterFailure(address, "input")
 		return 0, fmt.Errorf("failed to get data from address %d, error: %w", address, err)
 	}
 	log.Debugf("ReadInputRegisters 0x%04X returned %d bytes: %v", address, len(data), data)
