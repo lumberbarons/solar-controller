@@ -17,12 +17,11 @@ const Root = styled('div')({
 });
 
 const Title = styled(Typography)({
-  flexGrow: 1,
   display: 'flex',
   alignItems: 'center',
 });
 
-function Header() {
+function Header({ version }) {
   const location = useLocation();
 
   // Determine current tab based on path
@@ -53,7 +52,21 @@ function Header() {
               Solar Controller
             </Link>
           </Title>
-          <Box sx={{ flexGrow: 0 }}>
+          {version && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: '0.75rem',
+                fontWeight: 400,
+                marginLeft: 2
+              }}
+            >
+              {version.version}
+            </Typography>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          <Box sx={{ flexGrow: 0, display: 'flex', alignItems: 'center' }}>
             <Tabs
               value={getCurrentTab()}
               textColor="inherit"

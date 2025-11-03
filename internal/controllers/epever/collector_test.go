@@ -42,7 +42,8 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		collector := NewCollector(mockClient)
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
 		status, err := collector.GetStatus(ctx)
 
 		if err != nil {
@@ -103,7 +104,8 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		collector := NewCollector(mockClient)
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
 		if err == nil {
@@ -145,7 +147,8 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		collector := NewCollector(mockClient)
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
 		if err == nil {
@@ -183,7 +186,8 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		collector := NewCollector(mockClient)
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
 		status, err := collector.GetStatus(ctx)
 
 		if err != nil {
@@ -207,7 +211,8 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		collector := NewCollector(mockClient)
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
 		if err == nil {

@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-  args_bin = ["-config", "test/config.yaml", "-debug"]
+  args_bin = ["-config", "config.yaml", "-debug"]
   bin = "./tmp/main"
   cmd = "go build -o ./tmp/main ./cmd/controller"
   delay = 1000

@@ -1,13 +1,16 @@
 package epever
 
 import (
+	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type PrometheusCollector struct {
-	failures      prometheus.Counter
-	writeFailures prometheus.Counter
+	failures             prometheus.Counter
+	writeFailures        prometheus.Counter
+	registerReadFailures *prometheus.CounterVec
 
 	panelVoltage prometheus.Gauge
 	panelCurrent prometheus.Gauge
@@ -41,6 +44,14 @@ func NewPrometheusCollector() *PrometheusCollector {
 			Name:      "write_failures",
 			Help:      "Number of errors while writing to the epever controller.",
 		}),
+		registerReadFailures: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "register_read_failures_total",
+				Help:      "Modbus register read failures by address and type.",
+			},
+			[]string{"address", "register_type"},
+		),
 	}
 
 	// Initialize all metrics immediately to avoid race conditions
@@ -55,6 +66,13 @@ func (e *PrometheusCollector) IncrementFailures() {
 
 func (e *PrometheusCollector) IncrementWriteFailures() {
 	e.writeFailures.Inc()
+}
+
+func (e *PrometheusCollector) IncrementRegisterFailure(address uint16, registerType string) {
+	e.registerReadFailures.WithLabelValues(
+		fmt.Sprintf("0x%04X", address),
+		registerType,
+	).Inc()
 }
 
 func (e *PrometheusCollector) initializeMetrics() {
