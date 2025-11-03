@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faSun } from '@fortawesome/free-solid-svg-icons'
@@ -102,5 +103,11 @@ function Header({ version }) {
     </Root>
   );
 }
+
+Header.propTypes = {
+  version: PropTypes.shape({
+    version: PropTypes.string
+  })
+};
 
 export default Header;
