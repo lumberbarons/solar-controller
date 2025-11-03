@@ -7,3 +7,4 @@ bin/
 tmp/
 build-errors.log
 config.yaml
+dist/

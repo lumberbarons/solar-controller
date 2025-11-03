@@ -14,6 +14,11 @@ builds:
     goarch:
       - amd64
       - arm64
+    ldflags:
+      - -s -w
+      - -X 'main.Version={{.Version}}'
+      - -X 'main.BuildTime={{.Date}}'
+      - -X 'main.GitCommit={{.ShortCommit}}'
 
 archives:
   - format: tar.gz
@@ -30,7 +35,7 @@ archives:
 
 checksum:
   name_template: 'checksums.txt'
-
+`
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
