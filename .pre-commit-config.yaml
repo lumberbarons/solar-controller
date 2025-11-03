@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.5.0
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        entry: golangci-lint run --fix
+        types: [go]
+        language: system
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd site && npm run lint --silent'
+        language: system
+        types: [javascript, jsx, ts, tsx]
+        files: ^site/
+        pass_filenames: false
