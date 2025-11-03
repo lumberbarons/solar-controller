@@ -22,8 +22,6 @@ const (
 	regDeviceTemperature    = 0x3111
 	regBatterySOC           = 0x311A
 	regControllerStatus     = 0x3201
-	regBatteryMaxVoltage    = 0x3302
-	regBatteryMinVoltage    = 0x3303
 	regEnergyGeneratedDaily = 0x330C
 )
 
@@ -49,8 +47,6 @@ type ControllerStatus struct {
 	BatteryVoltage       float32 `json:"batteryVoltage"`
 	BatterySOC           int32   `json:"batterySoc"`
 	BatteryTemp          float32 `json:"batteryTemp"`
-	BatteryMaxVoltage    float32 `json:"batteryMaxVoltage"`
-	BatteryMinVoltage    float32 `json:"batteryMinVoltage"`
 	DeviceTemp           float32 `json:"deviceTemp"`
 	EnergyGeneratedDaily float32 `json:"energyGeneratedDaily"`
 	ChargingStatus       int32   `json:"chargingStatus"`
@@ -105,21 +101,6 @@ func (e *Collector) GetStatus(ctx context.Context) (*ControllerStatus, error) {
 	}
 	log.Debugf("Battery SOC: %d%%", c.BatterySOC)
 	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
-
-	log.Debugf("Reading battery max/min voltage from register 0x%04X", regBatteryMaxVoltage)
-	results, err = e.getValueFloats(ctx, regBatteryMaxVoltage, 2)
-	if err != nil {
-		log.Debugf("Failed to read battery max/min voltage: %v", err)
-		return nil, err
-	}
-	if len(results) < 2 {
-		return nil, fmt.Errorf("expected 2 values for battery max/min voltage, got %d", len(results))
-	}
-	log.Debugf("Battery max voltage: %.2fV, Battery min voltage: %.2fV", results[0], results[1])
-	time.Sleep(100 * time.Millisecond) // Allow device to recover before next read
-
-	c.BatteryMaxVoltage = results[0]
-	c.BatteryMinVoltage = results[1]
 
 	log.Debugf("Reading array power from register 0x%04X", regArrayPower)
 	c.ArrayPower, err = e.getValueFloat32(ctx, regArrayPower)

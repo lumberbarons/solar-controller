@@ -29,8 +29,6 @@ func TestCollector_GetStatus(t *testing.T) {
 					return testingpkg.CreateModbusResponse(85), nil // 85%
 				case regBatteryTemperature: // Battery and device temp (2 registers)
 					return testingpkg.CreateModbusResponse(2500, 3200), nil // 25°C, 32°C
-				case regBatteryMaxVoltage: // Max voltage (reading 2: max then min)
-					return testingpkg.CreateModbusResponse(1440, 1200), nil // 14.4V, 12.0V
 				case regEnergyGeneratedDaily: // Daily energy (2 registers for 32-bit)
 					return testingpkg.CreateModbusResponse(0, 1550), nil // 15.5 kWh
 				case regControllerStatus: // Controller status (1 register)
@@ -65,8 +63,6 @@ func TestCollector_GetStatus(t *testing.T) {
 			{"BatteryVoltage", status.BatteryVoltage, 12.8},
 			{"BatteryTemp", status.BatteryTemp, 25.0},
 			{"DeviceTemp", status.DeviceTemp, 32.0},
-			{"BatteryMinVoltage", status.BatteryMinVoltage, 12.0},
-			{"BatteryMaxVoltage", status.BatteryMaxVoltage, 14.4},
 		}
 
 		for _, tt := range tests {
@@ -133,10 +129,6 @@ func TestCollector_GetStatus(t *testing.T) {
 					return testingpkg.CreateModbusResponse(0, 614), nil
 				case regBatterySOC:
 					return testingpkg.CreateModbusResponse(85), nil
-				case regBatteryMinVoltage:
-					return testingpkg.CreateModbusResponse(1200), nil
-				case regBatteryMaxVoltage:
-					return testingpkg.CreateModbusResponse(1440), nil
 				case regEnergyGeneratedDaily:
 					return testingpkg.CreateModbusResponse(0, 1550), nil
 				case regControllerStatus:
@@ -174,8 +166,6 @@ func TestCollector_GetStatus(t *testing.T) {
 					return testingpkg.CreateModbusResponse(85), nil
 				case regBatteryTemperature: // -10°C battery, -5°C device
 					return testingpkg.CreateModbusResponse(64536, 65036), nil
-				case regBatteryMaxVoltage: // Max and Min voltage
-					return testingpkg.CreateModbusResponse(1440, 1200), nil
 				case regEnergyGeneratedDaily:
 					return testingpkg.CreateModbusResponse(0, 1550), nil
 				case regControllerStatus:
