@@ -18,10 +18,10 @@ func TestNewPublisher(t *testing.T) {
 		{
 			name: "MQTT enabled but no host - returns empty MQTT publisher",
 			config: config.SolarControllerConfiguration{
+				TopicPrefix: "test",
 				Mqtt: mqtt.Configuration{
-					Enabled:     true,
-					Host:        "", // Empty host prevents connection attempt
-					TopicPrefix: "test",
+					Enabled: true,
+					Host:    "", // Empty host prevents connection attempt
 				},
 				Solace: solace.Configuration{
 					Enabled: false,
@@ -37,14 +37,14 @@ func TestNewPublisher(t *testing.T) {
 		{
 			name: "Solace enabled but no host - returns empty Solace publisher",
 			config: config.SolarControllerConfiguration{
+				TopicPrefix: "test",
 				Mqtt: mqtt.Configuration{
 					Enabled: false,
 				},
 				Solace: solace.Configuration{
-					Enabled:     true,
-					Host:        "", // Empty host prevents connection attempt
-					VpnName:     "default",
-					TopicPrefix: "test",
+					Enabled: true,
+					Host:    "", // Empty host prevents connection attempt
+					VpnName: "default",
 				},
 			},
 			wantErr: false,
@@ -74,16 +74,15 @@ func TestNewPublisher(t *testing.T) {
 		{
 			name: "Both enabled - returns error",
 			config: config.SolarControllerConfiguration{
+				TopicPrefix: "test",
 				Mqtt: mqtt.Configuration{
-					Enabled:     true,
-					Host:        "",
-					TopicPrefix: "test",
+					Enabled: true,
+					Host:    "",
 				},
 				Solace: solace.Configuration{
-					Enabled:     true,
-					Host:        "",
-					VpnName:     "default",
-					TopicPrefix: "test",
+					Enabled: true,
+					Host:    "",
+					VpnName: "default",
 				},
 			},
 			wantErr: true,

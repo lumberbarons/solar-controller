@@ -13,21 +13,21 @@ import (
 )
 
 type Configuration struct {
-	Enabled     bool   `yaml:"enabled"`
-	Host        string `yaml:"host"`
-	Username    string `yaml:"username"`
-	Password    string `yaml:"password"`
-	VpnName     string `yaml:"vpnName"`
-	TopicPrefix string `yaml:"topicPrefix"`
+	Enabled  bool   `yaml:"enabled"`
+	Host     string `yaml:"host"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	VpnName  string `yaml:"vpnName"`
 }
 
 type Publisher struct {
 	messagingService solace.MessagingService
 	publisher        solace.DirectMessagePublisher
 	config           Configuration
+	topicPrefix      string
 }
 
-func NewPublisher(cfg *Configuration) (*Publisher, error) {
+func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 	if !cfg.Enabled {
 		log.Info("Solace publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -82,6 +82,7 @@ func NewPublisher(cfg *Configuration) (*Publisher, error) {
 		messagingService: messagingService,
 		publisher:        directPublisher,
 		config:           *cfg,
+		topicPrefix:      topicPrefix,
 	}
 
 	return publisher, nil
@@ -92,7 +93,7 @@ func (p *Publisher) Publish(topicSuffix, payload string) {
 		return
 	}
 
-	topic := fmt.Sprintf("%s/%s", p.config.TopicPrefix, topicSuffix)
+	topic := fmt.Sprintf("%s/%s", p.topicPrefix, topicSuffix)
 
 	log.Infof("publishing for %s to %s", topicSuffix, topic)
 

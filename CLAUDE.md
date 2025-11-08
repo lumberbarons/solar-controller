@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT and Prometheus. It includes a React-based web UI for monitoring.
+Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT, Solace, or file logging, with metrics also exposed via Prometheus. It includes a React-based web UI for monitoring.
 
 ## Development Commands
 
@@ -128,7 +128,7 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
 
 ### Message Publishing
 
-The application supports two message broker options (mutually exclusive):
+The application supports three message publisher options (mutually exclusive):
 
 - **MQTT**: Using Eclipse Paho MQTT client
   - QoS 0 (fire-and-forget)
@@ -141,7 +141,14 @@ The application supports two message broker options (mutually exclusive):
   - Requires message VPN configuration
   - Suitable for enterprise deployments
 
-Both publishers implement the `MessagePublisher` interface. The publisher is selected at startup via configuration, and only one can be enabled at a time (enforced by configuration validation).
+- **File**: Using lumberjack for log rotation
+  - Writes JSON-formatted metrics to rotating log files
+  - Configurable max file size (default: 10MB)
+  - Configurable max backup files (default: 10)
+  - Optional compression of rotated files
+  - Suitable for offline logging, archival, or edge deployments with intermittent connectivity
+
+All publishers implement the `MessagePublisher` interface. The publisher is selected at startup via configuration, and only one can be enabled at a time (enforced by configuration validation).
 
 #### Topic Structure
 
@@ -225,40 +232,53 @@ YAML-based configuration with the following structure:
 ```yaml
 solarController:
   httpPort: 8080
-  debug: false  # Enable debug logging (can also use -debug flag)
+  debug: false          # Enable debug logging (can also use -debug flag)
+  deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
+  topicPrefix: solar            # Topic prefix for all publishers (default: "solar")
   mqtt:
-    enabled: true  # Only one of mqtt or solace can be enabled
+    enabled: true  # Only one of mqtt, solace, or file can be enabled
     host: mqtt://broker:1883
     username: user
     password: pass
-    topicPrefix: solar/metrics
   solace:
-    enabled: false  # Mutually exclusive with mqtt
+    enabled: false  # Mutually exclusive with mqtt and file
     host: tcp://solace-broker:55555
     username: user
     password: pass
     vpnName: default
-    topicPrefix: solar/metrics
+  file:
+    enabled: false  # Mutually exclusive with mqtt and solace
+    filename: /var/log/solar-controller/metrics.log
+    maxSizeMB: 10      # Max size per file before rotation (default: 10)
+    maxBackups: 10     # Number of old files to keep (default: 10)
+    compress: false    # Compress rotated files with gzip (default: false)
   epever:
     enabled: true
-    deviceId: controller-123  # Unique identifier for this device (used in MQTT/Solace topics)
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
 ```
 
 The controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration. If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start.
 
+**Global Configuration:**
+- `deviceId` (optional): Unique identifier for this device instance, used in publisher topics across all controllers. Defaults to `"controller-1"` if not specified.
+- `topicPrefix` (optional): Topic prefix prepended to all published messages. Used by all publisher types (MQTT, Solace, File). Defaults to `"solar"` if not specified.
+- `httpPort` (required): HTTP server port (1-65535)
+- `debug` (optional): Enable debug logging, can also be set via `-debug` command-line flag
+
 **Epever Controller Configuration:**
-- `deviceId` (optional): Unique identifier for this controller instance, used in message broker topics. Defaults to `"controller-1"` if not specified.
 - `serialPort` (required): Serial port path for Modbus RTU communication
 - `publishPeriod` (required): Collection interval in seconds
 
 **Message Publisher Configuration:**
-- Only one of `mqtt` or `solace` can be enabled at a time
+- Only one of `mqtt`, `solace`, or `file` can be enabled at a time
 - Configuration validation enforces this mutual exclusion
-- If neither is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published to a message broker
-- Required fields for MQTT: `host`, `topicPrefix`
-- Required fields for Solace: `host`, `vpnName`, `topicPrefix`
+- If none is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published
+- Global `topicPrefix` is used by all publishers (defaults to `"solar"`)
+- Required fields for MQTT: `host`
+- Required fields for Solace: `host`, `vpnName`
+- Required fields for File: `filename`
+- Optional fields for File: `maxSizeMB` (default: 10), `maxBackups` (default: 10), `compress` (default: false)
 
 Debug mode can be enabled via the `debug` configuration field or the `-debug` command-line flag. The command-line flag takes precedence over the config file setting.
 
@@ -268,6 +288,7 @@ Debug mode can be enabled via the `debug` configuration field or the `-debug` co
 - `internal/controllers/` - Hardware controller implementations (epever)
 - `internal/mqtt/` - MQTT publishing functionality
 - `internal/solace/` - Solace publishing functionality
+- `internal/file/` - File publishing functionality with log rotation
 - `internal/publishers/` - Publisher factory and abstraction layer
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
@@ -279,9 +300,9 @@ Debug mode can be enabled via the `debug` configuration field or the `-debug` co
 - The build process copies `site/build` to `internal/static/build` where it's embedded into the binary
 - Main package is in `cmd/controller/`, not at the project root
 - Controllers implement graceful shutdown via `defer controller.Close()` in `main.go`
-- Message publishing is optional - if neither MQTT nor Solace is enabled, a no-op publisher is used
+- Message publishing is optional - if no publisher (MQTT, Solace, or File) is enabled, a no-op publisher is used
 - Publishers implement the `MessagePublisher` interface for easy testing and swapping
-- Only one message publisher (MQTT or Solace) can be enabled at a time
+- Only one message publisher (MQTT, Solace, or File) can be enabled at a time
 - The application uses structured logging via `logrus`
 - All controllers register their own HTTP endpoints via `RegisterEndpoints()`
 - Always add unit tests for new code

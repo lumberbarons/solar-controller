@@ -18,12 +18,12 @@ func TestLoad(t *testing.T) {
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   mqtt:
     enabled: true
     host: mqtt://localhost:1883
     username: user
     password: pass
-    topicPrefix: solar/metrics
   epever:
     enabled: true
     serialPort: /dev/ttyUSB0
@@ -40,8 +40,8 @@ solarController:
 				if c.SolarController.Mqtt.Host != "mqtt://localhost:1883" {
 					t.Errorf("MQTT Host = %s, want mqtt://localhost:1883", c.SolarController.Mqtt.Host)
 				}
-				if c.SolarController.Mqtt.TopicPrefix != "solar/metrics" {
-					t.Errorf("MQTT TopicPrefix = %s, want solar/metrics", c.SolarController.Mqtt.TopicPrefix)
+				if c.SolarController.TopicPrefix != "solar/metrics" {
+					t.Errorf("TopicPrefix = %s, want solar/metrics", c.SolarController.TopicPrefix)
 				}
 				if !c.SolarController.Epever.Enabled {
 					t.Error("Epever should be enabled")
@@ -171,10 +171,10 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   mqtt:
     enabled: true
     host: ""
-    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
@@ -182,19 +182,22 @@ solarController:
 			errMsg:  "MQTT host is required",
 		},
 		{
-			name: "MQTT enabled but no topic prefix",
+			name: "MQTT enabled but no topic prefix - should use default",
 			yaml: `
 solarController:
   httpPort: 8080
   mqtt:
     enabled: true
     host: mqtt://localhost:1883
-    topicPrefix: ""
   epever:
     enabled: false
 `,
-			wantErr: true,
-			errMsg:  "MQTT topic prefix is required",
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.TopicPrefix != "solar" {
+					t.Errorf("TopicPrefix = %s, want solar (default)", c.SolarController.TopicPrefix)
+				}
+			},
 		},
 		{
 			name: "MQTT disabled - no validation errors",
@@ -252,12 +255,12 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: home/solar
   mqtt:
     enabled: true
     host: mqtt://broker.example.com:1883
     username: solaruser
     password: secretpassword
-    topicPrefix: home/solar
   epever:
     enabled: false
 `,
@@ -294,13 +297,13 @@ someOtherConfig:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   solace:
     enabled: true
     host: tcp://solace-broker:55555
     username: solaceuser
     password: solacepass
     vpnName: default
-    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
@@ -321,8 +324,8 @@ solarController:
 				if c.SolarController.Solace.VpnName != "default" {
 					t.Errorf("Solace VpnName = %s, want default", c.SolarController.Solace.VpnName)
 				}
-				if c.SolarController.Solace.TopicPrefix != "solar/metrics" {
-					t.Errorf("Solace TopicPrefix = %s, want solar/metrics", c.SolarController.Solace.TopicPrefix)
+				if c.SolarController.TopicPrefix != "solar/metrics" {
+					t.Errorf("TopicPrefix = %s, want solar/metrics", c.SolarController.TopicPrefix)
 				}
 			},
 		},
@@ -331,11 +334,11 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   solace:
     enabled: true
     host: ""
     vpnName: default
-    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
@@ -347,11 +350,11 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   solace:
     enabled: true
     host: tcp://solace-broker:55555
     vpnName: ""
-    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
@@ -359,7 +362,7 @@ solarController:
 			errMsg:  "solace VPN name is required",
 		},
 		{
-			name: "Solace enabled but no topic prefix",
+			name: "Solace enabled but no topic prefix - should use default",
 			yaml: `
 solarController:
   httpPort: 8080
@@ -367,12 +370,15 @@ solarController:
     enabled: true
     host: tcp://solace-broker:55555
     vpnName: default
-    topicPrefix: ""
   epever:
     enabled: false
 `,
-			wantErr: true,
-			errMsg:  "solace topic prefix is required",
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.TopicPrefix != "solar" {
+					t.Errorf("TopicPrefix = %s, want solar (default)", c.SolarController.TopicPrefix)
+				}
+			},
 		},
 		{
 			name: "Solace disabled - no validation errors",
@@ -404,7 +410,7 @@ solarController:
     enabled: false
 `,
 			wantErr: true,
-			errMsg:  "MQTT and Solace cannot both be enabled",
+			errMsg:  "only one publisher can be enabled at a time",
 		},
 	}
 

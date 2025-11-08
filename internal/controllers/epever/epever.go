@@ -19,7 +19,6 @@ const (
 
 type Configuration struct {
 	Enabled       bool   `yaml:"enabled"`
-	DeviceID      string `yaml:"deviceId"`
 	SerialPort    string `yaml:"serialPort"`
 	PublishPeriod int    `yaml:"publishPeriod"`
 }
@@ -85,7 +84,7 @@ func NewController(
 
 // NewControllerFromConfig creates a new Epever controller from configuration.
 // This is the production entry point that creates all concrete dependencies.
-func NewControllerFromConfig(config Configuration, mqttPublisher controllers.MessagePublisher) (*Controller, error) {
+func NewControllerFromConfig(config Configuration, mqttPublisher controllers.MessagePublisher, deviceID string) (*Controller, error) {
 	if !config.Enabled {
 		log.Info("epever disabled via configuration")
 		return &Controller{}, nil
@@ -113,7 +112,7 @@ func NewControllerFromConfig(config Configuration, mqttPublisher controllers.Mes
 		epeverConfigurer,
 		mqttPublisher,
 		prometheusCollector,
-		config.DeviceID,
+		deviceID,
 		config.PublishPeriod,
 	)
 }

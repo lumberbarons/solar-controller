@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 	"gopkg.in/yaml.v3"
@@ -14,11 +15,14 @@ type Config struct {
 }
 
 type SolarControllerConfiguration struct {
-	HTTPPort int                  `yaml:"httpPort"`
-	Debug    bool                 `yaml:"debug"`
-	Mqtt     mqtt.Configuration   `yaml:"mqtt"`
-	Solace   solace.Configuration `yaml:"solace"`
-	Epever   epever.Configuration `yaml:"epever"`
+	HTTPPort    int                  `yaml:"httpPort"`
+	Debug       bool                 `yaml:"debug"`
+	DeviceID    string               `yaml:"deviceId"`
+	TopicPrefix string               `yaml:"topicPrefix"`
+	Mqtt        mqtt.Configuration   `yaml:"mqtt"`
+	Solace      solace.Configuration `yaml:"solace"`
+	File        file.Configuration   `yaml:"file"`
+	Epever      epever.Configuration `yaml:"epever"`
 }
 
 // Load parses and validates configuration from YAML bytes.
@@ -31,6 +35,9 @@ func Load(data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
+	// Apply defaults
+	config.applyDefaults()
+
 	// Validate configuration
 	if err := config.Validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
@@ -39,24 +46,46 @@ func Load(data []byte) (Config, error) {
 	return config, nil
 }
 
+// applyDefaults sets default values for optional configuration fields
+func (c *Config) applyDefaults() {
+	// Set default device ID if not provided
+	if c.SolarController.DeviceID == "" {
+		c.SolarController.DeviceID = "controller-1"
+	}
+
+	// Set default topic prefix if not provided
+	if c.SolarController.TopicPrefix == "" {
+		c.SolarController.TopicPrefix = "solar"
+	}
+}
+
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
 	if c.SolarController.HTTPPort <= 0 || c.SolarController.HTTPPort > 65535 {
 		return fmt.Errorf("invalid HTTP port: %d (must be 1-65535)", c.SolarController.HTTPPort)
 	}
 
-	// Validate that only one publisher is enabled (MQTT and Solace are mutually exclusive)
-	if c.SolarController.Mqtt.Enabled && c.SolarController.Solace.Enabled {
-		return fmt.Errorf("MQTT and Solace cannot both be enabled - please enable only one publisher")
+	// Validate that only one publisher is enabled (MQTT, Solace, and File are mutually exclusive)
+	enabledCount := 0
+	if c.SolarController.Mqtt.Enabled {
+		enabledCount++
 	}
+	if c.SolarController.Solace.Enabled {
+		enabledCount++
+	}
+	if c.SolarController.File.Enabled {
+		enabledCount++
+	}
+	if enabledCount > 1 {
+		return fmt.Errorf("only one publisher can be enabled at a time (MQTT, Solace, or File)")
+	}
+
+	// Note: topicPrefix has a default value of "solar", so no validation needed
 
 	// Validate MQTT configuration if enabled
 	if c.SolarController.Mqtt.Enabled {
 		if c.SolarController.Mqtt.Host == "" {
 			return fmt.Errorf("MQTT host is required when MQTT is enabled")
-		}
-		if c.SolarController.Mqtt.TopicPrefix == "" {
-			return fmt.Errorf("MQTT topic prefix is required when MQTT is enabled")
 		}
 	}
 
@@ -68,8 +97,12 @@ func (c *Config) Validate() error {
 		if c.SolarController.Solace.VpnName == "" {
 			return fmt.Errorf("solace VPN name is required when Solace is enabled")
 		}
-		if c.SolarController.Solace.TopicPrefix == "" {
-			return fmt.Errorf("solace topic prefix is required when Solace is enabled")
+	}
+
+	// Validate File configuration if enabled
+	if c.SolarController.File.Enabled {
+		if c.SolarController.File.Filename == "" {
+			return fmt.Errorf("file filename is required when File publisher is enabled")
 		}
 	}
 
