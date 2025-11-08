@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/app"
 	"github.com/lumberbarons/solar-controller/internal/config"
-	"github.com/lumberbarons/solar-controller/internal/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/publishers"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,7 +49,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	mqttPublisher, err := mqtt.NewPublisher(&controllerConfig.SolarController.Mqtt)
+	publisher, err := publishers.NewPublisher(&controllerConfig.SolarController)
 	if err != nil {
 		log.Fatalf("failed to create publisher: %v", err)
 	}
@@ -60,7 +60,7 @@ func main() {
 		GitCommit: GitCommit,
 	}
 
-	application, err := app.NewApplication(&controllerConfig, mqttPublisher, versionInfo)
+	application, err := app.NewApplication(&controllerConfig, publisher, versionInfo)
 	if err != nil {
 		log.Fatalf("failed to create application: %v", err)
 	}

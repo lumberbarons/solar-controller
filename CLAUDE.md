@@ -123,8 +123,25 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
 3. On each tick, the controller's `collectAndPublish()` method:
    - Calls the Collector to fetch device metrics
    - Updates Prometheus metrics via PrometheusCollector
-   - Publishes JSON payload to MQTT via MqttPublisher
+   - Publishes JSON payload to message broker (MQTT or Solace) via MessagePublisher interface
    - Caches last status for HTTP API endpoints
+
+### Message Publishing
+
+The application supports two message broker options (mutually exclusive):
+
+- **MQTT**: Using Eclipse Paho MQTT client
+  - QoS 0 (fire-and-forget)
+  - 5-second publish timeout
+  - Suitable for lightweight deployments
+
+- **Solace**: Using Solace PubSub+ Go client
+  - Direct messaging (fire-and-forget)
+  - 5-second publish timeout
+  - Requires message VPN configuration
+  - Suitable for enterprise deployments
+
+Both publishers implement the `MessagePublisher` interface and follow the same topic pattern: `{topicPrefix}/{topicSuffix}`. The publisher is selected at startup via configuration, and only one can be enabled at a time (enforced by configuration validation).
 
 ### Communication Protocols
 
@@ -155,9 +172,17 @@ solarController:
   httpPort: 8080
   debug: false  # Enable debug logging (can also use -debug flag)
   mqtt:
+    enabled: true  # Only one of mqtt or solace can be enabled
     host: mqtt://broker:1883
     username: user
     password: pass
+    topicPrefix: solar/metrics
+  solace:
+    enabled: false  # Mutually exclusive with mqtt
+    host: tcp://solace-broker:55555
+    username: user
+    password: pass
+    vpnName: default
     topicPrefix: solar/metrics
   epever:
     enabled: true
@@ -167,6 +192,13 @@ solarController:
 
 The controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration. If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start.
 
+**Message Publisher Configuration:**
+- Only one of `mqtt` or `solace` can be enabled at a time
+- Configuration validation enforces this mutual exclusion
+- If neither is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published to a message broker
+- Required fields for MQTT: `host`, `topicPrefix`
+- Required fields for Solace: `host`, `vpnName`, `topicPrefix`
+
 Debug mode can be enabled via the `debug` configuration field or the `-debug` command-line flag. The command-line flag takes precedence over the config file setting.
 
 ## Project Structure
@@ -174,6 +206,8 @@ Debug mode can be enabled via the `debug` configuration field or the `-debug` co
 - `cmd/controller/` - Main application entry point
 - `internal/controllers/` - Hardware controller implementations (epever)
 - `internal/mqtt/` - MQTT publishing functionality
+- `internal/solace/` - Solace publishing functionality
+- `internal/publishers/` - Publisher factory and abstraction layer
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
 - `package/` - Packaging files for system packages (deb, rpm, etc.)
@@ -184,7 +218,9 @@ Debug mode can be enabled via the `debug` configuration field or the `-debug` co
 - The build process copies `site/build` to `internal/static/build` where it's embedded into the binary
 - Main package is in `cmd/controller/`, not at the project root
 - Controllers implement graceful shutdown via `defer controller.Close()` in `main.go`
-- MQTT publishing is optional - if no host is configured, MqttPublisher returns an empty/no-op instance
+- Message publishing is optional - if neither MQTT nor Solace is enabled, a no-op publisher is used
+- Publishers implement the `MessagePublisher` interface for easy testing and swapping
+- Only one message publisher (MQTT or Solace) can be enabled at a time
 - The application uses structured logging via `logrus`
 - All controllers register their own HTTP endpoints via `RegisterEndpoints()`
 - Always add unit tests for new code

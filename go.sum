@@ -159,3 +159,5 @@ gopkg.in/errgo.v2 v2.1.0/go.mod h1:hNsd1EY+bozCKY1Ytp96fpM3vjJbqLJn88ws8XvfDNI=
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+solace.dev/go/messaging v1.10.0 h1:6fYG0SF4ILXmXA32thnbNRy87w76+CjQhTp16EP3U/Q=
+solace.dev/go/messaging v1.10.0/go.mod h1:QKqAKqxKX5v0G9PEuRpe9wBNbEuj/ncbrkqsNArT7L0=
