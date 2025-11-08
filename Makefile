@@ -1,4 +1,4 @@
-.PHONY: help build test clean build-frontend build-backend build-with-cgo build-linux-arm64 deploy
+.PHONY: help build test clean build-frontend build-backend build-with-cgo build-linux-arm64 docker deploy
 
 .DEFAULT_GOAL := help
 
@@ -40,6 +40,9 @@ clean: ## Clean build artifacts
 	rm -f bin/solar-controller-linux-arm64
 	rm -rf site/build
 	rm -rf internal/static/build
+
+docker: ## Build Docker image
+	docker build -t solar-controller:$(VERSION) -t solar-controller:latest .
 
 deploy: build-linux-arm64 ## Deploy to remote server (requires REMOTE_HOST=user@host)
 	@if [ -z "$(REMOTE_HOST)" ]; then \

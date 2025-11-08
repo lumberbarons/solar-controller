@@ -4,7 +4,6 @@
 .gitignore
 
 # Build artifacts
-bin/
 site/build/
 dist/
 
