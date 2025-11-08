@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS build-backend
+FROM golang:1.24-trixie AS build-backend
 
 WORKDIR /build
 
