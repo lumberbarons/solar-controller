@@ -123,7 +123,7 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
 3. On each tick, the controller's `collectAndPublish()` method:
    - Calls the Collector to fetch device metrics
    - Updates Prometheus metrics via PrometheusCollector
-   - Publishes JSON payload to message broker (MQTT or Solace) via MessagePublisher interface
+   - Publishes individual metric messages to message broker (MQTT or Solace) via MessagePublisher interface
    - Caches last status for HTTP API endpoints
 
 ### Message Publishing
@@ -141,7 +141,58 @@ The application supports two message broker options (mutually exclusive):
   - Requires message VPN configuration
   - Suitable for enterprise deployments
 
-Both publishers implement the `MessagePublisher` interface and follow the same topic pattern: `{topicPrefix}/{topicSuffix}`. The publisher is selected at startup via configuration, and only one can be enabled at a time (enforced by configuration validation).
+Both publishers implement the `MessagePublisher` interface. The publisher is selected at startup via configuration, and only one can be enabled at a time (enforced by configuration validation).
+
+#### Topic Structure
+
+Messages are published with one message per metric using the following topic pattern:
+
+```
+{topicPrefix}/{deviceId}/{controller}/{metric-name}
+```
+
+For example, with configuration `topicPrefix: "solar"` and `deviceId: "controller-123"`:
+```
+solar/controller-123/epever/array-voltage
+solar/controller-123/epever/battery-soc
+solar/controller-123/epever/charging-power
+```
+
+#### Message Payload
+
+Each metric message contains a JSON payload with the metric value, unit, and timestamp:
+
+```json
+{
+  "value": 18.5,
+  "unit": "volts",
+  "timestamp": 1699000000
+}
+```
+
+#### Metric Names and Units
+
+Epever controller publishes the following metrics (kebab-case naming):
+
+- `array-voltage` (volts) - Solar panel voltage
+- `array-current` (amperes) - Solar panel current
+- `array-power` (watts) - Solar panel power
+- `charging-current` (amperes) - Battery charging current
+- `charging-power` (watts) - Battery charging power
+- `battery-voltage` (volts) - Battery voltage
+- `battery-soc` (percent) - Battery state of charge
+- `battery-temp` (celsius) - Battery temperature
+- `device-temp` (celsius) - Controller device temperature
+- `energy-generated-daily` (kilowatt-hours) - Daily energy generation
+- `charging-status` (code) - Charging status code
+- `collection-time` (seconds) - Time taken to collect metrics
+
+#### Wildcard Subscriptions
+
+MQTT/Solace subscribers can use wildcard patterns:
+- `solar/+/epever/#` - All epever metrics from all devices
+- `solar/controller-123/epever/#` - All metrics from specific device
+- `solar/controller-123/epever/battery-+` - All battery-related metrics
 
 ### Communication Protocols
 
@@ -190,11 +241,17 @@ solarController:
     topicPrefix: solar/metrics
   epever:
     enabled: true
+    deviceId: controller-123  # Unique identifier for this device (used in MQTT/Solace topics)
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
 ```
 
 The controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration. If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start.
+
+**Epever Controller Configuration:**
+- `deviceId` (optional): Unique identifier for this controller instance, used in message broker topics. Defaults to `"controller-1"` if not specified.
+- `serialPort` (required): Serial port path for Modbus RTU communication
+- `publishPeriod` (required): Collection interval in seconds
 
 **Message Publisher Configuration:**
 - Only one of `mqtt` or `solace` can be enabled at a time

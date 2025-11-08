@@ -2,7 +2,6 @@ package epever
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -20,6 +19,7 @@ const (
 
 type Configuration struct {
 	Enabled       bool   `yaml:"enabled"`
+	DeviceID      string `yaml:"deviceId"`
 	SerialPort    string `yaml:"serialPort"`
 	PublishPeriod int    `yaml:"publishPeriod"`
 }
@@ -31,6 +31,7 @@ type Controller struct {
 	mqttPublisher       controllers.MessagePublisher
 	prometheusCollector controllers.MetricsCollector
 	scheduler           *gocron.Scheduler
+	deviceID            string
 	lastStatus          *ControllerStatus
 	lastStatusMutex     sync.RWMutex
 	collectInProgress   bool
@@ -45,10 +46,16 @@ func NewController(
 	configurer *Configurer,
 	mqttPublisher controllers.MessagePublisher,
 	prometheusCollector controllers.MetricsCollector,
+	deviceID string,
 	publishPeriod int,
 ) (*Controller, error) {
 	if client == nil {
 		return &Controller{}, nil
+	}
+
+	// Default device ID if not provided
+	if deviceID == "" {
+		deviceID = "controller-1"
 	}
 
 	s := gocron.NewScheduler(time.UTC)
@@ -59,6 +66,7 @@ func NewController(
 		configurer:          configurer,
 		prometheusCollector: prometheusCollector,
 		mqttPublisher:       mqttPublisher,
+		deviceID:            deviceID,
 		scheduler:           s,
 	}
 
@@ -105,6 +113,7 @@ func NewControllerFromConfig(config Configuration, mqttPublisher controllers.Mes
 		epeverConfigurer,
 		mqttPublisher,
 		prometheusCollector,
+		config.DeviceID,
 		config.PublishPeriod,
 	)
 }
@@ -145,13 +154,23 @@ func (e *Controller) collectAndPublish() {
 
 	e.prometheusCollector.SetMetrics(status)
 
-	b, err := json.Marshal(status)
-	if err != nil {
-		log.Errorf("failed to marshall status for publishing for epever: %s", err)
-		return
-	}
+	// Convert status to individual metrics
+	metrics := ConvertStatusToMetrics(status)
 
-	e.mqttPublisher.Publish(namespace, string(b))
+	// Publish each metric individually
+	for _, metric := range metrics {
+		payload, err := metric.ToJSON()
+		if err != nil {
+			log.Errorf("failed to marshal metric %s for publishing: %s", metric.Name, err)
+			continue
+		}
+
+		// Topic format: {deviceId}/epever/{metric-name}
+		topicSuffix := fmt.Sprintf("%s/%s/%s", e.deviceID, namespace, metric.Name)
+		e.mqttPublisher.Publish(topicSuffix, payload)
+
+		log.Debugf("published metric %s to %s", metric.Name, topicSuffix)
+	}
 
 	log.Debug("collection done for epever controller")
 }
