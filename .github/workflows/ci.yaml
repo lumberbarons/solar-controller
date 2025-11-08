@@ -80,6 +80,10 @@ jobs:
           name: site-build
           path: internal/static/build
 
+      - name: Install frontend dependencies
+        working-directory: ./site
+        run: npm ci
+
       - name: Run ESLint
         working-directory: ./site
         run: npm run lint
