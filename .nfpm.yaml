@@ -1,0 +1,50 @@
+name: solar-controller
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+release: 1
+section: default
+priority: optional
+maintainer: Lumberbarons <https://github.com/lumberbarons>
+description: Solar power equipment monitoring service with MQTT, Solace, and Prometheus support
+vendor: Lumberbarons
+homepage: https://github.com/lumberbarons/solar-controller
+license: MIT
+
+contents:
+  # Main binary
+  - src: bin/solar-controller
+    dst: /usr/bin/solar-controller
+    file_info:
+      mode: 0755
+
+  # Configuration file
+  - src: package/config.yaml
+    dst: /etc/solar-controller/config.yaml
+    type: config
+    file_info:
+      mode: 0644
+
+  # Systemd service file
+  - src: package/solar-controller.service
+    dst: /etc/systemd/system/solar-controller.service
+    file_info:
+      mode: 0644
+
+  # Logrotate configuration
+  - src: package/logrotate.d/solar-controller
+    dst: /etc/logrotate.d/solar-controller
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: package/postinstall.sh
+  postremove: package/postremove.sh
+
+overrides:
+  deb:
+    depends:
+      - systemd
+  rpm:
+    depends:
+      - systemd

@@ -9,20 +9,19 @@ import (
 )
 
 type Configuration struct {
-	Enabled       bool   `yaml:"enabled"`
-	Host          string `yaml:"host"`
-	Username      string `yaml:"username"`
-	Password      string `yaml:"password"`
-	TopicPrefix   string `yaml:"topicPrefix"`
-	PublishPeriod int    `yaml:"publishPeriod"`
+	Enabled  bool   `yaml:"enabled"`
+	Host     string `yaml:"host"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 type Publisher struct {
-	client mqtt.Client
-	config Configuration
+	client      mqtt.Client
+	config      Configuration
+	topicPrefix string
 }
 
-func NewPublisher(config *Configuration) (*Publisher, error) {
+func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error) {
 	if !config.Enabled {
 		log.Info("MQTT publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -50,7 +49,11 @@ func NewPublisher(config *Configuration) (*Publisher, error) {
 
 	log.Infof("connected to broker %s", config.Host)
 
-	publisher := &Publisher{client: client, config: *config}
+	publisher := &Publisher{
+		client:      client,
+		config:      *config,
+		topicPrefix: topicPrefix,
+	}
 
 	return publisher, nil
 }
@@ -60,7 +63,7 @@ func (p *Publisher) Publish(topicSuffix, payload string) {
 		return
 	}
 
-	topic := fmt.Sprintf("%s/%s", p.config.TopicPrefix, topicSuffix)
+	topic := fmt.Sprintf("%s/%s", p.topicPrefix, topicSuffix)
 
 	log.Infof("publishing for %s to %s", topicSuffix, topic)
 

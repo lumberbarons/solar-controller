@@ -263,19 +263,19 @@ These delays and timeouts ensure the Epever device has adequate time to process 
 
 #### Monitoring Endpoints
 - `GET /metrics` - Prometheus metrics export
-- `GET /api/solar/metrics` - JSON metrics for Epever controller (current status)
+- `GET /api/epever/metrics` - JSON metrics for Epever controller (current status)
 
 #### Configuration Endpoints
-- `GET /api/solar/battery-profile` - Get battery type and capacity
-- `PATCH /api/solar/battery-profile` - Update battery type and/or capacity
-- `GET /api/solar/charging-parameters` - Get all charging parameters (voltages, durations, temperature limits)
-- `PATCH /api/solar/charging-parameters` - Update charging parameters (only when battery type is 'userDefined')
-- `GET /api/solar/time` - Get controller's current time
-- `PATCH /api/solar/time` - Set controller's time
+- `GET /api/epever/battery-profile` - Get battery type and capacity
+- `PATCH /api/epever/battery-profile` - Update battery type and/or capacity
+- `GET /api/epever/charging-parameters` - Get all charging parameters (voltages, durations, temperature limits)
+- `PATCH /api/epever/charging-parameters` - Update charging parameters (only when battery type is 'userDefined')
+- `GET /api/epever/time` - Get controller's current time
+- `PATCH /api/epever/time` - Set controller's time
 
 #### Legacy Endpoints (for backwards compatibility)
-- `GET /api/solar/config` - Get all configuration settings
-- `PATCH /api/solar/config` - Update configuration settings
+- `GET /api/epever/config` - Get all configuration settings
+- `PATCH /api/epever/config` - Update configuration settings
 
 #### Frontend
 - `/*` - Embedded React SPA for web-based monitoring
@@ -284,17 +284,17 @@ These delays and timeouts ensure the Epever device has adequate time to process 
 
 #### Get current metrics
 ```bash
-curl http://localhost:8080/api/solar/metrics
+curl http://localhost:8080/api/epever/metrics
 ```
 
 #### Get battery profile
 ```bash
-curl http://localhost:8080/api/solar/battery-profile
+curl http://localhost:8080/api/epever/battery-profile
 ```
 
 #### Update battery type
 ```bash
-curl -X PATCH http://localhost:8080/api/solar/battery-profile \
+curl -X PATCH http://localhost:8080/api/epever/battery-profile \
   -H "Content-Type: application/json" \
   -d '{"batteryType": "userDefined"}'
 ```
@@ -303,7 +303,7 @@ curl -X PATCH http://localhost:8080/api/solar/battery-profile \
 
 #### Update charging parameters
 ```bash
-curl -X PATCH http://localhost:8080/api/solar/charging-parameters \
+curl -X PATCH http://localhost:8080/api/epever/charging-parameters \
   -H "Content-Type: application/json" \
   -d '{"boostVoltage": 14.4, "floatVoltage": 13.8}'
 ```

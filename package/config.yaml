@@ -11,3 +11,10 @@ solarController:
     username:
     password:
     topicPrefix: solar/metrics
+  solace:
+    enabled: false
+    host:
+    username:
+    password:
+    vpnName: default
+    topicPrefix: solar/metrics

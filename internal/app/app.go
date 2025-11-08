@@ -61,7 +61,7 @@ func (a *Application) buildControllers() error {
 	var ctrlList []controllers.SolarController
 
 	// Initialize Epever controller
-	epeverController, err := epever.NewControllerFromConfig(a.config.SolarController.Epever, a.mqtt)
+	epeverController, err := epever.NewControllerFromConfig(a.config.SolarController.Epever, a.mqtt, a.config.SolarController.DeviceID)
 	if err != nil {
 		return fmt.Errorf("failed to create epever controller: %w", err)
 	}

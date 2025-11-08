@@ -18,12 +18,12 @@ func TestLoad(t *testing.T) {
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   mqtt:
     enabled: true
     host: mqtt://localhost:1883
     username: user
     password: pass
-    topicPrefix: solar/metrics
   epever:
     enabled: true
     serialPort: /dev/ttyUSB0
@@ -40,8 +40,8 @@ solarController:
 				if c.SolarController.Mqtt.Host != "mqtt://localhost:1883" {
 					t.Errorf("MQTT Host = %s, want mqtt://localhost:1883", c.SolarController.Mqtt.Host)
 				}
-				if c.SolarController.Mqtt.TopicPrefix != "solar/metrics" {
-					t.Errorf("MQTT TopicPrefix = %s, want solar/metrics", c.SolarController.Mqtt.TopicPrefix)
+				if c.SolarController.TopicPrefix != "solar/metrics" {
+					t.Errorf("TopicPrefix = %s, want solar/metrics", c.SolarController.TopicPrefix)
 				}
 				if !c.SolarController.Epever.Enabled {
 					t.Error("Epever should be enabled")
@@ -171,10 +171,10 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: solar/metrics
   mqtt:
     enabled: true
     host: ""
-    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
@@ -182,19 +182,22 @@ solarController:
 			errMsg:  "MQTT host is required",
 		},
 		{
-			name: "MQTT enabled but no topic prefix",
+			name: "MQTT enabled but no topic prefix - should use default",
 			yaml: `
 solarController:
   httpPort: 8080
   mqtt:
     enabled: true
     host: mqtt://localhost:1883
-    topicPrefix: ""
   epever:
     enabled: false
 `,
-			wantErr: true,
-			errMsg:  "MQTT topic prefix is required",
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.TopicPrefix != "solar" {
+					t.Errorf("TopicPrefix = %s, want solar (default)", c.SolarController.TopicPrefix)
+				}
+			},
 		},
 		{
 			name: "MQTT disabled - no validation errors",
@@ -252,12 +255,12 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
+  topicPrefix: home/solar
   mqtt:
     enabled: true
     host: mqtt://broker.example.com:1883
     username: solaruser
     password: secretpassword
-    topicPrefix: home/solar
   epever:
     enabled: false
 `,
@@ -288,6 +291,126 @@ someOtherConfig:
 `,
 			wantErr: true,
 			errMsg:  "invalid HTTP port",
+		},
+		{
+			name: "Solace configuration valid with all fields",
+			yaml: `
+solarController:
+  httpPort: 8080
+  topicPrefix: solar/metrics
+  solace:
+    enabled: true
+    host: tcp://solace-broker:55555
+    username: solaceuser
+    password: solacepass
+    vpnName: default
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if !c.SolarController.Solace.Enabled {
+					t.Error("Solace should be enabled")
+				}
+				if c.SolarController.Solace.Host != "tcp://solace-broker:55555" {
+					t.Errorf("Solace Host = %s, want tcp://solace-broker:55555", c.SolarController.Solace.Host)
+				}
+				if c.SolarController.Solace.Username != "solaceuser" {
+					t.Errorf("Solace Username = %s, want solaceuser", c.SolarController.Solace.Username)
+				}
+				if c.SolarController.Solace.Password != "solacepass" {
+					t.Errorf("Solace Password = %s, want solacepass", c.SolarController.Solace.Password)
+				}
+				if c.SolarController.Solace.VpnName != "default" {
+					t.Errorf("Solace VpnName = %s, want default", c.SolarController.Solace.VpnName)
+				}
+				if c.SolarController.TopicPrefix != "solar/metrics" {
+					t.Errorf("TopicPrefix = %s, want solar/metrics", c.SolarController.TopicPrefix)
+				}
+			},
+		},
+		{
+			name: "Solace enabled but no host",
+			yaml: `
+solarController:
+  httpPort: 8080
+  topicPrefix: solar/metrics
+  solace:
+    enabled: true
+    host: ""
+    vpnName: default
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "solace host is required",
+		},
+		{
+			name: "Solace enabled but no VPN name",
+			yaml: `
+solarController:
+  httpPort: 8080
+  topicPrefix: solar/metrics
+  solace:
+    enabled: true
+    host: tcp://solace-broker:55555
+    vpnName: ""
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "solace VPN name is required",
+		},
+		{
+			name: "Solace enabled but no topic prefix - should use default",
+			yaml: `
+solarController:
+  httpPort: 8080
+  solace:
+    enabled: true
+    host: tcp://solace-broker:55555
+    vpnName: default
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.TopicPrefix != "solar" {
+					t.Errorf("TopicPrefix = %s, want solar (default)", c.SolarController.TopicPrefix)
+				}
+			},
+		},
+		{
+			name: "Solace disabled - no validation errors",
+			yaml: `
+solarController:
+  httpPort: 8080
+  solace:
+    enabled: false
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+		},
+		{
+			name: "Both MQTT and Solace enabled - should error",
+			yaml: `
+solarController:
+  httpPort: 8080
+  mqtt:
+    enabled: true
+    host: mqtt://localhost:1883
+    topicPrefix: solar/metrics
+  solace:
+    enabled: true
+    host: tcp://solace-broker:55555
+    vpnName: default
+    topicPrefix: solar/metrics
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "only one publisher can be enabled at a time",
 		},
 	}
 

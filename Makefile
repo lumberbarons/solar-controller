@@ -1,4 +1,4 @@
-.PHONY: help build test clean build-frontend build-backend build-linux-arm64 deploy
+.PHONY: help build test clean build-frontend build-backend build-with-cgo build-linux-arm64 deploy
 
 .DEFAULT_GOAL := help
 
@@ -26,8 +26,11 @@ build-frontend: ## Build only frontend (React app)
 build-backend: ## Build only backend (Go binary)
 	go build -ldflags="$(LDFLAGS)" -o bin/solar-controller ./cmd/controller
 
-build-linux-arm64: build-frontend ## Build backend for Linux ARM64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$(LDFLAGS) -s -w" -trimpath -o bin/solar-controller-linux-arm64 ./cmd/controller
+build-with-cgo: build-frontend ## Build backend with CGO enabled (for Solace support)
+	CGO_ENABLED=1 go build -ldflags="$(LDFLAGS)" -o bin/solar-controller ./cmd/controller
+
+build-linux-arm64: build-frontend ## Build backend for Linux ARM64 (requires native ARM64 or cross-compiler)
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags="$(LDFLAGS) -s -w" -trimpath -o bin/solar-controller-linux-arm64 ./cmd/controller
 
 test: ## Run tests
 	go test ./...

@@ -17,9 +17,32 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build frontend
+        run: make build-frontend
+
+      - name: Upload site build artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: site-build
+          path: internal/static/build
+          retention-days: 1
+
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: build-frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -29,16 +52,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
+      - name: Download site build artifacts
+        uses: actions/download-artifact@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Get Go dependencies
-        run: go mod download
-
-      - name: Build frontend
-        run: make build-frontend
+          name: site-build
+          path: internal/static/build
 
       - name: Run Go tests
         run: go test -v -race -cover ./...
@@ -46,6 +64,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: build-frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -55,10 +74,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
+      - name: Download site build artifacts
+        uses: actions/download-artifact@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          name: site-build
+          path: internal/static/build
 
       - name: Install frontend dependencies
         working-directory: ./site
@@ -67,9 +87,6 @@ jobs:
       - name: Run ESLint
         working-directory: ./site
         run: npm run lint
-
-      - name: Build frontend
-        run: make build-frontend
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
