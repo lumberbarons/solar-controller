@@ -1,10 +1,11 @@
-## Description
+## Summary
 
-<!-- Brief description of what this PR does -->
+<!-- Brief summary of what this PR does -->
 
 ## Changes
 
-- <!-- Point form list of changes in this PR -->
+- <!-- Point form list of functional changes in this PR -->
+- <!-- Not literally every change, just the big chunks -->
 
 ## Testing
 
