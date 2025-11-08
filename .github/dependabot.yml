@@ -9,7 +9,7 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
-      - "go"
+      - "backend"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"

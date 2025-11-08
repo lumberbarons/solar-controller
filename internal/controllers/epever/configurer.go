@@ -98,8 +98,9 @@ type ControllerConfig struct {
 
 // BatteryProfile contains battery identity settings
 type BatteryProfile struct {
-	BatteryType     *string `json:"batteryType,omitempty"`
-	BatteryCapacity *uint16 `json:"batteryCapacity,omitempty"`
+	BatteryType         *string  `json:"batteryType,omitempty"`
+	BatteryCapacity     *uint16  `json:"batteryCapacity,omitempty"`
+	TempCompCoefficient *float32 `json:"tempCompCoefficient,omitempty"`
 }
 
 // ChargingParameters contains all charging algorithm settings
@@ -360,6 +361,104 @@ func (sc *Configurer) writeSingle(c *gin.Context, address, value uint16, descrip
 	return nil
 }
 
+// writeVoltageParametersBlock writes all 12 voltage parameter registers (0x9003-0x900E) in a single operation.
+// For any voltage parameters not provided in the config, it uses values from the cached config.
+func (sc *Configurer) writeVoltageParametersBlock(c *gin.Context, config *ControllerConfig) error {
+	ctx := c.Request.Context()
+
+	// Get current config from cache to fill in any missing values
+	cachedConfig, err := sc.getCachedConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get cached config for voltage parameters: %w", err)
+	}
+
+	// Use provided values, fall back to cached values if not provided
+	overVoltDisconnect := config.OverVoltDisconnectVoltage
+	if overVoltDisconnect == 0 {
+		overVoltDisconnect = cachedConfig.OverVoltDisconnectVoltage
+	}
+	chargingLimit := config.ChargingLimitVoltage
+	if chargingLimit == 0 {
+		chargingLimit = cachedConfig.ChargingLimitVoltage
+	}
+	overVoltReconnect := config.OverVoltReconnectVoltage
+	if overVoltReconnect == 0 {
+		overVoltReconnect = cachedConfig.OverVoltReconnectVoltage
+	}
+	equalization := config.EqualizationVoltage
+	if equalization == 0 {
+		equalization = cachedConfig.EqualizationVoltage
+	}
+	boost := config.BoostVoltage
+	if boost == 0 {
+		boost = cachedConfig.BoostVoltage
+	}
+	floatVolt := config.FloatVoltage
+	if floatVolt == 0 {
+		floatVolt = cachedConfig.FloatVoltage
+	}
+	boostReconnect := config.BoostReconnectChargingVoltage
+	if boostReconnect == 0 {
+		boostReconnect = cachedConfig.BoostReconnectChargingVoltage
+	}
+	lowVoltReconnect := config.LowVoltReconnectVoltage
+	if lowVoltReconnect == 0 {
+		lowVoltReconnect = cachedConfig.LowVoltReconnectVoltage
+	}
+	underVoltRecover := config.UnderVoltReconnectVoltage
+	if underVoltRecover == 0 {
+		underVoltRecover = cachedConfig.UnderVoltReconnectVoltage
+	}
+	underVoltWarning := config.UnderVoltWarningVoltage
+	if underVoltWarning == 0 {
+		underVoltWarning = cachedConfig.UnderVoltWarningVoltage
+	}
+	lowVoltDisconnect := config.LowVoltDisconnectVoltage
+	if lowVoltDisconnect == 0 {
+		lowVoltDisconnect = cachedConfig.LowVoltDisconnectVoltage
+	}
+	dischargingLimit := config.DischargingLimitVoltage
+	if dischargingLimit == 0 {
+		dischargingLimit = cachedConfig.DischargingLimitVoltage
+	}
+
+	// Convert all voltage values to uint16 (multiply by 100 for device format)
+	values := []uint16{
+		uint16(overVoltDisconnect * 100), // 0x9003
+		uint16(chargingLimit * 100),      // 0x9004
+		uint16(overVoltReconnect * 100),  // 0x9005
+		uint16(equalization * 100),       // 0x9006
+		uint16(boost * 100),              // 0x9007
+		uint16(floatVolt * 100),          // 0x9008
+		uint16(boostReconnect * 100),     // 0x9009
+		uint16(lowVoltReconnect * 100),   // 0x900A
+		uint16(underVoltRecover * 100),   // 0x900B
+		uint16(underVoltWarning * 100),   // 0x900C
+		uint16(lowVoltDisconnect * 100),  // 0x900D
+		uint16(dischargingLimit * 100),   // 0x900E
+	}
+
+	// Build byte array for all 12 registers (24 bytes)
+	bytes := make([]byte, 24)
+	for i, value := range values {
+		binary.BigEndian.PutUint16(bytes[i*2:], value)
+	}
+
+	log.Info("Writing voltage parameters block (0x9003-0x900E) to controller")
+	_, err = sc.modbusClient.WriteMultipleRegisters(ctx, regOverVoltDisconnect, 12, bytes)
+	if err != nil {
+		log.Warn("Failed to write voltage parameters block", err.Error())
+		if sc.prometheusCollector != nil {
+			sc.prometheusCollector.IncrementWriteFailures()
+		}
+		return fmt.Errorf("failed to write voltage parameters block: %w", err)
+	}
+
+	// Allow device time to commit all writes to EEPROM
+	time.Sleep(500 * time.Millisecond)
+	return nil
+}
+
 func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var config ControllerConfig
@@ -431,7 +530,22 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 				return
 			}
 
-			// Validation passed, proceed with writes
+			// Check if any voltage parameters are present
+			voltageParamsPresent := config.ChargingLimitVoltage > 0 ||
+				config.EqualizationVoltage > 0 ||
+				config.BoostVoltage > 0 ||
+				config.FloatVoltage > 0 ||
+				config.BoostReconnectChargingVoltage > 0
+
+			// If voltage parameters are present, write the entire block
+			if voltageParamsPresent {
+				if err := sc.writeVoltageParametersBlock(c, &proposedConfig); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
+
+			// Write non-voltage parameters individually
 			if config.EqualizationCycle > 0 {
 				if err := sc.writeSingle(c, regEqualizationChargingCycle, config.EqualizationCycle, "equalization cycle"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -446,30 +560,6 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 				}
 			}
 
-			if config.ChargingLimitVoltage > 0 {
-				chargingLimitVoltage := uint16(config.ChargingLimitVoltage * voltageDivisor)
-				if err := sc.writeSingle(c, regChargingLimitVoltage, chargingLimitVoltage, "charging limit voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-			}
-
-			if config.EqualizationVoltage > 0 {
-				equalizationVoltage := uint16(config.EqualizationVoltage * voltageDivisor)
-				if err := sc.writeSingle(c, regEqualizationVoltage, equalizationVoltage, "equalization voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-			}
-
-			if config.BoostVoltage > 0 {
-				boostVoltage := uint16(config.BoostVoltage * voltageDivisor)
-				if err := sc.writeSingle(c, regBoostVoltage, boostVoltage, "boost voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-			}
-
 			if config.BoostDuration > 0 {
 				if err := sc.writeSingle(c, regBoostChargingTime, config.BoostDuration, "boost duration"); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -477,26 +567,8 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 				}
 			}
 
-			if config.FloatVoltage > 0 {
-				floatVoltage := uint16(config.FloatVoltage * voltageDivisor)
-				if err := sc.writeSingle(c, regFloatVoltage, floatVoltage, "float voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-			}
-
-			if config.BoostReconnectChargingVoltage > 0 {
-				boostReconnectChargingVoltage := uint16(config.BoostReconnectChargingVoltage * voltageDivisor)
-				if err := sc.writeSingle(c, regBoostReconnectVoltage, boostReconnectChargingVoltage, "boost reconnect charging voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-			}
-
 			// Invalidate cache after writing charging parameters
 			sc.invalidateCache()
-			// Allow device time to fully commit all changes to EEPROM before reading back
-			time.Sleep(500 * time.Millisecond)
 		}
 
 		newConfig, err := sc.getCachedConfig(c.Request.Context())
@@ -520,8 +592,9 @@ func (sc *Configurer) BatteryProfileGet() gin.HandlerFunc {
 		}
 
 		profile := gin.H{
-			"batteryType":     config.BatteryType,
-			"batteryCapacity": config.BatteryCapacity,
+			"batteryType":         config.BatteryType,
+			"batteryCapacity":     config.BatteryCapacity,
+			"tempCompCoefficient": config.TempCompCoefficient,
 		}
 		c.JSON(http.StatusOK, profile)
 	}
@@ -565,6 +638,19 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 			}
 		}
 
+		// Check and write temperature compensation coefficient if present
+		if tempCompCoefficientRaw, ok := rawData["tempCompCoefficient"]; ok {
+			var tempCompCoefficient float32
+			if err := json.Unmarshal(tempCompCoefficientRaw, &tempCompCoefficient); err == nil {
+				tempCompCoefficientInt := uint16(tempCompCoefficient * voltageDivisor)
+				if err := sc.writeSingle(c, regTempCompCoefficient, tempCompCoefficientInt, "temperature compensation coefficient"); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				writeSucceeded = true
+			}
+		}
+
 		// Invalidate cache after successful write
 		if writeSucceeded {
 			sc.invalidateCache()
@@ -580,8 +666,9 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 			return
 		}
 		profile := gin.H{
-			"batteryType":     config.BatteryType,
-			"batteryCapacity": config.BatteryCapacity,
+			"batteryType":         config.BatteryType,
+			"batteryCapacity":     config.BatteryCapacity,
+			"tempCompCoefficient": config.TempCompCoefficient,
 		}
 		c.JSON(http.StatusOK, profile)
 	}
@@ -744,8 +831,28 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 
 		// Track if any writes succeeded
 		writeSucceeded := false
+		voltageParamsPresent := false
 
-		// Write each field that is present in the request
+		// Check if any voltage parameters are present in the request
+		voltageFields := []string{"chargingLimitVoltage", "equalizationVoltage", "boostVoltage",
+			"floatVoltage", "boostReconnectChargingVoltage"}
+		for _, field := range voltageFields {
+			if _, ok := rawData[field]; ok {
+				voltageParamsPresent = true
+				break
+			}
+		}
+
+		// If any voltage parameters are present, write the entire voltage block
+		if voltageParamsPresent {
+			if err := sc.writeVoltageParametersBlock(c, &proposedConfig); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			writeSucceeded = true
+		}
+
+		// Write non-voltage parameters individually
 		if val, ok := rawData["equalizationCycle"]; ok {
 			var equalizationCycle uint16
 			if err := json.Unmarshal(val, &equalizationCycle); err == nil {
@@ -768,39 +875,6 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 			}
 		}
 
-		if val, ok := rawData["chargingLimitVoltage"]; ok {
-			var chargingLimitVoltage float32
-			if err := json.Unmarshal(val, &chargingLimitVoltage); err == nil {
-				if err := sc.writeSingle(c, regChargingLimitVoltage, uint16(chargingLimitVoltage*voltageDivisor), "charging limit voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		if val, ok := rawData["equalizationVoltage"]; ok {
-			var equalizationVoltage float32
-			if err := json.Unmarshal(val, &equalizationVoltage); err == nil {
-				if err := sc.writeSingle(c, regEqualizationVoltage, uint16(equalizationVoltage*voltageDivisor), "equalization voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		if val, ok := rawData["boostVoltage"]; ok {
-			var boostVoltage float32
-			if err := json.Unmarshal(val, &boostVoltage); err == nil {
-				if err := sc.writeSingle(c, regBoostVoltage, uint16(boostVoltage*voltageDivisor), "boost voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
 		if val, ok := rawData["boostDuration"]; ok {
 			var boostDuration uint16
 			if err := json.Unmarshal(val, &boostDuration); err == nil {
@@ -812,33 +886,9 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 			}
 		}
 
-		if val, ok := rawData["floatVoltage"]; ok {
-			var floatVoltage float32
-			if err := json.Unmarshal(val, &floatVoltage); err == nil {
-				if err := sc.writeSingle(c, regFloatVoltage, uint16(floatVoltage*voltageDivisor), "float voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		if val, ok := rawData["boostReconnectChargingVoltage"]; ok {
-			var boostReconnectChargingVoltage float32
-			if err := json.Unmarshal(val, &boostReconnectChargingVoltage); err == nil {
-				if err := sc.writeSingle(c, regBoostReconnectVoltage, uint16(boostReconnectChargingVoltage*voltageDivisor), "boost reconnect charging voltage"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
 		// Invalidate cache after successful write
 		if writeSucceeded {
 			sc.invalidateCache()
-			// Allow device time to fully commit all changes to EEPROM before reading back
-			time.Sleep(500 * time.Millisecond)
 		}
 
 		// Return updated parameters (this will fetch fresh data from device)
