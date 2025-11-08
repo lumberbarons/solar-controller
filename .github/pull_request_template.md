@@ -4,7 +4,8 @@
 
 ## Changes
 
-- <!-- Point form list of changes in this PR -->
+- <!-- Point form list of functional changes in this PR -->
+- <!-- Not literally every change, just the big chunks -->
 
 ## Testing
 
