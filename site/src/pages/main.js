@@ -23,7 +23,7 @@ class Main extends React.Component {
   fetchMetrics() {
     this.setState({loading: true});
 
-    axios.get(`/api/solar/metrics`)
+    axios.get(`/api/epever/metrics`)
       .then(res => {
         this.setState({metrics: res.data, error: undefined, loading: false});
       }).catch(error => {

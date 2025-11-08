@@ -156,10 +156,14 @@ Both publishers implement the `MessagePublisher` interface and follow the same t
 - **Framework**: Gin (Go web framework)
 - **Endpoints**:
   - `/metrics` - Prometheus metrics
-  - `/api/{controller}/metrics` - JSON metrics for each controller
-  - `/api/{controller}/config` - Configuration endpoints (GET/PATCH)
+  - `/api/epever/metrics` - JSON metrics for Epever controller
+  - `/api/epever/battery-profile` - Battery profile configuration (GET/PATCH)
+  - `/api/epever/charging-parameters` - Charging parameters configuration (GET/PATCH)
+  - `/api/epever/time` - Controller time (GET/PATCH)
+  - `/api/epever/config` - Legacy configuration endpoint (GET/PATCH)
   - `/*` - Embedded React SPA (via `//go:embed site/build`)
 - **SPA Support**: NoRoute handler serves index.html for client-side routing (React Router)
+- **Namespace**: Each controller registers endpoints under `/api/{controllerName}` where the controller name matches the hardware type (e.g., "epever")
 
 The React frontend is embedded into the binary at build time and served statically by Gin. The frontend build artifacts are copied from `site/build` to `internal/static/build` during the build process, where they're embedded using `//go:embed`.
 

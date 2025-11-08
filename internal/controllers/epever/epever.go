@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	namespace = "solar" // legacy
+	namespace = "epever"
 )
 
 type Configuration struct {

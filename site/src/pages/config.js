@@ -61,8 +61,8 @@ class Config extends React.Component {
 
     // Fetch both battery profile and charging parameters
     Promise.all([
-      axios.get(`/api/solar/battery-profile`),
-      axios.get(`/api/solar/charging-parameters`)
+      axios.get(`/api/epever/battery-profile`),
+      axios.get(`/api/epever/charging-parameters`)
     ])
       .then(([profileRes, paramsRes]) => {
         let profileClone = JSON.parse(JSON.stringify(profileRes.data));
@@ -132,7 +132,7 @@ class Config extends React.Component {
       payload.tempCompCoefficient = parseFloat(current.tempCompCoefficient);
     }
 
-    axios.patch(`/api/solar/battery-profile`, payload)
+    axios.patch(`/api/epever/battery-profile`, payload)
       .then(res => {
         let profileClone = JSON.parse(JSON.stringify(res.data));
         const isUserDefined = res.data.batteryType === 'userDefined';
@@ -145,7 +145,7 @@ class Config extends React.Component {
         this.setSuccessMessage('Battery profile saved successfully!');
 
         // Auto-refresh charging parameters after battery profile save
-        return axios.get(`/api/solar/charging-parameters`);
+        return axios.get(`/api/epever/charging-parameters`);
       })
       .then(paramsRes => {
         let paramsClone = JSON.parse(JSON.stringify(paramsRes.data));
@@ -245,7 +245,7 @@ class Config extends React.Component {
       payload.dischargingLimitVoltage = parseFloat(current.dischargingLimitVoltage);
     }
 
-    axios.patch(`/api/solar/charging-parameters`, payload)
+    axios.patch(`/api/epever/charging-parameters`, payload)
       .then(res => {
         let paramsClone = JSON.parse(JSON.stringify(res.data));
         this.setState({
