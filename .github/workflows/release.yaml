@@ -165,9 +165,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download all artifacts
+      - name: Download binary artifacts
         uses: actions/download-artifact@v6
         with:
+          pattern: binary-*
+          path: artifacts
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: package-*
           path: artifacts
 
       - name: Organize release assets
