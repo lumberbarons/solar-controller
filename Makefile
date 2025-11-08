@@ -1,4 +1,4 @@
-.PHONY: help build test clean build-frontend build-backend build-linux-arm64
+.PHONY: help build test clean build-frontend build-backend build-linux-arm64 deploy
 
 .DEFAULT_GOAL := help
 
@@ -37,3 +37,14 @@ clean: ## Clean build artifacts
 	rm -f bin/solar-controller-linux-arm64
 	rm -rf site/build
 	rm -rf internal/static/build
+
+deploy: build-linux-arm64 ## Deploy to remote server (requires REMOTE_HOST=user@host)
+	@if [ -z "$(REMOTE_HOST)" ]; then \
+		echo "Error: REMOTE_HOST is required. Usage: make deploy REMOTE_HOST=user@host"; \
+		exit 1; \
+	fi
+	@echo "Copying binary to $(REMOTE_HOST)..."
+	scp bin/solar-controller-linux-arm64 $(REMOTE_HOST):/home/$$(echo $(REMOTE_HOST) | cut -d@ -f1)/solar-controller
+	@echo "Installing and restarting service on remote server..."
+	ssh $(REMOTE_HOST) 'sudo chown root:root solar-controller && sudo mv solar-controller /usr/bin && sudo service solar-controller restart'
+	@echo "Deployment complete!"

@@ -1,6 +1,6 @@
-## Description
+## Summary
 
-<!-- Brief description of what this PR does -->
+<!-- Brief summary of what this PR does -->
 
 ## Changes
 
