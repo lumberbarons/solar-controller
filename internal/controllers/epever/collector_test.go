@@ -12,23 +12,34 @@ func TestCollector_GetStatus(t *testing.T) {
 
 	t.Run("successful status collection", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				// Return realistic test data based on the address and quantity
 				switch address {
-				case regArrayVoltage: // Array voltage and current (2 registers)
-					return testingpkg.CreateModbusResponse(1850, 520), nil // 18.5V, 5.2A
-				case regArrayPower: // Array power (2 registers for 32-bit)
-					return testingpkg.CreateModbusResponse(0, 962), nil // ~96.2W
-				case regBatteryVoltage: // Battery voltage (1 register)
-					return testingpkg.CreateModbusResponse(1280), nil // 12.8V
-				case regChargingCurrent: // Charging current (1 register)
-					return testingpkg.CreateModbusResponse(480), nil // 4.8A
-				case regChargingPower: // Charging power (2 registers for 32-bit)
-					return testingpkg.CreateModbusResponse(0, 614), nil // ~61.4W
+				case regArrayVoltage: // Batch read (18 registers: 0x3100-0x3111)
+					if quantity == 18 {
+						// Create 18 registers of data (36 bytes)
+						// 0x3100: Array voltage (1850 = 18.5V)
+						// 0x3101: Array current (520 = 5.2A)
+						// 0x3102-0x3103: Array power (0, 962 = ~96.2W as 32-bit)
+						// 0x3104: Battery voltage (1280 = 12.8V)
+						// 0x3105: Charging current (480 = 4.8A)
+						// 0x3106-0x3107: Charging power (0, 614 = ~61.4W as 32-bit)
+						// 0x3108-0x310F: Unused (8 registers, set to 0)
+						// 0x3110: Battery temp (2500 = 25°C)
+						// 0x3111: Device temp (3200 = 32°C)
+						return testingpkg.CreateModbusResponse(
+							1850, 520, // Array V/I
+							0, 962, // Array power (32-bit)
+							1280,   // Battery voltage
+							480,    // Charging current
+							0, 614, // Charging power (32-bit)
+							0, 0, 0, 0, 0, 0, 0, 0, // Unused registers (0x3108-0x310F)
+							2500, 3200, // Battery temp, Device temp
+						), nil
+					}
+					return testingpkg.CreateModbusResponse(1850, 520), nil // Legacy fallback
 				case regBatterySOC: // Battery SOC (1 register)
 					return testingpkg.CreateModbusResponse(85), nil // 85%
-				case regBatteryTemperature: // Battery and device temp (2 registers)
-					return testingpkg.CreateModbusResponse(2500, 3200), nil // 25°C, 32°C
 				case regEnergyGeneratedDaily: // Daily energy (2 registers for 32-bit)
 					return testingpkg.CreateModbusResponse(0, 1550), nil // 15.5 kWh
 				case regControllerStatus: // Controller status (1 register)
@@ -109,33 +120,13 @@ func TestCollector_GetStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("modbus read failure for temperature", func(t *testing.T) {
+	t.Run("modbus read failure for batch data", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
-				if address == regBatteryTemperature {
+				if address == regArrayVoltage {
 					return nil, &testingpkg.ModbusTestError{Message: "device disconnected"}
 				}
-				// Return valid data for other addresses to get to temperature read
-				switch address {
-				case regArrayVoltage:
-					return testingpkg.CreateModbusResponse(1850, 520), nil
-				case regArrayPower:
-					return testingpkg.CreateModbusResponse(0, 962), nil
-				case regBatteryVoltage:
-					return testingpkg.CreateModbusResponse(1280), nil
-				case regChargingCurrent:
-					return testingpkg.CreateModbusResponse(480), nil
-				case regChargingPower:
-					return testingpkg.CreateModbusResponse(0, 614), nil
-				case regBatterySOC:
-					return testingpkg.CreateModbusResponse(85), nil
-				case regEnergyGeneratedDaily:
-					return testingpkg.CreateModbusResponse(0, 1550), nil
-				case regControllerStatus:
-					return testingpkg.CreateModbusResponse(0x0004), nil
-				default:
-					return testingpkg.CreateModbusResponse(0), nil
-				}
+				return testingpkg.CreateModbusResponse(0), nil
 			},
 		}
 
@@ -144,28 +135,30 @@ func TestCollector_GetStatus(t *testing.T) {
 		_, err := collector.GetStatus(ctx)
 
 		if err == nil {
-			t.Error("GetStatus() should return error when temperature read fails")
+			t.Error("GetStatus() should return error when batch read fails")
 		}
 	})
 
 	t.Run("negative temperature handling", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
+			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				switch address {
-				case regArrayVoltage:
+				case regArrayVoltage: // Batch read with negative temperatures
+					if quantity == 18 {
+						// Same as successful test but with negative temperatures
+						return testingpkg.CreateModbusResponse(
+							1850, 520, // Array V/I
+							0, 962, // Array power (32-bit)
+							1280,   // Battery voltage
+							480,    // Charging current
+							0, 614, // Charging power (32-bit)
+							0, 0, 0, 0, 0, 0, 0, 0, // Unused registers
+							64536, 65036, // Battery temp (-10°C), Device temp (-5°C)
+						), nil
+					}
 					return testingpkg.CreateModbusResponse(1850, 520), nil
-				case regArrayPower:
-					return testingpkg.CreateModbusResponse(0, 962), nil
-				case regBatteryVoltage:
-					return testingpkg.CreateModbusResponse(1280), nil
-				case regChargingCurrent:
-					return testingpkg.CreateModbusResponse(480), nil
-				case regChargingPower:
-					return testingpkg.CreateModbusResponse(0, 614), nil
 				case regBatterySOC:
 					return testingpkg.CreateModbusResponse(85), nil
-				case regBatteryTemperature: // -10°C battery, -5°C device
-					return testingpkg.CreateModbusResponse(64536, 65036), nil
 				case regEnergyGeneratedDaily:
 					return testingpkg.CreateModbusResponse(0, 1550), nil
 				case regControllerStatus:

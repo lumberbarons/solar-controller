@@ -1,14 +1,10 @@
-## Summary
+## Description
 
 <!-- Brief description of what this PR does -->
 
-Fixes #<!-- issue number, or remove this line if not applicable -->
-
 ## Changes
 
--
--
--
+- <!-- Point form list of changes in this PR -->
 
 ## Testing
 

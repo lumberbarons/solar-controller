@@ -128,6 +128,10 @@ class Config extends React.Component {
       payload.batteryCapacity = parseInt(current.batteryCapacity);
     }
 
+    if(current.tempCompCoefficient !== original.tempCompCoefficient) {
+      payload.tempCompCoefficient = parseFloat(current.tempCompCoefficient);
+    }
+
     axios.patch(`/api/solar/battery-profile`, payload)
       .then(res => {
         let profileClone = JSON.parse(JSON.stringify(res.data));
@@ -275,7 +279,7 @@ class Config extends React.Component {
   }
 
   render() {
-    const batteryProfile = this.state.batteryProfile || { batteryType: '', batteryCapacity: '' };
+    const batteryProfile = this.state.batteryProfile || { batteryType: '', batteryCapacity: '', tempCompCoefficient: '' };
     const chargingParameters = this.state.chargingParameters || {
       boostDuration: '', equalizationCycle: '', equalizationDuration: '',
       boostVoltage: '', boostReconnectChargingVoltage: '', floatVoltage: '',
@@ -343,6 +347,16 @@ class Config extends React.Component {
                     label="Battery Capacity (Ah)"
                     name="batteryCapacity"
                     value={batteryProfile.batteryCapacity}
+                    onChange={this.handleBatteryProfileChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    label="Temp Comp Coeff (mV/°C/2V)"
+                    name="tempCompCoefficient"
+                    value={batteryProfile.tempCompCoefficient}
                     onChange={this.handleBatteryProfileChange}
                   />
                 </Grid>
