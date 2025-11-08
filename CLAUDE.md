@@ -39,6 +39,9 @@ make clean
 # Build the application (requires frontend to be built first)
 go build -o bin/solar-controller ./cmd/controller
 
+# Build with CGO enabled (required for Solace support)
+make build-with-cgo
+
 # Run with configuration
 ./bin/solar-controller -config path/to/config.yaml
 
@@ -54,6 +57,8 @@ go get -d -v ./...
 # Tidy dependencies
 go mod tidy
 ```
+
+**Note:** The Solace messaging library requires CGO to be enabled. When building locally with Solace support, use `make build-with-cgo` or set `CGO_ENABLED=1` when running `go build`.
 
 ### Frontend (React)
 
@@ -85,15 +90,21 @@ docker run solar-controller -config /etc/solar-controller/config.yaml
 
 ### Release
 
-Uses goreleaser for multi-platform builds and packaging:
+The project uses GitHub Actions for multi-platform releases with native builds on split runners:
 
 ```bash
-# Create release (requires git tag)
-goreleaser release
-
-# Test release build without publishing
-goreleaser release --snapshot --clean
+# Create a release by pushing a tag
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
 ```
+
+The release workflow:
+- Builds binaries natively on architecture-specific runners (CGO enabled)
+- Creates .deb and .rpm packages using nfpm
+- Builds Docker images for both amd64 and arm64
+- Creates a GitHub release with all artifacts
+
+**Note:** CGO is required for the Solace messaging library, so all builds must be done on native architecture runners or with appropriate cross-compilation toolchains.
 
 ## Architecture
 

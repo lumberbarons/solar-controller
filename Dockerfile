@@ -14,8 +14,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY cmd/ cmd/
 COPY internal/ internal/
 
-# Build with optimizations for smaller binary
-RUN CGO_ENABLED=0 GOOS=linux go build \
+# Build with CGO enabled (required for Solace library)
+RUN CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-w -s" \
     -o /go/bin/solar-controller \
     ./cmd/controller
