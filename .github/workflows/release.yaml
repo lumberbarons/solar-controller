@@ -146,7 +146,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
           ARCH: ${{ matrix.nfpm_arch }}
         run: |
-          nfpm package --packager ${{ matrix.format }} --target dist/
+          nfpm package --config .nfpm.yaml --packager ${{ matrix.format }} --target dist/
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v5
