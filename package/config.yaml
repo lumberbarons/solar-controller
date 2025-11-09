@@ -4,17 +4,4 @@ solarController:
   epever:
     enabled: true
     serialPort: /dev/ttyXRUSB0
-    publishPeriod: 60
-  mqtt:
-    enabled: false
-    host:
-    username:
-    password:
-    topicPrefix: solar/metrics
-  solace:
-    enabled: false
-    host:
-    username:
-    password:
-    vpnName: default
-    topicPrefix: solar/metrics
+    publishPeriod: 30

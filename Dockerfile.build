@@ -1,0 +1,21 @@
+FROM --platform=linux/arm64 golang:1.24-trixie AS go-builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+ARG BUILD_TIME
+ARG GIT_COMMIT
+
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build \
+    -ldflags="-X 'main.Version=${VERSION}' -X 'main.BuildTime=${BUILD_TIME}' -X 'main.GitCommit=${GIT_COMMIT}' -s -w" \
+    -trimpath \
+    -o /solar-controller-linux-arm64 \
+    ./cmd/controller
+
+FROM --platform=linux/arm64 scratch AS binary
+COPY --from=go-builder /solar-controller-linux-arm64 /solar-controller-linux-arm64

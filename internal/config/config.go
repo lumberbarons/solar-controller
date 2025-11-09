@@ -6,6 +6,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
 	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/remotewrite"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 	"gopkg.in/yaml.v3"
 )
@@ -15,14 +16,15 @@ type Config struct {
 }
 
 type SolarControllerConfiguration struct {
-	HTTPPort    int                  `yaml:"httpPort"`
-	Debug       bool                 `yaml:"debug"`
-	DeviceID    string               `yaml:"deviceId"`
-	TopicPrefix string               `yaml:"topicPrefix"`
-	Mqtt        mqtt.Configuration   `yaml:"mqtt"`
-	Solace      solace.Configuration `yaml:"solace"`
-	File        file.Configuration   `yaml:"file"`
-	Epever      epever.Configuration `yaml:"epever"`
+	HTTPPort    int                       `yaml:"httpPort"`
+	Debug       bool                      `yaml:"debug"`
+	DeviceID    string                    `yaml:"deviceId"`
+	TopicPrefix string                    `yaml:"topicPrefix"`
+	Mqtt        mqtt.Configuration        `yaml:"mqtt"`
+	Solace      solace.Configuration      `yaml:"solace"`
+	File        file.Configuration        `yaml:"file"`
+	RemoteWrite remotewrite.Configuration `yaml:"remoteWrite"`
+	Epever      epever.Configuration      `yaml:"epever"`
 }
 
 // Load parses and validates configuration from YAML bytes.
@@ -65,7 +67,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid HTTP port: %d (must be 1-65535)", c.SolarController.HTTPPort)
 	}
 
-	// Validate that only one publisher is enabled (MQTT, Solace, and File are mutually exclusive)
+	// Validate that only one publisher is enabled (MQTT, Solace, File, and RemoteWrite are mutually exclusive)
 	enabledCount := 0
 	if c.SolarController.Mqtt.Enabled {
 		enabledCount++
@@ -76,8 +78,11 @@ func (c *Config) Validate() error {
 	if c.SolarController.File.Enabled {
 		enabledCount++
 	}
+	if c.SolarController.RemoteWrite.Enabled {
+		enabledCount++
+	}
 	if enabledCount > 1 {
-		return fmt.Errorf("only one publisher can be enabled at a time (MQTT, Solace, or File)")
+		return fmt.Errorf("only one publisher can be enabled at a time (MQTT, Solace, File, or RemoteWrite)")
 	}
 
 	// Note: topicPrefix has a default value of "solar", so no validation needed
@@ -103,6 +108,13 @@ func (c *Config) Validate() error {
 	if c.SolarController.File.Enabled {
 		if c.SolarController.File.Filename == "" {
 			return fmt.Errorf("file filename is required when File publisher is enabled")
+		}
+	}
+
+	// Validate RemoteWrite configuration if enabled
+	if c.SolarController.RemoteWrite.Enabled {
+		if err := c.SolarController.RemoteWrite.Validate(); err != nil {
+			return err
 		}
 	}
 

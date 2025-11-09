@@ -1,10 +1,21 @@
+# IDE
 .idea
-node_modules
+
+# OS
 .DS_Store
+
+# Build artifacts
+bin/
+dist/
 site/build
 internal/static/build
-bin/
-tmp/
 build-errors.log
-config.yaml
-dist/
+
+# Dependencies
+node_modules
+
+# Local config
+testing/config-local.yaml
+
+# Temporary files
+tmp/
