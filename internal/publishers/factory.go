@@ -7,13 +7,15 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/remotewrite"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 	log "github.com/sirupsen/logrus"
 )
 
 // NewPublisher creates a message publisher based on the configuration.
 // It returns an MQTT publisher if MQTT is enabled, a Solace publisher if Solace is enabled,
-// a File publisher if File is enabled, or a no-op publisher if none is enabled.
+// a File publisher if File is enabled, a RemoteWrite publisher if RemoteWrite is enabled,
+// or a no-op publisher if none is enabled.
 // Returns an error if multiple publishers are enabled (should be caught by config validation) or if publisher creation fails.
 func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.MessagePublisher, error) {
 	// Count enabled publishers (should never be > 1 due to config validation)
@@ -25,6 +27,9 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.Message
 		enabledCount++
 	}
 	if cfg.File.Enabled {
+		enabledCount++
+	}
+	if cfg.RemoteWrite.Enabled {
 		enabledCount++
 	}
 
@@ -48,6 +53,12 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.Message
 	if cfg.File.Enabled {
 		log.Info("Creating File publisher")
 		return file.NewPublisher(&cfg.File, cfg.TopicPrefix)
+	}
+
+	// Try RemoteWrite
+	if cfg.RemoteWrite.Enabled {
+		log.Info("Creating Prometheus RemoteWrite publisher")
+		return remotewrite.NewPublisher(&cfg.RemoteWrite, cfg.TopicPrefix, cfg.DeviceID)
 	}
 
 	// None enabled - return a no-op publisher

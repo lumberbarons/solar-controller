@@ -1,0 +1,15 @@
+solarController:
+  httpPort: 8080
+  debug: true
+  deviceId: test-controller-1
+  topicPrefix: solar
+
+  remoteWrite:
+    enabled: true
+    url: http://localhost:8428/api/v1/write
+    timeout: 30s
+
+  epever:
+    enabled: true
+    serialPort: /dev/ttys001
+    publishPeriod: 5
