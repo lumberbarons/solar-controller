@@ -23,8 +23,14 @@ make build-frontend
 # Build only backend (Go binary)
 make build-backend
 
-# Build backend for Linux ARM64
-make build-linux-arm64
+# Build backend for Linux ARM64 using Docker
+make build-linux-arm64-docker
+
+# Build Docker image
+make docker
+
+# Deploy to remote server (requires REMOTE_HOST)
+make deploy REMOTE_HOST=user@host
 
 # Run tests
 make test
@@ -81,12 +87,21 @@ npm test
 ### Docker
 
 ```bash
-# Build Docker image
+# Build Docker image using Makefile (recommended)
+make docker
+
+# Or build manually
 docker build -t solar-controller .
 
 # Run container
 docker run solar-controller -config /etc/solar-controller/config.yaml
 ```
+
+**Docker Build Features:**
+- Multi-stage build for minimal image size
+- Supports both amd64 and arm64 architectures
+- Includes all required dependencies for Solace support (CGO enabled)
+- Frontend is embedded at build time
 
 ### Release
 
@@ -104,7 +119,33 @@ The release workflow:
 - Builds Docker images for both amd64 and arm64
 - Creates a GitHub release with all artifacts
 
+**Release Artifacts:**
+- Standalone binaries for Linux (amd64/arm64) and macOS (amd64/arm64)
+- Debian packages (.deb) for easy installation on Debian/Ubuntu systems
+- RPM packages (.rpm) for RHEL/CentOS/Fedora systems
+- Multi-architecture Docker images pushed to registry
+
 **Note:** CGO is required for the Solace messaging library, so all builds must be done on native architecture runners or with appropriate cross-compilation toolchains.
+
+### Deployment
+
+The project includes a convenient deployment workflow:
+
+```bash
+# Build for Linux ARM64 and deploy to remote server
+make deploy REMOTE_HOST=user@host
+```
+
+This command:
+1. Builds the Linux ARM64 binary using Docker
+2. Copies the binary to the remote server via SCP
+3. Installs it to `/usr/bin` with proper permissions
+4. Restarts the `solar-controller` systemd service
+
+**Prerequisites:**
+- SSH access to the remote server
+- `solar-controller` systemd service configured on the remote server
+- User has sudo privileges on the remote server
 
 ## Architecture
 
@@ -200,6 +241,7 @@ Each metric message contains a JSON payload with the metric value, unit, and tim
 
 Epever controller publishes the following metrics (kebab-case naming):
 
+**Normal Metrics** (published on successful collection):
 - `array-voltage` (volts) - Solar panel voltage
 - `array-current` (amperes) - Solar panel current
 - `array-power` (watts) - Solar panel power
@@ -212,6 +254,9 @@ Epever controller publishes the following metrics (kebab-case naming):
 - `energy-generated-daily` (kilowatt-hours) - Daily energy generation
 - `charging-status` (code) - Charging status code
 - `collection-time` (seconds) - Time taken to collect metrics
+
+**Failure Metrics** (published when collection fails):
+- `collection-failure` (count) - Collection failure indicator (value is always 1, published when complete collection fails)
 
 #### Wildcard Subscriptions
 
@@ -248,7 +293,7 @@ epever_battery_voltage{device_id="controller-123"}
 ```
 
 **Batching:**
-All 12 metrics from each collection cycle are batched into a single WriteRequest, reducing HTTP overhead and improving efficiency.
+All 12 normal metrics from each successful collection cycle are batched into a single WriteRequest, reducing HTTP overhead and improving efficiency. When collection fails, a single `collection-failure` metric is published instead.
 
 ### Communication Protocols
 
@@ -387,4 +432,4 @@ See `testing/README.md` for details.
 - The application uses structured logging via `logrus`
 - All controllers register their own HTTP endpoints via `RegisterEndpoints()`
 - Always add unit tests for new code
-- Alaways run linters after code changes
+- Always run linters after code changes
