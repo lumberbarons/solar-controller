@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT, Solace, file logging, or Prometheus remote_write, with metrics also exposed via Prometheus scraping. It includes a React-based web UI for monitoring.
+Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT, Solace, AWS SNS, file logging, or Prometheus remote_write, with metrics also exposed via Prometheus scraping. It includes a React-based web UI for monitoring.
 
 ## Development Commands
 
@@ -193,6 +193,13 @@ The application supports multiple message publishers that can be enabled simulta
   - Requires message VPN configuration
   - Suitable for enterprise deployments
 
+- **AWS SNS**: Using AWS SDK for Go v2
+  - Publishes messages to an SNS topic
+  - 5-second publish timeout
+  - Supports AWS credentials from environment, config files, or IAM roles
+  - Message subject is set to the full topic path
+  - Suitable for AWS-based deployments and notification workflows
+
 - **File**: Using lumberjack for log rotation
   - Writes JSON-formatted metrics to rotating log files
   - Configurable max file size (default: 10MB)
@@ -341,6 +348,11 @@ solarController:
     password: pass
     vpnName: default
     topicPrefix: solar  # Topic prefix for Solace (default: "solar")
+  sns:
+    enabled: false
+    region: us-east-1
+    topicArn: arn:aws:sns:us-east-1:123456789012:solar-metrics
+    topicPrefix: solar  # Topic prefix for SNS (default: "solar")
   file:
     enabled: false
     filename: /var/log/solar-controller/metrics.log
@@ -378,7 +390,7 @@ The controller can be explicitly enabled or disabled via the `enabled` boolean f
 **Message Publisher Configuration:**
 - Multiple publishers can be enabled simultaneously - metrics will be published to all enabled publishers
 - If none is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published
-- MQTT, Solace, and RemoteWrite publishers have their own `topicPrefix` configuration that defaults to `"solar"` if not specified
+- MQTT, Solace, SNS, and RemoteWrite publishers have their own `topicPrefix` configuration that defaults to `"solar"` if not specified
 - File publisher does not use topicPrefix - it writes the full topic path directly to the log file
 - **MQTT Publisher:**
   - Required fields: `host`
@@ -386,6 +398,10 @@ The controller can be explicitly enabled or disabled via the `enabled` boolean f
 - **Solace Publisher:**
   - Required fields: `host`, `vpnName`
   - Optional fields: `username`, `password`, `topicPrefix` (default: "solar")
+- **SNS Publisher:**
+  - Required fields: `region`, `topicArn`
+  - Optional fields: `topicPrefix` (default: "solar")
+  - AWS credentials are loaded from standard AWS SDK credential chain (environment variables, config files, IAM roles, etc.)
 - **File Publisher:**
   - Required fields: `filename`
   - Optional fields: `maxSizeMB` (default: 10), `maxBackups` (default: 10), `compress` (default: false)
@@ -420,6 +436,7 @@ See `testing/README.md` for details.
 - `internal/controllers/` - Hardware controller implementations (epever)
 - `internal/mqtt/` - MQTT publishing functionality
 - `internal/solace/` - Solace publishing functionality
+- `internal/sns/` - AWS SNS publishing functionality
 - `internal/file/` - File publishing functionality with log rotation
 - `internal/remotewrite/` - Prometheus remote_write publishing functionality
 - `internal/publishers/` - Publisher factory and abstraction layer

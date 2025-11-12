@@ -8,6 +8,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	"github.com/lumberbarons/solar-controller/internal/remotewrite"
+	"github.com/lumberbarons/solar-controller/internal/sns"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 	log "github.com/sirupsen/logrus"
 )
@@ -34,6 +35,16 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.Message
 		publisher, err := solace.NewPublisher(&cfg.Solace, cfg.Solace.TopicPrefix)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Solace publisher: %w", err)
+		}
+		publishers = append(publishers, publisher)
+	}
+
+	// Create SNS publisher if enabled
+	if cfg.SNS.Enabled {
+		log.Info("Creating SNS publisher")
+		publisher, err := sns.NewPublisher(&cfg.SNS, cfg.SNS.TopicPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create SNS publisher: %w", err)
 		}
 		publishers = append(publishers, publisher)
 	}
