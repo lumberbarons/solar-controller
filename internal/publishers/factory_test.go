@@ -18,10 +18,10 @@ func TestNewPublisher(t *testing.T) {
 		{
 			name: "MQTT enabled but no host - returns empty MQTT publisher",
 			config: config.SolarControllerConfiguration{
-				TopicPrefix: "test",
 				Mqtt: mqtt.Configuration{
-					Enabled: true,
-					Host:    "", // Empty host prevents connection attempt
+					Enabled:     true,
+					Host:        "", // Empty host prevents connection attempt
+					TopicPrefix: "test",
 				},
 				Solace: solace.Configuration{
 					Enabled: false,
@@ -37,14 +37,14 @@ func TestNewPublisher(t *testing.T) {
 		{
 			name: "Solace enabled but no host - returns empty Solace publisher",
 			config: config.SolarControllerConfiguration{
-				TopicPrefix: "test",
 				Mqtt: mqtt.Configuration{
 					Enabled: false,
 				},
 				Solace: solace.Configuration{
-					Enabled: true,
-					Host:    "", // Empty host prevents connection attempt
-					VpnName: "default",
+					Enabled:     true,
+					Host:        "", // Empty host prevents connection attempt
+					VpnName:     "default",
+					TopicPrefix: "test",
 				},
 			},
 			wantErr: false,
@@ -72,20 +72,26 @@ func TestNewPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "Both enabled - returns error",
+			name: "Both MQTT and Solace enabled - returns MultiPublisher",
 			config: config.SolarControllerConfiguration{
-				TopicPrefix: "test",
 				Mqtt: mqtt.Configuration{
-					Enabled: true,
-					Host:    "",
+					Enabled:     true,
+					Host:        "", // Empty host prevents connection attempt
+					TopicPrefix: "test",
 				},
 				Solace: solace.Configuration{
-					Enabled: true,
-					Host:    "",
-					VpnName: "default",
+					Enabled:     true,
+					Host:        "", // Empty host prevents connection attempt
+					VpnName:     "default",
+					TopicPrefix: "test",
 				},
 			},
-			wantErr: true,
+			wantErr: false,
+			check: func(t *testing.T, pub interface{}) {
+				if _, ok := pub.(*MultiPublisher); !ok {
+					t.Errorf("expected *MultiPublisher, got %T", pub)
+				}
+			},
 		},
 		{
 			name: "MQTT disabled, Solace disabled - returns no-op publisher",

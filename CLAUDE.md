@@ -180,7 +180,7 @@ Controllers are instantiated in `main.go:buildControllers()` and conditionally e
 
 ### Message Publishing
 
-The application supports four message publisher options (mutually exclusive):
+The application supports multiple message publishers that can be enabled simultaneously:
 
 - **MQTT**: Using Eclipse Paho MQTT client
   - QoS 0 (fire-and-forget)
@@ -208,7 +208,7 @@ The application supports four message publisher options (mutually exclusive):
   - Configurable timeout (default: 30s)
   - Suitable for pushing metrics to Prometheus, Cortex, VictoriaMetrics, Grafana Cloud, etc.
 
-All publishers implement the `MessagePublisher` interface. The publisher is selected at startup via configuration, and only one can be enabled at a time (enforced by configuration validation).
+All publishers implement the `MessagePublisher` interface. Multiple publishers can be enabled simultaneously - metrics will be published to all enabled publishers (fan-out pattern). When multiple publishers are enabled, the factory creates a `MultiPublisher` that wraps all enabled publishers and distributes messages to each one. Individual publishers continue to operate independently with best-effort delivery semantics.
 
 #### Topic Structure
 
@@ -328,34 +328,36 @@ solarController:
   httpPort: 8080
   debug: false          # Enable debug logging (can also use -debug flag)
   deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
-  topicPrefix: solar            # Topic prefix for all publishers (default: "solar")
   mqtt:
-    enabled: true  # Only one of mqtt, solace, file, or remoteWrite can be enabled
+    enabled: true       # Multiple publishers can be enabled simultaneously
     host: mqtt://broker:1883
     username: user
     password: pass
+    topicPrefix: solar  # Topic prefix for MQTT (default: "solar")
   solace:
-    enabled: false  # Mutually exclusive with mqtt, file, and remoteWrite
+    enabled: false
     host: tcp://solace-broker:55555
     username: user
     password: pass
     vpnName: default
+    topicPrefix: solar  # Topic prefix for Solace (default: "solar")
   file:
-    enabled: false  # Mutually exclusive with mqtt, solace, and remoteWrite
+    enabled: false
     filename: /var/log/solar-controller/metrics.log
-    maxSizeMB: 10      # Max size per file before rotation (default: 10)
-    maxBackups: 10     # Number of old files to keep (default: 10)
-    compress: false    # Compress rotated files with gzip (default: false)
+    maxSizeMB: 10       # Max size per file before rotation (default: 10)
+    maxBackups: 10      # Number of old files to keep (default: 10)
+    compress: false     # Compress rotated files with gzip (default: false)
   remoteWrite:
-    enabled: false  # Mutually exclusive with mqtt, solace, and file
+    enabled: false
     url: http://prometheus:9090/api/v1/write  # Required when enabled
-    timeout: 30s    # Optional (default: 30s)
-    basicAuth:      # Optional (mutually exclusive with bearerToken)
+    timeout: 30s        # Optional (default: 30s)
+    basicAuth:          # Optional (mutually exclusive with bearerToken)
       username: user
       password: pass
     bearerToken: token123  # Optional (mutually exclusive with basicAuth)
-    headers:        # Optional custom headers
+    headers:            # Optional custom headers
       X-Scope-OrgID: tenant1
+    topicPrefix: solar  # Topic prefix for RemoteWrite (default: "solar")
   epever:
     enabled: true
     serialPort: /dev/ttyXRUSB0
@@ -366,7 +368,6 @@ The controller can be explicitly enabled or disabled via the `enabled` boolean f
 
 **Global Configuration:**
 - `deviceId` (optional): Unique identifier for this device instance, used in publisher topics across all controllers. Defaults to `"controller-1"` if not specified.
-- `topicPrefix` (optional): Topic prefix prepended to all published messages. Used by all publisher types (MQTT, Solace, File). Defaults to `"solar"` if not specified.
 - `httpPort` (required): HTTP server port (1-65535)
 - `debug` (optional): Enable debug logging, can also be set via `-debug` command-line flag
 
@@ -375,17 +376,24 @@ The controller can be explicitly enabled or disabled via the `enabled` boolean f
 - `publishPeriod` (required): Collection interval in seconds
 
 **Message Publisher Configuration:**
-- Only one of `mqtt`, `solace`, `file`, or `remoteWrite` can be enabled at a time
-- Configuration validation enforces this mutual exclusion
+- Multiple publishers can be enabled simultaneously - metrics will be published to all enabled publishers
 - If none is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published
-- Global `topicPrefix` is used by MQTT, Solace, and File publishers (defaults to `"solar"`)
-- Required fields for MQTT: `host`
-- Required fields for Solace: `host`, `vpnName`
-- Required fields for File: `filename`
-- Optional fields for File: `maxSizeMB` (default: 10), `maxBackups` (default: 10), `compress` (default: false)
-- Required fields for RemoteWrite: `url`
-- Optional fields for RemoteWrite: `timeout` (default: 30s), `basicAuth`, `bearerToken`, `headers`
-- RemoteWrite authentication: `basicAuth` and `bearerToken` are mutually exclusive
+- MQTT, Solace, and RemoteWrite publishers have their own `topicPrefix` configuration that defaults to `"solar"` if not specified
+- File publisher does not use topicPrefix - it writes the full topic path directly to the log file
+- **MQTT Publisher:**
+  - Required fields: `host`
+  - Optional fields: `username`, `password`, `topicPrefix` (default: "solar")
+- **Solace Publisher:**
+  - Required fields: `host`, `vpnName`
+  - Optional fields: `username`, `password`, `topicPrefix` (default: "solar")
+- **File Publisher:**
+  - Required fields: `filename`
+  - Optional fields: `maxSizeMB` (default: 10), `maxBackups` (default: 10), `compress` (default: false)
+  - Note: Topics are written directly without prefix (format: `{deviceId}/{controller}/{metric-name}`)
+- **RemoteWrite Publisher:**
+  - Required fields: `url`
+  - Optional fields: `timeout` (default: 30s), `basicAuth`, `bearerToken`, `headers`, `topicPrefix` (default: "solar")
+  - RemoteWrite authentication: `basicAuth` and `bearerToken` are mutually exclusive
 
 Debug mode can be enabled via the `debug` configuration field or the `-debug` command-line flag. The command-line flag takes precedence over the config file setting.
 
@@ -428,7 +436,7 @@ See `testing/README.md` for details.
 - Controllers implement graceful shutdown via `defer controller.Close()` in `main.go`
 - Message publishing is optional - if no publisher (MQTT, Solace, File, or RemoteWrite) is enabled, a no-op publisher is used
 - Publishers implement the `MessagePublisher` interface for easy testing and swapping
-- Only one message publisher (MQTT, Solace, File, or RemoteWrite) can be enabled at a time
+- Multiple message publishers can be enabled simultaneously - metrics are published to all enabled publishers
 - The application uses structured logging via `logrus`
 - All controllers register their own HTTP endpoints via `RegisterEndpoints()`
 - Always add unit tests for new code

@@ -13,7 +13,7 @@ func TestNewPublisher_Disabled(t *testing.T) {
 		Enabled: false,
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -29,7 +29,7 @@ func TestNewPublisher_NoFilename(t *testing.T) {
 		Filename: "",
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestNewPublisher_WithDefaults(t *testing.T) {
 		Filename: filename,
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -79,7 +79,7 @@ func TestNewPublisher_WithCustomConfig(t *testing.T) {
 		Compress:   true,
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -107,14 +107,14 @@ func TestPublish(t *testing.T) {
 		Filename: filename,
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	defer publisher.Close()
 
 	// Publish a test message
-	topicSuffix := "epever/battery-voltage"
+	topicSuffix := "controller-1/epever/battery-voltage"
 	payload := `{"value":12.5,"unit":"volts","timestamp":1699000000}`
 
 	publisher.Publish(topicSuffix, payload)
@@ -126,7 +126,7 @@ func TestPublish(t *testing.T) {
 	}
 
 	content := string(data)
-	expectedTopic := "test/prefix/epever/battery-voltage"
+	expectedTopic := "controller-1/epever/battery-voltage"
 	if !strings.Contains(content, expectedTopic) {
 		t.Errorf("expected log to contain topic %q, got %q", expectedTopic, content)
 	}
@@ -175,7 +175,7 @@ func TestPublish_MultipleMessages(t *testing.T) {
 		Filename: filename,
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -186,9 +186,9 @@ func TestPublish_MultipleMessages(t *testing.T) {
 		topic   string
 		payload string
 	}{
-		{"epever/battery-voltage", `{"value":12.5,"unit":"volts"}`},
-		{"epever/battery-current", `{"value":5.2,"unit":"amperes"}`},
-		{"epever/battery-soc", `{"value":85,"unit":"percent"}`},
+		{"controller-1/epever/battery-voltage", `{"value":12.5,"unit":"volts"}`},
+		{"controller-1/epever/battery-current", `{"value":5.2,"unit":"amperes"}`},
+		{"controller-1/epever/battery-soc", `{"value":85,"unit":"percent"}`},
 	}
 
 	for _, msg := range messages {
@@ -214,7 +214,7 @@ func TestPublish_MultipleMessages(t *testing.T) {
 			t.Fatalf("failed to parse line %d: %v", i, err)
 		}
 
-		expectedTopic := "test/prefix/" + messages[i].topic
+		expectedTopic := messages[i].topic
 		if logEntry.Topic != expectedTopic {
 			t.Errorf("line %d: expected topic %q, got %q", i, expectedTopic, logEntry.Topic)
 		}
@@ -226,11 +226,11 @@ func TestPublish_DisabledPublisher(t *testing.T) {
 		Enabled: false,
 	}
 
-	publisher, err := NewPublisher(config, "test/prefix")
+	publisher, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	// Should not panic when publishing to disabled publisher
-	publisher.Publish("test/topic", `{"value":123}`)
+	publisher.Publish("controller-1/test/topic", `{"value":123}`)
 }

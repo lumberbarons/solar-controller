@@ -13,11 +13,12 @@ import (
 )
 
 type Configuration struct {
-	Enabled  bool   `yaml:"enabled"`
-	Host     string `yaml:"host"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	VpnName  string `yaml:"vpnName"`
+	Enabled     bool   `yaml:"enabled"`
+	Host        string `yaml:"host"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	VpnName     string `yaml:"vpnName"`
+	TopicPrefix string `yaml:"topicPrefix"` // Optional: overrides global topicPrefix
 }
 
 type Publisher struct {

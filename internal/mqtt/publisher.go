@@ -9,10 +9,11 @@ import (
 )
 
 type Configuration struct {
-	Enabled  bool   `yaml:"enabled"`
-	Host     string `yaml:"host"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Enabled     bool   `yaml:"enabled"`
+	Host        string `yaml:"host"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	TopicPrefix string `yaml:"topicPrefix"` // Optional: overrides global topicPrefix
 }
 
 type Publisher struct {

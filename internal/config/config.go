@@ -19,7 +19,6 @@ type SolarControllerConfiguration struct {
 	HTTPPort    int                       `yaml:"httpPort"`
 	Debug       bool                      `yaml:"debug"`
 	DeviceID    string                    `yaml:"deviceId"`
-	TopicPrefix string                    `yaml:"topicPrefix"`
 	Mqtt        mqtt.Configuration        `yaml:"mqtt"`
 	Solace      solace.Configuration      `yaml:"solace"`
 	File        file.Configuration        `yaml:"file"`
@@ -55,10 +54,17 @@ func (c *Config) applyDefaults() {
 		c.SolarController.DeviceID = "controller-1"
 	}
 
-	// Set default topic prefix if not provided
-	if c.SolarController.TopicPrefix == "" {
-		c.SolarController.TopicPrefix = "solar"
+	// Set default topic prefix for publishers that use it
+	if c.SolarController.Mqtt.TopicPrefix == "" {
+		c.SolarController.Mqtt.TopicPrefix = "solar"
 	}
+	if c.SolarController.Solace.TopicPrefix == "" {
+		c.SolarController.Solace.TopicPrefix = "solar"
+	}
+	if c.SolarController.RemoteWrite.TopicPrefix == "" {
+		c.SolarController.RemoteWrite.TopicPrefix = "solar"
+	}
+	// Note: File publisher does not use topicPrefix
 }
 
 // Validate checks if the configuration is valid
@@ -67,25 +73,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid HTTP port: %d (must be 1-65535)", c.SolarController.HTTPPort)
 	}
 
-	// Validate that only one publisher is enabled (MQTT, Solace, File, and RemoteWrite are mutually exclusive)
-	enabledCount := 0
-	if c.SolarController.Mqtt.Enabled {
-		enabledCount++
-	}
-	if c.SolarController.Solace.Enabled {
-		enabledCount++
-	}
-	if c.SolarController.File.Enabled {
-		enabledCount++
-	}
-	if c.SolarController.RemoteWrite.Enabled {
-		enabledCount++
-	}
-	if enabledCount > 1 {
-		return fmt.Errorf("only one publisher can be enabled at a time (MQTT, Solace, File, or RemoteWrite)")
-	}
-
-	// Note: topicPrefix has a default value of "solar", so no validation needed
+	// Note: Multiple publishers can now be enabled simultaneously
 
 	// Validate MQTT configuration if enabled
 	if c.SolarController.Mqtt.Enabled {

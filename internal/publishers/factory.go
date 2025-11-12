@@ -13,57 +13,65 @@ import (
 )
 
 // NewPublisher creates a message publisher based on the configuration.
-// It returns an MQTT publisher if MQTT is enabled, a Solace publisher if Solace is enabled,
-// a File publisher if File is enabled, a RemoteWrite publisher if RemoteWrite is enabled,
-// or a no-op publisher if none is enabled.
-// Returns an error if multiple publishers are enabled (should be caught by config validation) or if publisher creation fails.
+// It returns a MultiPublisher wrapping all enabled publishers, or a no-op publisher if none is enabled.
+// Returns an error if publisher creation fails.
 func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.MessagePublisher, error) {
-	// Count enabled publishers (should never be > 1 due to config validation)
-	enabledCount := 0
-	if cfg.Mqtt.Enabled {
-		enabledCount++
-	}
-	if cfg.Solace.Enabled {
-		enabledCount++
-	}
-	if cfg.File.Enabled {
-		enabledCount++
-	}
-	if cfg.RemoteWrite.Enabled {
-		enabledCount++
-	}
+	var publishers []controllers.MessagePublisher
 
-	if enabledCount > 1 {
-		return nil, fmt.Errorf("multiple publishers are enabled - only one publisher can be active")
-	}
-
-	// Try MQTT first
+	// Create MQTT publisher if enabled
 	if cfg.Mqtt.Enabled {
 		log.Info("Creating MQTT publisher")
-		return mqtt.NewPublisher(&cfg.Mqtt, cfg.TopicPrefix)
+		publisher, err := mqtt.NewPublisher(&cfg.Mqtt, cfg.Mqtt.TopicPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create MQTT publisher: %w", err)
+		}
+		publishers = append(publishers, publisher)
 	}
 
-	// Try Solace
+	// Create Solace publisher if enabled
 	if cfg.Solace.Enabled {
 		log.Info("Creating Solace publisher")
-		return solace.NewPublisher(&cfg.Solace, cfg.TopicPrefix)
+		publisher, err := solace.NewPublisher(&cfg.Solace, cfg.Solace.TopicPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Solace publisher: %w", err)
+		}
+		publishers = append(publishers, publisher)
 	}
 
-	// Try File
+	// Create File publisher if enabled
 	if cfg.File.Enabled {
 		log.Info("Creating File publisher")
-		return file.NewPublisher(&cfg.File, cfg.TopicPrefix)
+		publisher, err := file.NewPublisher(&cfg.File)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create File publisher: %w", err)
+		}
+		publishers = append(publishers, publisher)
 	}
 
-	// Try RemoteWrite
+	// Create RemoteWrite publisher if enabled
 	if cfg.RemoteWrite.Enabled {
 		log.Info("Creating Prometheus RemoteWrite publisher")
-		return remotewrite.NewPublisher(&cfg.RemoteWrite, cfg.TopicPrefix, cfg.DeviceID)
+		publisher, err := remotewrite.NewPublisher(&cfg.RemoteWrite, cfg.RemoteWrite.TopicPrefix, cfg.DeviceID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create RemoteWrite publisher: %w", err)
+		}
+		publishers = append(publishers, publisher)
 	}
 
-	// None enabled - return a no-op publisher
-	log.Info("No message publisher enabled")
-	return &NoOpPublisher{}, nil
+	// If no publishers enabled, return no-op publisher
+	if len(publishers) == 0 {
+		log.Info("No message publisher enabled")
+		return &NoOpPublisher{}, nil
+	}
+
+	// If only one publisher, return it directly (no need for MultiPublisher wrapper)
+	if len(publishers) == 1 {
+		return publishers[0], nil
+	}
+
+	// Multiple publishers - wrap in MultiPublisher
+	log.Infof("Creating MultiPublisher with %d publishers", len(publishers))
+	return NewMultiPublisher(publishers, log.StandardLogger()), nil
 }
 
 // NoOpPublisher is a publisher that does nothing.
