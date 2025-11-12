@@ -7,6 +7,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	"github.com/lumberbarons/solar-controller/internal/remotewrite"
+	"github.com/lumberbarons/solar-controller/internal/sns"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 	"gopkg.in/yaml.v3"
 )
@@ -21,6 +22,7 @@ type SolarControllerConfiguration struct {
 	DeviceID    string                    `yaml:"deviceId"`
 	Mqtt        mqtt.Configuration        `yaml:"mqtt"`
 	Solace      solace.Configuration      `yaml:"solace"`
+	SNS         sns.Configuration         `yaml:"sns"`
 	File        file.Configuration        `yaml:"file"`
 	RemoteWrite remotewrite.Configuration `yaml:"remoteWrite"`
 	Epever      epever.Configuration      `yaml:"epever"`
@@ -61,6 +63,9 @@ func (c *Config) applyDefaults() {
 	if c.SolarController.Solace.TopicPrefix == "" {
 		c.SolarController.Solace.TopicPrefix = "solar"
 	}
+	if c.SolarController.SNS.TopicPrefix == "" {
+		c.SolarController.SNS.TopicPrefix = "solar"
+	}
 	if c.SolarController.RemoteWrite.TopicPrefix == "" {
 		c.SolarController.RemoteWrite.TopicPrefix = "solar"
 	}
@@ -89,6 +94,16 @@ func (c *Config) Validate() error {
 		}
 		if c.SolarController.Solace.VpnName == "" {
 			return fmt.Errorf("solace VPN name is required when Solace is enabled")
+		}
+	}
+
+	// Validate SNS configuration if enabled
+	if c.SolarController.SNS.Enabled {
+		if c.SolarController.SNS.TopicArn == "" {
+			return fmt.Errorf("SNS topic ARN is required when SNS is enabled")
+		}
+		if c.SolarController.SNS.Region == "" {
+			return fmt.Errorf("SNS region is required when SNS is enabled")
 		}
 	}
 
