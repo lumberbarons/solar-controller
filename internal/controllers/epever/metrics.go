@@ -3,6 +3,7 @@ package epever
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Metric represents a single metric with its value, unit, and timestamp
@@ -117,5 +118,15 @@ func ConvertStatusToMetrics(status *ControllerStatus) []Metric {
 			Unit:      "seconds",
 			Timestamp: timestamp,
 		},
+	}
+}
+
+// CreateCollectionFailureMetric creates a failure metric when collection fails
+func CreateCollectionFailureMetric() Metric {
+	return Metric{
+		Name:      "collection-failure",
+		Value:     1,
+		Unit:      "count",
+		Timestamp: time.Now().Unix(),
 	}
 }

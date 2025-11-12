@@ -1,15 +1,21 @@
 # solar-controller
 
-A Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT and Prometheus. It includes a React-based web UI for monitoring.
+A Go-based service that collects metrics from solar power equipment (Epever) and publishes them via multiple backends (MQTT, Solace, File, or Prometheus Remote Write). Metrics are also exposed via Prometheus scraping endpoint. It includes a React-based web UI for monitoring.
 
 ## Features
 
 - Modular controller architecture supporting multiple hardware types
-- Prometheus metrics export
-- MQTT publishing for integration with home automation systems
-- Web-based monitoring UI
+- Multiple publishing options:
+  - **MQTT** - Lightweight message broker for home automation systems
+  - **Solace** - Enterprise-grade messaging with Solace PubSub+
+  - **File** - JSON log files with automatic rotation and optional compression
+  - **Prometheus Remote Write** - Push metrics to Prometheus, Grafana Cloud, VictoriaMetrics, etc.
+- Prometheus metrics export via scraping endpoint
+- Web-based monitoring UI (React SPA)
 - RESTful API for metrics and configuration
-- Multi-platform builds via goreleaser
+- Multi-platform builds (amd64/arm64) with native compilation
+- Docker images for both amd64 and arm64 architectures
+- Debian and RPM packages for easy deployment
 
 ## Development
 
@@ -50,8 +56,14 @@ make build-frontend
 # Build only backend (Go binary)
 make build-backend
 
-# Build backend for Linux ARM64
-make build-linux-arm64
+# Build backend for Linux ARM64 using Docker
+make build-linux-arm64-docker
+
+# Build Docker image
+make docker
+
+# Deploy to remote server (requires REMOTE_HOST)
+make deploy REMOTE_HOST=user@host
 
 # Run tests
 make test
@@ -63,8 +75,8 @@ make clean
 #### Backend (Go)
 
 ```bash
-# Build the application (requires frontend to be built first)
-go build -o bin/solar-controller ./cmd/controller
+# Build the application with CGO enabled (requires frontend to be built first)
+CGO_ENABLED=1 go build -o bin/solar-controller ./cmd/controller
 
 # Run with configuration
 ./bin/solar-controller -config path/to/config.yaml
@@ -82,7 +94,10 @@ go get -d -v ./...
 go mod tidy
 ```
 
-**Important:** The React app must be built before building the Go binary since the frontend is embedded via `//go:embed`.
+**Important Notes:**
+- The React app must be built before building the Go binary since the frontend is embedded via `//go:embed`
+- CGO is required for Solace messaging support. Use `CGO_ENABLED=1` when building with Solace enabled
+- The Makefile automatically enables CGO when using `make build-backend`
 
 #### Frontend (React)
 
@@ -114,15 +129,25 @@ docker run solar-controller -config /etc/solar-controller/config.yaml
 
 ### Release
 
-Uses goreleaser for multi-platform builds and packaging:
+The project uses GitHub Actions for multi-platform releases with native builds:
 
 ```bash
-# Create release (requires git tag)
-goreleaser release
-
-# Test release build without publishing
-goreleaser release --snapshot --clean
+# Create a release by pushing a tag
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
 ```
+
+The release workflow automatically:
+- Builds binaries natively on architecture-specific runners (amd64 and arm64) with CGO enabled
+- Creates .deb and .rpm packages using nfpm
+- Builds Docker images for both amd64 and arm64 architectures
+- Creates a GitHub release with all artifacts
+
+Releases include:
+- Standalone binaries for Linux (amd64/arm64) and macOS (amd64/arm64)
+- Debian packages (.deb)
+- RPM packages (.rpm)
+- Multi-architecture Docker images
 
 ## Configuration
 
@@ -131,34 +156,67 @@ Create a YAML configuration file with the following structure:
 ```yaml
 solarController:
   httpPort: 8080
-  debug: false  # Enable debug logging (can also use -debug flag)
+  debug: false          # Enable debug logging (can also use -debug flag)
+  deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
+  topicPrefix: solar            # Topic prefix for all publishers (default: "solar")
+
+  # Message Publishers (choose one - mutually exclusive)
   mqtt:
-    enabled: true
+    enabled: true  # Only one of mqtt, solace, file, or remoteWrite can be enabled
     host: mqtt://broker:1883
     username: user
     password: pass
-    topicPrefix: solar/metrics
+
+  solace:
+    enabled: false  # Enterprise messaging with Solace PubSub+
+    host: tcp://solace-broker:55555
+    username: user
+    password: pass
+    vpnName: default
+
+  file:
+    enabled: false  # Write metrics to rotating log files
+    filename: /var/log/solar-controller/metrics.log
+    maxSizeMB: 10      # Max size per file before rotation (default: 10)
+    maxBackups: 10     # Number of old files to keep (default: 10)
+    compress: false    # Compress rotated files with gzip (default: false)
+
+  remoteWrite:
+    enabled: false  # Push to Prometheus, Grafana Cloud, VictoriaMetrics, etc.
+    url: http://prometheus:9090/api/v1/write
+    timeout: 30s    # Optional (default: 30s)
+    basicAuth:      # Optional (mutually exclusive with bearerToken)
+      username: user
+      password: pass
+    bearerToken: token123  # Optional (mutually exclusive with basicAuth)
+    headers:        # Optional custom headers
+      X-Scope-OrgID: tenant1
+
+  # Hardware Controllers
   epever:
     enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
 ```
 
-### Enabling/Disabling Controllers
+### Configuration Details
 
-Each controller (epever) has an `enabled` boolean field that controls whether it runs:
-
+**Hardware Controllers:**
+- Each controller (e.g., epever) has an `enabled` boolean field
 - Set `enabled: true` to activate the controller
-- Set `enabled: false` to disable the controller
-- If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start
+- If required fields are missing (serialPort for epever), a warning will be logged and the controller won't start
 
-### Enabling/Disabling MQTT
+**Message Publishers:**
+- Only one publisher (mqtt, solace, file, or remoteWrite) can be enabled at a time
+- If multiple publishers are enabled, configuration validation will fail
+- If no publisher is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published
+- The `deviceId` and `topicPrefix` are global settings used by all publishers
 
-MQTT publishing has an `enabled` boolean field that controls whether it runs:
-
-- Set `enabled: true` to activate MQTT publishing
-- Set `enabled: false` to disable MQTT publishing
-- If `enabled: true` but required fields are missing (host or topicPrefix), configuration validation will fail
+**Publisher Options:**
+- **MQTT**: Lightweight message broker integration (QoS 0, 5s timeout)
+- **Solace**: Enterprise messaging with VPN support (direct messaging, 5s timeout)
+- **File**: JSON log files with rotation, compression, and configurable retention
+- **Remote Write**: Push to Prometheus-compatible endpoints with authentication and custom headers
 
 ### Debug Mode
 
@@ -310,13 +368,72 @@ curl -X PATCH http://localhost:8080/api/epever/charging-parameters \
 
 **Note**: Charging parameters can only be modified when battery type is set to 'userDefined'. The API validates voltage relationships to ensure safe charging parameters.
 
+## Message Publishing
+
+The application supports flexible message publishing with four backend options:
+
+### Topic Structure
+
+Messages are published with one message per metric using this pattern:
+```
+{topicPrefix}/{deviceId}/{controller}/{metric-name}
+```
+
+Example with `topicPrefix: "solar"` and `deviceId: "controller-123"`:
+```
+solar/controller-123/epever/array-voltage
+solar/controller-123/epever/battery-soc
+solar/controller-123/epever/charging-power
+```
+
+### Message Payload
+
+Each metric message contains JSON with value, unit, and timestamp:
+```json
+{
+  "value": 18.5,
+  "unit": "volts",
+  "timestamp": 1699000000
+}
+```
+
+### Prometheus Remote Write
+
+When using the RemoteWrite publisher, metrics are converted to Prometheus format:
+- Metric names: `{controller}_{metric_name}` (snake_case)
+- Labels: `device_id`, `controller`, `unit`
+- Example: `epever_battery_voltage{device_id="controller-123",unit="volts"}`
+
+All metrics from each collection cycle are batched into a single WriteRequest for efficiency.
+
+### Testing Remote Write
+
+To test Prometheus remote_write locally:
+```bash
+# Start VictoriaMetrics test server
+cd testing && ./test-remotewrite.sh
+
+# In another terminal, run solar-controller
+make build-backend
+./bin/solar-controller -config testing/config-remotewrite-test.yaml
+
+# View metrics at http://localhost:8428/vmui
+```
+
+See `testing/README.md` for details.
+
 ## Project Structure
 
 - `cmd/controller/` - Main application entry point
 - `internal/controllers/` - Hardware controller implementations (epever)
 - `internal/mqtt/` - MQTT publishing functionality
+- `internal/solace/` - Solace publishing functionality
+- `internal/file/` - File publishing with log rotation
+- `internal/remotewrite/` - Prometheus remote_write publishing
+- `internal/publishers/` - Publisher factory and abstraction
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
+- `testing/` - Remote write testing setup and utilities
 - `package/` - Packaging files for system packages (deb, rpm, etc.)
 
 ## License

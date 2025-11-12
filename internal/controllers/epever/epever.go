@@ -144,6 +144,19 @@ func (e *Controller) collectAndPublish() {
 	if err != nil {
 		log.Errorf("failed to collect metrics from epever: %s", err)
 		e.prometheusCollector.IncrementFailures()
+
+		// Publish failure metric to message broker
+		failureMetric := CreateCollectionFailureMetric()
+		payload, err := failureMetric.ToJSON()
+		if err != nil {
+			log.Errorf("failed to marshal failure metric: %s", err)
+			return
+		}
+
+		topicSuffix := fmt.Sprintf("%s/%s/%s", e.deviceID, namespace, failureMetric.Name)
+		e.mqttPublisher.Publish(topicSuffix, payload)
+		log.Debugf("published failure metric to %s", topicSuffix)
+
 		return
 	}
 
