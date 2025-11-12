@@ -23,6 +23,9 @@ type Configuration struct {
 	// Headers allows custom headers to be added to requests (optional)
 	// Example: X-Scope-OrgID for Cortex multi-tenancy
 	Headers map[string]string `yaml:"headers,omitempty"`
+
+	// TopicPrefix overrides global topicPrefix (optional)
+	TopicPrefix string `yaml:"topicPrefix,omitempty"`
 }
 
 // BasicAuthConfig holds HTTP Basic Authentication credentials.

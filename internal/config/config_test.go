@@ -18,12 +18,12 @@ func TestLoad(t *testing.T) {
 			yaml: `
 solarController:
   httpPort: 8080
-  topicPrefix: solar/metrics
   mqtt:
     enabled: true
     host: mqtt://localhost:1883
     username: user
     password: pass
+    topicPrefix: solar/metrics
   epever:
     enabled: true
     serialPort: /dev/ttyUSB0
@@ -40,8 +40,8 @@ solarController:
 				if c.SolarController.Mqtt.Host != "mqtt://localhost:1883" {
 					t.Errorf("MQTT Host = %s, want mqtt://localhost:1883", c.SolarController.Mqtt.Host)
 				}
-				if c.SolarController.TopicPrefix != "solar/metrics" {
-					t.Errorf("TopicPrefix = %s, want solar/metrics", c.SolarController.TopicPrefix)
+				if c.SolarController.Mqtt.TopicPrefix != "solar/metrics" {
+					t.Errorf("MQTT TopicPrefix = %s, want solar/metrics", c.SolarController.Mqtt.TopicPrefix)
 				}
 				if !c.SolarController.Epever.Enabled {
 					t.Error("Epever should be enabled")
@@ -194,8 +194,8 @@ solarController:
 `,
 			wantErr: false,
 			check: func(t *testing.T, c Config) {
-				if c.SolarController.TopicPrefix != "solar" {
-					t.Errorf("TopicPrefix = %s, want solar (default)", c.SolarController.TopicPrefix)
+				if c.SolarController.Mqtt.TopicPrefix != "solar" {
+					t.Errorf("MQTT TopicPrefix = %s, want solar (default)", c.SolarController.Mqtt.TopicPrefix)
 				}
 			},
 		},
@@ -255,12 +255,12 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
-  topicPrefix: home/solar
   mqtt:
     enabled: true
     host: mqtt://broker.example.com:1883
     username: solaruser
     password: secretpassword
+    topicPrefix: home/solar
   epever:
     enabled: false
 `,
@@ -274,6 +274,9 @@ solarController:
 				}
 				if c.SolarController.Mqtt.Password != "secretpassword" {
 					t.Errorf("MQTT Password = %s, want secretpassword", c.SolarController.Mqtt.Password)
+				}
+				if c.SolarController.Mqtt.TopicPrefix != "home/solar" {
+					t.Errorf("MQTT TopicPrefix = %s, want home/solar", c.SolarController.Mqtt.TopicPrefix)
 				}
 			},
 		},
@@ -297,13 +300,13 @@ someOtherConfig:
 			yaml: `
 solarController:
   httpPort: 8080
-  topicPrefix: solar/metrics
   solace:
     enabled: true
     host: tcp://solace-broker:55555
     username: solaceuser
     password: solacepass
     vpnName: default
+    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
@@ -324,8 +327,8 @@ solarController:
 				if c.SolarController.Solace.VpnName != "default" {
 					t.Errorf("Solace VpnName = %s, want default", c.SolarController.Solace.VpnName)
 				}
-				if c.SolarController.TopicPrefix != "solar/metrics" {
-					t.Errorf("TopicPrefix = %s, want solar/metrics", c.SolarController.TopicPrefix)
+				if c.SolarController.Solace.TopicPrefix != "solar/metrics" {
+					t.Errorf("Solace TopicPrefix = %s, want solar/metrics", c.SolarController.Solace.TopicPrefix)
 				}
 			},
 		},
@@ -334,7 +337,6 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
-  topicPrefix: solar/metrics
   solace:
     enabled: true
     host: ""
@@ -350,7 +352,6 @@ solarController:
 			yaml: `
 solarController:
   httpPort: 8080
-  topicPrefix: solar/metrics
   solace:
     enabled: true
     host: tcp://solace-broker:55555
@@ -375,8 +376,8 @@ solarController:
 `,
 			wantErr: false,
 			check: func(t *testing.T, c Config) {
-				if c.SolarController.TopicPrefix != "solar" {
-					t.Errorf("TopicPrefix = %s, want solar (default)", c.SolarController.TopicPrefix)
+				if c.SolarController.Solace.TopicPrefix != "solar" {
+					t.Errorf("Solace TopicPrefix = %s, want solar (default)", c.SolarController.Solace.TopicPrefix)
 				}
 			},
 		},
@@ -393,24 +394,29 @@ solarController:
 			wantErr: false,
 		},
 		{
-			name: "Both MQTT and Solace enabled - should error",
+			name: "Both MQTT and Solace enabled - should succeed (multi-publisher support)",
 			yaml: `
 solarController:
   httpPort: 8080
   mqtt:
     enabled: true
     host: mqtt://localhost:1883
-    topicPrefix: solar/metrics
   solace:
     enabled: true
     host: tcp://solace-broker:55555
     vpnName: default
-    topicPrefix: solar/metrics
   epever:
     enabled: false
 `,
-			wantErr: true,
-			errMsg:  "only one publisher can be enabled at a time",
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if !c.SolarController.Mqtt.Enabled {
+					t.Error("MQTT should be enabled")
+				}
+				if !c.SolarController.Solace.Enabled {
+					t.Error("Solace should be enabled")
+				}
+			},
 		},
 	}
 

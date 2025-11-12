@@ -17,12 +17,11 @@ type Configuration struct {
 }
 
 type Publisher struct {
-	logger      *lumberjack.Logger
-	config      Configuration
-	topicPrefix string
+	logger *lumberjack.Logger
+	config Configuration
 }
 
-func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error) {
+func NewPublisher(config *Configuration) (*Publisher, error) {
 	if !config.Enabled {
 		log.Info("File publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -56,9 +55,8 @@ func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error)
 		config.Filename, maxSize, maxBackups, config.Compress)
 
 	publisher := &Publisher{
-		logger:      logger,
-		config:      *config,
-		topicPrefix: topicPrefix,
+		logger: logger,
+		config: *config,
 	}
 
 	return publisher, nil
@@ -69,12 +67,9 @@ func (p *Publisher) Publish(topicSuffix, payload string) {
 		return
 	}
 
-	// Create full topic with prefix
-	topic := fmt.Sprintf("%s/%s", p.topicPrefix, topicSuffix)
-
 	// Write the message as a single line with timestamp
 	timestamp := time.Now().Format(time.RFC3339)
-	line := fmt.Sprintf(`{"timestamp":"%s","topic":"%s","payload":%s}`+"\n", timestamp, topic, payload)
+	line := fmt.Sprintf(`{"timestamp":"%s","topic":"%s","payload":%s}`+"\n", timestamp, topicSuffix, payload)
 
 	if _, err := p.logger.Write([]byte(line)); err != nil {
 		log.Errorf("failed to write to log file: %v", err)

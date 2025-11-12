@@ -27,7 +27,7 @@ type Controller struct {
 	client              controllers.ModbusClient
 	collector           *Collector
 	configurer          *Configurer
-	mqttPublisher       controllers.MessagePublisher
+	publisher           controllers.MessagePublisher
 	prometheusCollector controllers.MetricsCollector
 	scheduler           *gocron.Scheduler
 	deviceID            string
@@ -43,7 +43,7 @@ func NewController(
 	client controllers.ModbusClient,
 	collector *Collector,
 	configurer *Configurer,
-	mqttPublisher controllers.MessagePublisher,
+	publisher controllers.MessagePublisher,
 	prometheusCollector controllers.MetricsCollector,
 	deviceID string,
 	publishPeriod int,
@@ -64,7 +64,7 @@ func NewController(
 		collector:           collector,
 		configurer:          configurer,
 		prometheusCollector: prometheusCollector,
-		mqttPublisher:       mqttPublisher,
+		publisher:           publisher,
 		deviceID:            deviceID,
 		scheduler:           s,
 	}
@@ -84,7 +84,7 @@ func NewController(
 
 // NewControllerFromConfig creates a new Epever controller from configuration.
 // This is the production entry point that creates all concrete dependencies.
-func NewControllerFromConfig(config Configuration, mqttPublisher controllers.MessagePublisher, deviceID string) (*Controller, error) {
+func NewControllerFromConfig(config Configuration, publisher controllers.MessagePublisher, deviceID string) (*Controller, error) {
 	if !config.Enabled {
 		log.Info("epever disabled via configuration")
 		return &Controller{}, nil
@@ -110,7 +110,7 @@ func NewControllerFromConfig(config Configuration, mqttPublisher controllers.Mes
 		client,
 		epeverCollector,
 		epeverConfigurer,
-		mqttPublisher,
+		publisher,
 		prometheusCollector,
 		deviceID,
 		config.PublishPeriod,
@@ -154,7 +154,7 @@ func (e *Controller) collectAndPublish() {
 		}
 
 		topicSuffix := fmt.Sprintf("%s/%s/%s", e.deviceID, namespace, failureMetric.Name)
-		e.mqttPublisher.Publish(topicSuffix, payload)
+		e.publisher.Publish(topicSuffix, payload)
 		log.Debugf("published failure metric to %s", topicSuffix)
 
 		return
@@ -179,7 +179,7 @@ func (e *Controller) collectAndPublish() {
 
 		// Topic format: {deviceId}/epever/{metric-name}
 		topicSuffix := fmt.Sprintf("%s/%s/%s", e.deviceID, namespace, metric.Name)
-		e.mqttPublisher.Publish(topicSuffix, payload)
+		e.publisher.Publish(topicSuffix, payload)
 
 		log.Debugf("published metric %s to %s", metric.Name, topicSuffix)
 	}
