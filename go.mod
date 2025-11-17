@@ -8,7 +8,7 @@ require (
 	github.com/avast/retry-go/v4 v4.7.0
 	github.com/aws/aws-sdk-go-v2 v1.39.6
 	github.com/aws/aws-sdk-go-v2/config v1.31.19
-	github.com/aws/aws-sdk-go-v2/service/sns v1.39.4
+	github.com/aws/aws-sdk-go-v2/service/sns v1.39.5
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gin-contrib/static v1.1.5
 	github.com/gin-gonic/gin v1.11.0
