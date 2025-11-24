@@ -6,7 +6,7 @@ toolchain go1.24.5
 
 require (
 	github.com/avast/retry-go/v4 v4.7.0
-	github.com/aws/aws-sdk-go-v2 v1.39.6
+	github.com/aws/aws-sdk-go-v2 v1.40.0
 	github.com/aws/aws-sdk-go-v2/config v1.31.19
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.4
 	github.com/eclipse/paho.mqtt.golang v1.5.1
