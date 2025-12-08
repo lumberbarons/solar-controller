@@ -6,7 +6,7 @@ toolchain go1.24.5
 
 require (
 	github.com/avast/retry-go/v4 v4.7.0
-	github.com/aws/aws-sdk-go-v2 v1.39.6
+	github.com/aws/aws-sdk-go-v2 v1.40.1
 	github.com/aws/aws-sdk-go-v2/config v1.31.19
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.4
 	github.com/eclipse/paho.mqtt.golang v1.5.1
@@ -35,7 +35,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.40.1 // indirect
-	github.com/aws/smithy-go v1.23.2 // indirect
+	github.com/aws/smithy-go v1.24.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.1 // indirect
