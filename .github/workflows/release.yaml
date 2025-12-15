@@ -57,7 +57,7 @@ jobs:
         run: git fetch --force --tags
 
       - name: Download site build artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: site-build
           path: internal/static/build
@@ -134,7 +134,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: bin
@@ -184,13 +184,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Download site build artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: site-build
           path: internal/static/build
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: binary-linux-${{ matrix.arch }}
           path: bin
@@ -253,7 +253,7 @@ jobs:
     needs: [build-docker, build-packages]
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: /tmp/digests
           pattern: digests-*
@@ -300,13 +300,13 @@ jobs:
           fetch-depth: 0
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: binary-*
           path: artifacts
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: package-*
           path: artifacts
