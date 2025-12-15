@@ -33,7 +33,7 @@ jobs:
         run: make build-frontend
 
       - name: Upload site build artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: site-build
           path: internal/static/build
