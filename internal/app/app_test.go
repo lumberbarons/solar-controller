@@ -219,7 +219,7 @@ func TestApplication_ControllerRegistration(t *testing.T) {
 
 			// Test that epever endpoint is registered (or not)
 			w := httptest.NewRecorder()
-			req, _ := http.NewRequest("GET", "/api/solar/metrics", nil)
+			req, _ := http.NewRequest("GET", "/api/epever/metrics", nil)
 			app.Router().ServeHTTP(w, req)
 
 			if tt.expectEndpoint {
