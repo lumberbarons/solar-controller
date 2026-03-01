@@ -5,7 +5,10 @@ import (
 
 	"github.com/lumberbarons/solar-controller/internal/config"
 	"github.com/lumberbarons/solar-controller/internal/controllers"
+	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/remotewrite"
+	"github.com/lumberbarons/solar-controller/internal/sns"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 )
 
@@ -95,21 +98,91 @@ func TestNewPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "MQTT disabled, Solace disabled - returns no-op publisher",
+			name: "SNS enabled but no topic ARN - returns empty SNS publisher",
 			config: config.SolarControllerConfiguration{
-				Mqtt: mqtt.Configuration{
-					Enabled: false,
-				},
-				Solace: solace.Configuration{
-					Enabled: false,
+				SNS: sns.Configuration{
+					Enabled:  true,
+					TopicArn: "", // Empty ARN prevents connection
+					Region:   "us-east-1",
 				},
 			},
 			wantErr: false,
 			check: func(t *testing.T, pub interface{}) {
-				if _, ok := pub.(*NoOpPublisher); !ok {
-					t.Errorf("expected *NoOpPublisher, got %T", pub)
+				if _, ok := pub.(*sns.Publisher); !ok {
+					t.Errorf("expected *sns.Publisher, got %T", pub)
 				}
 			},
+		},
+		{
+			name: "File enabled but no filename - returns empty File publisher",
+			config: config.SolarControllerConfiguration{
+				File: file.Configuration{
+					Enabled:  true,
+					Filename: "", // Empty filename prevents creation
+				},
+			},
+			wantErr: false,
+			check: func(t *testing.T, pub interface{}) {
+				if _, ok := pub.(*file.Publisher); !ok {
+					t.Errorf("expected *file.Publisher, got %T", pub)
+				}
+			},
+		},
+		{
+			name: "RemoteWrite disabled - returns empty RemoteWrite publisher",
+			config: config.SolarControllerConfiguration{
+				RemoteWrite: remotewrite.Configuration{
+					Enabled: true,
+					URL:     "http://localhost:9090/api/v1/write",
+				},
+			},
+			wantErr: false,
+			check: func(t *testing.T, pub interface{}) {
+				if _, ok := pub.(*remotewrite.Publisher); !ok {
+					t.Errorf("expected *remotewrite.Publisher, got %T", pub)
+				}
+			},
+		},
+		{
+			name: "Three publishers enabled - returns MultiPublisher with 3 publishers",
+			config: config.SolarControllerConfiguration{
+				Mqtt: mqtt.Configuration{
+					Enabled:     true,
+					Host:        "", // Empty host prevents connection
+					TopicPrefix: "test",
+				},
+				Solace: solace.Configuration{
+					Enabled:     true,
+					Host:        "", // Empty host prevents connection
+					VpnName:     "default",
+					TopicPrefix: "test",
+				},
+				SNS: sns.Configuration{
+					Enabled:  true,
+					TopicArn: "", // Empty ARN prevents connection
+					Region:   "us-east-1",
+				},
+			},
+			wantErr: false,
+			check: func(t *testing.T, pub interface{}) {
+				mp, ok := pub.(*MultiPublisher)
+				if !ok {
+					t.Fatalf("expected *MultiPublisher, got %T", pub)
+				}
+				if len(mp.publishers) != 3 {
+					t.Errorf("expected 3 publishers, got %d", len(mp.publishers))
+				}
+			},
+		},
+		{
+			name: "RemoteWrite enabled with empty URL - returns error",
+			config: config.SolarControllerConfiguration{
+				RemoteWrite: remotewrite.Configuration{
+					Enabled: true,
+					URL:     "", // Missing required URL
+				},
+			},
+			wantErr: true,
 		},
 	}
 
