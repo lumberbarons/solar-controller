@@ -1,6 +1,7 @@
 package epever
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -71,7 +72,7 @@ func TestValidateVoltageParameters(t *testing.T) {
 			name: "invalid over voltage pair",
 			config: ControllerConfig{
 				OverVoltDisconnectVoltage:     15.0, // Lower than reconnect
-				ChargingLimitVoltage:          15.0,
+				ChargingLimitVoltage:          14.8,
 				EqualizationVoltage:           14.6,
 				BoostVoltage:                  14.4,
 				FloatVoltage:                  13.8,
@@ -132,8 +133,8 @@ func TestValidateVoltageParameters(t *testing.T) {
 			if tt.shouldError {
 				if err == nil {
 					t.Errorf("expected error containing '%s', got nil", tt.errorMsg)
-				} else if err.Error() == "" {
-					t.Errorf("expected error message, got empty string")
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error containing '%s', got: %s", tt.errorMsg, err.Error())
 				}
 			} else {
 				if err != nil {
