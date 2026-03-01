@@ -394,6 +394,82 @@ solarController:
 			wantErr: false,
 		},
 		{
+			name: "SNS enabled but no topic ARN",
+			yaml: `
+solarController:
+  httpPort: 8080
+  sns:
+    enabled: true
+    region: us-east-1
+    topicArn: ""
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "SNS topic ARN is required",
+		},
+		{
+			name: "SNS enabled but no region",
+			yaml: `
+solarController:
+  httpPort: 8080
+  sns:
+    enabled: true
+    region: ""
+    topicArn: "arn:aws:sns:us-east-1:123456789012:test"
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "SNS region is required",
+		},
+		{
+			name: "File enabled but no filename",
+			yaml: `
+solarController:
+  httpPort: 8080
+  file:
+    enabled: true
+    filename: ""
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "file filename is required",
+		},
+		{
+			name: "RemoteWrite enabled but no URL",
+			yaml: `
+solarController:
+  httpPort: 8080
+  remoteWrite:
+    enabled: true
+    url: ""
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "remoteWrite.url is required",
+		},
+		{
+			name: "RemoteWrite with both basicAuth and bearerToken",
+			yaml: `
+solarController:
+  httpPort: 8080
+  remoteWrite:
+    enabled: true
+    url: http://prometheus:9090/api/v1/write
+    basicAuth:
+      username: user
+      password: pass
+    bearerToken: mytoken
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+			errMsg:  "mutually exclusive",
+		},
+		{
 			name: "Both MQTT and Solace enabled - should succeed (multi-publisher support)",
 			yaml: `
 solarController:
