@@ -83,10 +83,22 @@ func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 		messagingService: messagingService,
 		publisher:        directPublisher,
 		config:           *cfg,
-		topicPrefix:      topicPrefix,
+		topicPrefix:      resolveTopicPrefix(cfg.TopicPrefix, topicPrefix),
 	}
 
 	return publisher, nil
+}
+
+// resolveTopicPrefix returns the effective topic prefix using the priority:
+// paramPrefix > configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix, paramPrefix string) string {
+	if paramPrefix != "" {
+		return paramPrefix
+	}
+	if configPrefix != "" {
+		return configPrefix
+	}
+	return "solar"
 }
 
 func (p *Publisher) Publish(topicSuffix, payload string) {

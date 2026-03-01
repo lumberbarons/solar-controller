@@ -57,10 +57,7 @@ func newPublisherWithConfig(cfg *Configuration, topicPrefix string, awsCfg aws.C
 	// Create SNS client
 	client := sns.NewFromConfig(awsCfg)
 
-	// Use config's TopicPrefix if provided, otherwise use parameter
-	if cfg.TopicPrefix != "" {
-		topicPrefix = cfg.TopicPrefix
-	}
+	topicPrefix = resolveTopicPrefix(cfg.TopicPrefix, topicPrefix)
 
 	// Verify topic exists by getting its attributes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -82,6 +79,18 @@ func newPublisherWithConfig(cfg *Configuration, topicPrefix string, awsCfg aws.C
 	}
 
 	return publisher, nil
+}
+
+// resolveTopicPrefix returns the effective topic prefix using the priority:
+// paramPrefix > configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix, paramPrefix string) string {
+	if paramPrefix != "" {
+		return paramPrefix
+	}
+	if configPrefix != "" {
+		return configPrefix
+	}
+	return "solar"
 }
 
 func (p *Publisher) Publish(topicSuffix, payload string) {
