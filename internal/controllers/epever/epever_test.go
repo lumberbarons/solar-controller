@@ -22,26 +22,15 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 		collector := NewCollector(mockClient, mockMetrics)
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
-		controller, err := NewController(
+		controller := newControllerForTest(
 			mockClient,
 			collector,
 			configurer,
 			mockPublisher,
 			mockMetrics,
 			"test-device-1",
-			60,
 		)
-		if err != nil {
-			t.Fatalf("NewController() error = %v", err)
-		}
-		defer controller.Close()
 
-		// Wait for the initial collection to complete (triggered in NewController)
-		// The collectAndPublish runs asynchronously, so we need to give it time
-		// In a real test, we'd use a more sophisticated synchronization mechanism
-		// but for now we'll just check the state after the goroutine runs
-
-		// Manually trigger collection to ensure it runs synchronously in test
 		controller.collectAndPublish()
 
 		// Verify failure counter was incremented
@@ -64,8 +53,7 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 
 		// Check payload structure
 		var payload MetricPayload
-		err = json.Unmarshal([]byte(call.Payload), &payload)
-		if err != nil {
+		if err := json.Unmarshal([]byte(call.Payload), &payload); err != nil {
 			t.Fatalf("Failed to unmarshal payload: %v", err)
 		}
 
@@ -119,21 +107,15 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 		collector := NewCollector(mockClient, mockMetrics)
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
-		controller, err := NewController(
+		controller := newControllerForTest(
 			mockClient,
 			collector,
 			configurer,
 			mockPublisher,
 			mockMetrics,
 			"test-device-1",
-			60,
 		)
-		if err != nil {
-			t.Fatalf("NewController() error = %v", err)
-		}
-		defer controller.Close()
 
-		// Manually trigger collection
 		controller.collectAndPublish()
 
 		// Verify failure counter was NOT incremented
