@@ -123,26 +123,34 @@ func TestResolveTopicPrefix(t *testing.T) {
 	}
 }
 
-func TestPublish_DisabledPublisher(_ *testing.T) {
+func TestPublish_DisabledPublisher(t *testing.T) {
 	pub := &Publisher{
 		publisher:        nil,
 		messagingService: nil,
 		topicPrefix:      "",
 	}
 
-	// Should not panic when publishing to disabled publisher
+	// Should not panic and fields should remain nil (no side effects)
 	pub.Publish("test/topic", "test payload")
+
+	if pub.publisher != nil {
+		t.Error("Expected publisher to remain nil after publishing to disabled publisher")
+	}
 }
 
-func TestClose_DisabledPublisher(_ *testing.T) {
+func TestClose_DisabledPublisher(t *testing.T) {
 	pub := &Publisher{
 		publisher:        nil,
 		messagingService: nil,
 		topicPrefix:      "",
 	}
 
-	// Should not panic when closing disabled publisher
+	// Should not panic and fields should remain nil (no side effects)
 	pub.Close()
+
+	if pub.publisher != nil {
+		t.Error("Expected publisher to remain nil after closing disabled publisher")
+	}
 }
 
 func TestServicePropertyMap(t *testing.T) {

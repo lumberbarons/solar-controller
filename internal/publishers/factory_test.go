@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lumberbarons/solar-controller/internal/config"
+	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
 	"github.com/lumberbarons/solar-controller/internal/solace"
 )
@@ -140,12 +141,16 @@ func TestNewPublisher(t *testing.T) {
 	}
 }
 
-func TestNoOpPublisher(_ *testing.T) {
-	pub := &NoOpPublisher{}
+func TestNoOpPublisher(t *testing.T) {
+	// Verify NoOpPublisher satisfies MessagePublisher interface at compile time
+	var pub controllers.MessagePublisher = &NoOpPublisher{}
 
-	// Should not panic
+	// Should not panic when used as MessagePublisher
 	pub.Publish("test", "payload")
 	pub.Close()
 
-	// Test passed if we got here without panic
+	// Verify the concrete type is preserved after operations
+	if _, ok := pub.(*NoOpPublisher); !ok {
+		t.Error("Expected publisher to remain a *NoOpPublisher")
+	}
 }
