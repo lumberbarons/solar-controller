@@ -31,15 +31,31 @@ A Go-based service that collects metrics from solar power equipment (Epever) and
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/lumberbarons/solar-controller.git
 cd solar-controller
 
 # Build everything (frontend + backend)
 make build
 
-# Run with configuration
+# Create a minimal config file
+cat > config.yaml <<EOF
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+EOF
+
+# Run the controller
 ./bin/solar-controller -config config.yaml
 ```
+
+You should see output like:
+```
+INFO Solar Controller starting    version=...
+INFO Starting HTTP server          port=8080
+```
+
+The web UI is then available at `http://localhost:8080`.
 
 ### Building
 

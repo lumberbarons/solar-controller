@@ -27,6 +27,11 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `testdata/` | Modbus simulator configuration | Testing with simulated hardware |
 | `docs/` | Modbus register documentation | Understanding Epever register mappings |
 | `package/` | System packaging (deb, rpm) via nfpm | Changing release packaging |
+| `Makefile` | Build, test, deploy orchestration | Modifying build targets or CI commands |
+| `Dockerfile` | Production container image | Changing container build or runtime |
+| `Dockerfile.build` | Cross-compilation build container | Changing ARM64 cross-build process |
+| `nfpm.yaml` | Package metadata (deb, rpm) | Changing package version, dependencies, or scripts |
+| `go.mod` | Go module and dependency versions | Adding or updating dependencies |
 
 ## Development Commands
 
@@ -64,11 +69,8 @@ make clean
 ### Backend (Go)
 
 ```bash
-# Build the application (requires frontend to be built first)
-go build -o bin/solar-controller ./cmd/controller
-
-# Build with CGO enabled (required for Solace support)
-make build-with-cgo
+# Build the application with CGO enabled (requires frontend to be built first)
+CGO_ENABLED=1 go build -o bin/solar-controller ./cmd/controller
 
 # Run with configuration
 ./bin/solar-controller -config path/to/config.yaml
@@ -95,7 +97,7 @@ go get -d -v ./...
 go mod tidy
 ```
 
-**Note:** The Solace messaging library requires CGO to be enabled. When building locally with Solace support, use `make build-with-cgo` or set `CGO_ENABLED=1` when running `go build`.
+**Note:** The Solace messaging library requires CGO to be enabled. Use `make build-backend` (which enables CGO automatically) or set `CGO_ENABLED=1` when running `go build` directly.
 
 **Testing:**
 - **Unit tests**: Run without build tags, use mocks for external dependencies
@@ -553,23 +555,6 @@ integration-tests:
 3. Reusable container helpers in `internal/testing/containers/`
 4. Parallel test support via dynamic port mapping
 5. Comprehensive cleanup with `t.Cleanup()`
-
-## Project Structure
-
-- `cmd/controller/` - Main application entry point
-- `internal/controllers/` - Hardware controller implementations (epever)
-- `internal/mqtt/` - MQTT publishing functionality
-- `internal/solace/` - Solace publishing functionality
-- `internal/sns/` - AWS SNS publishing functionality
-- `internal/file/` - File publishing functionality with log rotation
-- `internal/remotewrite/` - Prometheus remote_write publishing functionality
-- `internal/publishers/` - Publisher factory and abstraction layer
-- `internal/static/` - Static file embedding (React frontend)
-- `site/` - React frontend source code
-- `testing/` - Remote write testing setup and utilities
-- `testdata/` - Modbus simulator configuration files
-- `docs/` - Modbus register documentation
-- `package/` - Packaging files for system packages (deb, rpm, etc.)
 
 ## Important Notes
 
