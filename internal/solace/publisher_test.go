@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sirupsen/logrus"
+	"solace.dev/go/messaging/pkg/solace/config"
 )
 
 func init() {
@@ -177,9 +178,18 @@ func TestServicePropertyMap(t *testing.T) {
 				t.Fatal("Expected non-nil property map")
 			}
 
-			// Verify that ServicePropertyMap returns a valid config.ServicePropertyMap
-			// The actual validation happens when Solace SDK uses it
-			// We just verify it doesn't panic and returns something
+			if got := propMap[config.TransportLayerPropertyHost]; got != tt.host {
+				t.Errorf("Host = %v, want %v", got, tt.host)
+			}
+			if got := propMap[config.ServicePropertyVPNName]; got != tt.vpnName {
+				t.Errorf("VPNName = %v, want %v", got, tt.vpnName)
+			}
+			if got := propMap[config.AuthenticationPropertySchemeBasicUserName]; got != tt.username {
+				t.Errorf("Username = %v, want %v", got, tt.username)
+			}
+			if got := propMap[config.AuthenticationPropertySchemeBasicPassword]; got != tt.password {
+				t.Errorf("Password = %v, want %v", got, tt.password)
+			}
 		})
 	}
 }
