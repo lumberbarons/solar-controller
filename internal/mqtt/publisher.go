@@ -89,5 +89,8 @@ func (p *Publisher) Publish(topicSuffix, payload string) {
 }
 
 func (p *Publisher) Close() {
+	if p.client == nil {
+		return
+	}
 	p.client.Disconnect(250)
 }

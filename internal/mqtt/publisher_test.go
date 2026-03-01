@@ -316,19 +316,13 @@ func TestPublish_MultipleMessages(t *testing.T) {
 	}
 }
 
-func TestClose_DisabledPublisher(t *testing.T) {
-	mockClient := &MockMQTTClient{}
-
+func TestClose_NilClient_DoesNotPanic(t *testing.T) {
 	pub := &Publisher{
-		client:      mockClient,
-		topicPrefix: "",
+		client: nil,
 	}
 
+	// Should not panic
 	pub.Close()
-
-	if mockClient.disconnectCalls != 1 {
-		t.Errorf("Expected 1 disconnect call, got: %d", mockClient.disconnectCalls)
-	}
 }
 
 func TestClose_ValidPublisher(t *testing.T) {
