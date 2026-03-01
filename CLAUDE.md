@@ -6,6 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT, Solace, AWS SNS, file logging, or Prometheus remote_write, with metrics also exposed via Prometheus scraping. It includes a React-based web UI for monitoring.
 
+## Project Navigation
+
+| Directory | What | When to read |
+|-----------|------|--------------|
+| `cmd/controller/` | Application entry point | Changing startup, flags, or controller wiring |
+| `internal/controllers/` | Hardware controller implementations (epever) | Adding controllers, modifying collection or publishing logic |
+| `internal/publishers/` | Publisher factory, MultiPublisher, MessagePublisher interface | Adding a new publisher or changing fan-out behavior |
+| `internal/mqtt/` | MQTT publisher | Modifying MQTT publishing |
+| `internal/solace/` | Solace publisher | Modifying Solace publishing |
+| `internal/sns/` | AWS SNS publisher | Modifying SNS publishing |
+| `internal/file/` | File publisher with log rotation | Modifying file publishing |
+| `internal/remotewrite/` | Prometheus remote_write publisher | Modifying remote write publishing |
+| `internal/config/` | YAML configuration structs and validation | Changing configuration options |
+| `internal/app/` | Application bootstrap and HTTP server | Changing server setup or middleware |
+| `internal/static/` | Embedded React frontend (`//go:embed`) | Changing how the frontend is served |
+| `internal/testing/` | Integration test container helpers | Adding integration tests |
+| `site/` | React frontend source | Modifying the web UI |
+| `testing/` | Remote write test setup (VictoriaMetrics) | Testing remote write locally |
+| `testdata/` | Modbus simulator configuration | Testing with simulated hardware |
+| `docs/` | Modbus register documentation | Understanding Epever register mappings |
+| `package/` | System packaging (deb, rpm) via nfpm | Changing release packaging |
+
 ## Development Commands
 
 ### Using Make (Recommended)
@@ -433,16 +455,16 @@ To test Prometheus remote_write locally without Grafana Cloud:
 
 ```bash
 # Start VictoriaMetrics
-cd testing && ./test-remotewrite.sh
+cd testing/remotewrite && ./test-remotewrite.sh
 
 # In another terminal, run solar-controller
 make build-backend
-./bin/solar-controller -config testing/config-remotewrite-test.yaml
+./bin/solar-controller -config testing/remotewrite/config.yaml
 
 # View metrics at http://localhost:8428/vmui
 ```
 
-See `testing/README.md` for details.
+See `testing/remotewrite/README.md` for details.
 
 ### Integration Testing
 
@@ -545,6 +567,8 @@ integration-tests:
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
 - `testing/` - Remote write testing setup and utilities
+- `testdata/` - Modbus simulator configuration files
+- `docs/` - Modbus register documentation
 - `package/` - Packaging files for system packages (deb, rpm, etc.)
 
 ## Important Notes

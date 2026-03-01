@@ -422,16 +422,16 @@ All metrics from each collection cycle are batched into a single WriteRequest fo
 To test Prometheus remote_write locally:
 ```bash
 # Start VictoriaMetrics test server
-cd testing && ./test-remotewrite.sh
+cd testing/remotewrite && ./test-remotewrite.sh
 
 # In another terminal, run solar-controller
 make build-backend
-./bin/solar-controller -config testing/config-remotewrite-test.yaml
+./bin/solar-controller -config testing/remotewrite/config.yaml
 
 # View metrics at http://localhost:8428/vmui
 ```
 
-See `testing/README.md` for details.
+See `testing/remotewrite/README.md` for details.
 
 ## Project Structure
 
@@ -446,6 +446,8 @@ See `testing/README.md` for details.
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
 - `testing/` - Remote write testing setup and utilities
+- `testdata/` - Modbus simulator configuration files
+- `docs/` - Modbus register documentation
 - `package/` - Packaging files for system packages (deb, rpm, etc.)
 
 ## License
