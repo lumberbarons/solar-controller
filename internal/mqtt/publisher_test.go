@@ -1,6 +1,8 @@
 package mqtt
 
 import (
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -92,9 +94,13 @@ func (m *MockMQTTClient) OptionsReader() mqtt.ClientOptionsReader {
 	return mqtt.ClientOptionsReader{}
 }
 
-func init() {
-	// Suppress log output during tests
-	logrus.SetLevel(logrus.ErrorLevel)
+func TestMain(m *testing.M) {
+	// Suppress log output during tests without mutating the global level
+	origOutput := logrus.StandardLogger().Out
+	logrus.SetOutput(io.Discard)
+	code := m.Run()
+	logrus.SetOutput(origOutput)
+	os.Exit(code)
 }
 
 func TestNewPublisher_Disabled(t *testing.T) {
