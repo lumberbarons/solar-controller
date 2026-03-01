@@ -157,5 +157,38 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 				t.Errorf("Expected metric %q not found in publish calls", expectedMetric)
 			}
 		}
+
+		// Verify payload values for key metrics
+		payloadChecks := []struct {
+			metric string
+			value  float64
+			unit   string
+		}{
+			{"array-voltage", 18.5, "volts"},
+			{"battery-soc", 85, "percent"},
+			{"battery-voltage", 12.8, "volts"},
+		}
+
+		for _, pc := range payloadChecks {
+			suffix := "test-device-1/epever/" + pc.metric
+			for _, call := range mockPublisher.PublishCalls {
+				if call.TopicSuffix == suffix {
+					var payload MetricPayload
+					if err := json.Unmarshal([]byte(call.Payload), &payload); err != nil {
+						t.Fatalf("Failed to unmarshal %s payload: %v", pc.metric, err)
+					}
+					if payload.Value != pc.value {
+						t.Errorf("%s: value = %v, want %v", pc.metric, payload.Value, pc.value)
+					}
+					if payload.Unit != pc.unit {
+						t.Errorf("%s: unit = %q, want %q", pc.metric, payload.Unit, pc.unit)
+					}
+					if payload.Timestamp == 0 {
+						t.Errorf("%s: timestamp should be non-zero", pc.metric)
+					}
+					break
+				}
+			}
+		}
 	})
 }
