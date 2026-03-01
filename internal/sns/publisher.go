@@ -48,14 +48,25 @@ func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
+	return newPublisherWithConfig(cfg, topicPrefix, awsCfg)
+}
+
+// newPublisherWithConfig creates a publisher with a custom AWS config
+// This allows dependency injection for testing
+func newPublisherWithConfig(cfg *Configuration, topicPrefix string, awsCfg aws.Config) (*Publisher, error) {
 	// Create SNS client
 	client := sns.NewFromConfig(awsCfg)
+
+	// Use config's TopicPrefix if provided, otherwise use parameter
+	if cfg.TopicPrefix != "" {
+		topicPrefix = cfg.TopicPrefix
+	}
 
 	// Verify topic exists by getting its attributes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err = client.GetTopicAttributes(ctx, &sns.GetTopicAttributesInput{
+	_, err := client.GetTopicAttributes(ctx, &sns.GetTopicAttributesInput{
 		TopicArn: aws.String(cfg.TopicArn),
 	})
 	if err != nil {

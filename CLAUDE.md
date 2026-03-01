@@ -54,8 +54,17 @@ make build-with-cgo
 # Run in debug mode
 ./bin/solar-controller -config path/to/config.yaml -debug
 
-# Run tests
+# Run unit tests
 go test ./...
+
+# Run unit tests (via Makefile)
+make test-unit
+
+# Run integration tests (requires Docker)
+make test-int
+
+# Run all tests (unit + integration)
+make test-all
 
 # Install dependencies
 go get -d -v ./...
@@ -65,6 +74,11 @@ go mod tidy
 ```
 
 **Note:** The Solace messaging library requires CGO to be enabled. When building locally with Solace support, use `make build-with-cgo` or set `CGO_ENABLED=1` when running `go build`.
+
+**Testing:**
+- **Unit tests**: Run without build tags, use mocks for external dependencies
+- **Integration tests**: Require Docker, use `//go:build integration` tag, test with real services via testcontainers
+- Integration tests are automatically skipped when running `make test` or `go test ./...`
 
 ### Frontend (React)
 
@@ -429,6 +443,94 @@ make build-backend
 ```
 
 See `testing/README.md` for details.
+
+### Integration Testing
+
+The project uses [testcontainers-go](https://golang.testcontainers.org/) for integration testing with real service dependencies. Integration tests are marked with the `//go:build integration` build tag to separate them from unit tests.
+
+#### Running Integration Tests
+
+**Prerequisites:**
+- Docker daemon running locally
+- Docker socket accessible (typically `/var/run/docker.sock`)
+- Sufficient Docker resources allocated
+
+**Commands:**
+```bash
+# Run only integration tests
+make test-int
+
+# Run all tests (unit + integration)
+make test-all
+
+# Run integration tests directly with go test
+go test -v -tags=integration ./...
+
+# Run specific integration test
+go test -v -tags=integration ./internal/sns -run TestSNSPublisherIntegration
+```
+
+#### Available Integration Tests
+
+**SNS Publisher Integration** (`internal/sns/integration_test.go`):
+- Uses LocalStack testcontainer to simulate AWS SNS
+- Tests message publishing to SNS topics
+- Verifies message format and delivery via SQS subscription
+- Tests custom topic prefixes
+
+**Test Coverage:**
+- Single message publishing
+- Multiple message batching
+- Custom topic prefix configuration
+- Message payload format validation
+- SNS subject (topic path) verification
+
+#### Architecture
+
+**Helper Package** (`internal/testing/containers/`):
+- `localstack.go` - LocalStack container setup and helpers
+- `helpers.go` - Common test utilities
+
+**Container Lifecycle:**
+1. Test starts container using testcontainers-go
+2. Container is configured with service-specific settings
+3. Test runs against real service in container
+4. Container is automatically cleaned up after test (via `t.Cleanup()`)
+
+**Benefits:**
+- **Production parity**: Tests run against same service images as production
+- **Automated**: No manual setup required, containers start automatically
+- **Isolated**: Each test gets unique port mappings for parallel execution
+- **Reproducible**: Consistent test environment across machines and CI/CD
+- **Real protocols**: Catches issues that mocks can't detect
+
+#### CI/CD Integration
+
+Integration tests can run in GitHub Actions or other CI systems with Docker support:
+
+```yaml
+integration-tests:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+    - name: Run integration tests
+      run: make test-int
+```
+
+#### Future Integration Tests
+
+**Planned:**
+- **MQTT**: Mosquitto container for MQTT publisher testing
+- **Solace**: Official Solace PubSub+ container (supports both MQTT and SMF protocols)
+- **Epever End-to-End**: Full collection → publish → verify flow using built-in Modbus simulator
+
+**Design Principles:**
+1. Use build tags to separate integration from unit tests
+2. One integration test file per publisher/component
+3. Reusable container helpers in `internal/testing/containers/`
+4. Parallel test support via dynamic port mapping
+5. Comprehensive cleanup with `t.Cleanup()`
 
 ## Project Structure
 
