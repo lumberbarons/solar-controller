@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -100,10 +99,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 		publisher.Publish(topicSuffix, payload)
 
-		// Wait a bit for message to be delivered
-		time.Sleep(2 * time.Second)
-
-		// Receive message from SQS
+		// Receive message from SQS (WaitTimeSeconds handles waiting for delivery)
 		msgResp, err := sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 			QueueUrl:            aws.String(queueURL),
 			MaxNumberOfMessages: 1,
@@ -160,10 +156,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			publisher.Publish(m.topicSuffix, m.payload)
 		}
 
-		// Wait for messages to be delivered
-		time.Sleep(2 * time.Second)
-
-		// Receive all messages from SQS
+		// Receive all messages from SQS (WaitTimeSeconds handles waiting for delivery)
 		msgResp, err := sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 			QueueUrl:            aws.String(queueURL),
 			MaxNumberOfMessages: 10,
@@ -217,9 +210,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 		customPublisher.Publish(topicSuffix, payload)
 
-		// Wait and receive
-		time.Sleep(2 * time.Second)
-
+		// Receive message (WaitTimeSeconds handles waiting for delivery)
 		msgResp, err := sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 			QueueUrl:            aws.String(queueURL),
 			MaxNumberOfMessages: 1,
