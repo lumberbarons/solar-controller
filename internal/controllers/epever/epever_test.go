@@ -80,10 +80,10 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 					if quantity == 18 {
 						return testingpkg.CreateModbusResponse(
 							1850, 520, // Array V/I
-							0, 962, // Array power (32-bit)
+							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
 							480,    // Charging current
-							0, 614, // Charging power (32-bit)
+							614, 0, // Charging power (32-bit: low word, high word)
 							0, 0, 0, 0, 0, 0, 0, 0, // Unused registers
 							2500, 3200, // Battery temp, Device temp
 						), nil
@@ -92,7 +92,7 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 				case regBatterySOC:
 					return testingpkg.CreateModbusResponse(85), nil
 				case regEnergyGeneratedDaily:
-					return testingpkg.CreateModbusResponse(0, 1550), nil
+					return testingpkg.CreateModbusResponse(1550, 0), nil // low word, high word
 				case regControllerStatus:
 					return testingpkg.CreateModbusResponse(0x0004), nil
 				default:

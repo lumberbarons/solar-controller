@@ -29,10 +29,10 @@ func TestCollector_GetStatus(t *testing.T) {
 						// 0x3111: Device temp (3200 = 32°C)
 						return testingpkg.CreateModbusResponse(
 							1850, 520, // Array V/I
-							0, 962, // Array power (32-bit)
+							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
 							480,    // Charging current
-							0, 614, // Charging power (32-bit)
+							614, 0, // Charging power (32-bit: low word, high word)
 							0, 0, 0, 0, 0, 0, 0, 0, // Unused registers (0x3108-0x310F)
 							2500, 3200, // Battery temp, Device temp
 						), nil
@@ -41,7 +41,7 @@ func TestCollector_GetStatus(t *testing.T) {
 				case regBatterySOC: // Battery SOC (1 register)
 					return testingpkg.CreateModbusResponse(85), nil // 85%
 				case regEnergyGeneratedDaily: // Daily energy (2 registers for 32-bit)
-					return testingpkg.CreateModbusResponse(0, 1550), nil // 15.5 kWh
+					return testingpkg.CreateModbusResponse(1550, 0), nil // 15.5 kWh (low word, high word)
 				case regControllerStatus: // Controller status (1 register)
 					return testingpkg.CreateModbusResponse(0x0004), nil // Charging status bits
 				default:
@@ -71,9 +71,13 @@ func TestCollector_GetStatus(t *testing.T) {
 		}{
 			{"ArrayVoltage", status.ArrayVoltage, 18.5},
 			{"ArrayCurrent", status.ArrayCurrent, 5.2},
+			{"ArrayPower", status.ArrayPower, 9.62},
 			{"BatteryVoltage", status.BatteryVoltage, 12.8},
+			{"ChargingCurrent", status.ChargingCurrent, 4.8},
+			{"ChargingPower", status.ChargingPower, 6.14},
 			{"BatteryTemp", status.BatteryTemp, 25.0},
 			{"DeviceTemp", status.DeviceTemp, 32.0},
+			{"EnergyGeneratedDaily", status.EnergyGeneratedDaily, 15.5},
 		}
 
 		for _, tt := range tests {
@@ -148,10 +152,10 @@ func TestCollector_GetStatus(t *testing.T) {
 						// Same as successful test but with negative temperatures
 						return testingpkg.CreateModbusResponse(
 							1850, 520, // Array V/I
-							0, 962, // Array power (32-bit)
+							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
 							480,    // Charging current
-							0, 614, // Charging power (32-bit)
+							614, 0, // Charging power (32-bit: low word, high word)
 							0, 0, 0, 0, 0, 0, 0, 0, // Unused registers
 							64536, 65036, // Battery temp (-10°C), Device temp (-5°C)
 						), nil
