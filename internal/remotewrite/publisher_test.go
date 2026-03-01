@@ -319,9 +319,9 @@ func TestPublishWithMockServer(t *testing.T) {
 		assert.Equal(t, "0.1.0", req.headers.Get("X-Prometheus-Remote-Write-Version"))
 		assert.Equal(t, "tenant1", req.headers.Get("X-Scope-OrgID"))
 
-		// Verify basic auth header is present
+		// Verify basic auth header matches configured credentials (testuser:testpass)
 		authHeader := req.headers.Get("Authorization")
-		assert.NotEmpty(t, authHeader, "Authorization header should be present")
+		assert.Equal(t, "Basic dGVzdHVzZXI6dGVzdHBhc3M=", authHeader)
 
 		// Verify timeseries count
 		assert.Equal(t, 12, len(req.writeRequest.Timeseries), "Expected 12 time series")
