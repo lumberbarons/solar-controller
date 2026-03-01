@@ -105,7 +105,7 @@ func TestCollector_GetStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("modbus read failure for array voltage", func(t *testing.T) {
+	t.Run("modbus read failure for batch data", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				if address == regArrayVoltage {
@@ -120,15 +120,22 @@ func TestCollector_GetStatus(t *testing.T) {
 		_, err := collector.GetStatus(ctx)
 
 		if err == nil {
-			t.Error("GetStatus() should return error when modbus read fails")
+			t.Error("GetStatus() should return error when batch read fails")
 		}
 	})
 
-	t.Run("modbus read failure for batch data", func(t *testing.T) {
+	t.Run("modbus read failure for battery SOC", func(t *testing.T) {
 		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
-				if address == regArrayVoltage {
-					return nil, &testingpkg.ModbusTestError{Message: "device disconnected"}
+			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
+				if address == regBatterySOC {
+					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+				}
+				if address == regArrayVoltage && quantity == 18 {
+					return testingpkg.CreateModbusResponse(
+						1850, 520, 962, 0, 1280, 480, 614, 0,
+						0, 0, 0, 0, 0, 0, 0, 0,
+						2500, 3200,
+					), nil
 				}
 				return testingpkg.CreateModbusResponse(0), nil
 			},
@@ -139,7 +146,68 @@ func TestCollector_GetStatus(t *testing.T) {
 		_, err := collector.GetStatus(ctx)
 
 		if err == nil {
-			t.Error("GetStatus() should return error when batch read fails")
+			t.Error("GetStatus() should return error when battery SOC read fails")
+		}
+	})
+
+	t.Run("modbus read failure for energy generated daily", func(t *testing.T) {
+		mockClient := &testingpkg.MockModbusClient{
+			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
+				if address == regEnergyGeneratedDaily {
+					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+				}
+				if address == regArrayVoltage && quantity == 18 {
+					return testingpkg.CreateModbusResponse(
+						1850, 520, 962, 0, 1280, 480, 614, 0,
+						0, 0, 0, 0, 0, 0, 0, 0,
+						2500, 3200,
+					), nil
+				}
+				if address == regBatterySOC {
+					return testingpkg.CreateModbusResponse(85), nil
+				}
+				return testingpkg.CreateModbusResponse(0), nil
+			},
+		}
+
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
+		_, err := collector.GetStatus(ctx)
+
+		if err == nil {
+			t.Error("GetStatus() should return error when energy generated daily read fails")
+		}
+	})
+
+	t.Run("modbus read failure for controller status", func(t *testing.T) {
+		mockClient := &testingpkg.MockModbusClient{
+			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
+				if address == regControllerStatus {
+					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+				}
+				if address == regArrayVoltage && quantity == 18 {
+					return testingpkg.CreateModbusResponse(
+						1850, 520, 962, 0, 1280, 480, 614, 0,
+						0, 0, 0, 0, 0, 0, 0, 0,
+						2500, 3200,
+					), nil
+				}
+				if address == regBatterySOC {
+					return testingpkg.CreateModbusResponse(85), nil
+				}
+				if address == regEnergyGeneratedDaily {
+					return testingpkg.CreateModbusResponse(1550, 0), nil
+				}
+				return testingpkg.CreateModbusResponse(0), nil
+			},
+		}
+
+		mockMetrics := &testingpkg.MockMetricsCollector{}
+		collector := NewCollector(mockClient, mockMetrics)
+		_, err := collector.GetStatus(ctx)
+
+		if err == nil {
+			t.Error("GetStatus() should return error when controller status read fails")
 		}
 	})
 
