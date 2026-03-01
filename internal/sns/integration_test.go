@@ -5,6 +5,7 @@ package sns
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,13 +20,21 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/testing/containers"
 )
 
-func TestSNSPublisherIntegration(t *testing.T) {
-	// Start LocalStack container
-	localStack := containers.StartLocalStack(t)
+// snsTestFixture holds per-subtest SNS/SQS resources
+type snsTestFixture struct {
+	topicArn  string
+	queueURL  string
+	snsClient *sns.Client
+	sqsClient *sqs.Client
+	awsCfg    aws.Config
+}
+
+// setupSNSFixture creates an isolated SNS topic + SQS queue + subscription for a single subtest.
+func setupSNSFixture(t *testing.T, localStack *containers.LocalStackContainer, name string) *snsTestFixture {
+	t.Helper()
 
 	ctx := context.Background()
 
-	// Configure AWS SDK for LocalStack
 	endpoint := localStack.GetSNSEndpoint(t)
 	region := localStack.GetRegion()
 	accessKey, secretKey := localStack.GetCredentials()
@@ -44,25 +53,21 @@ func TestSNSPublisherIntegration(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Create SNS and SQS clients
 	snsClient := sns.NewFromConfig(awsCfg)
 	sqsClient := sqs.NewFromConfig(awsCfg)
 
-	// Create SNS topic
 	topicResp, err := snsClient.CreateTopic(ctx, &sns.CreateTopicInput{
-		Name: aws.String("test-solar-metrics"),
+		Name: aws.String(fmt.Sprintf("test-%s", name)),
 	})
 	require.NoError(t, err)
 	topicArn := *topicResp.TopicArn
 
-	// Create SQS queue to receive SNS messages
 	queueResp, err := sqsClient.CreateQueue(ctx, &sqs.CreateQueueInput{
-		QueueName: aws.String("test-solar-metrics-queue"),
+		QueueName: aws.String(fmt.Sprintf("test-%s-queue", name)),
 	})
 	require.NoError(t, err)
 	queueURL := *queueResp.QueueUrl
 
-	// Get queue ARN
 	attrResp, err := sqsClient.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
 		QueueUrl:       aws.String(queueURL),
 		AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameQueueArn},
@@ -70,7 +75,6 @@ func TestSNSPublisherIntegration(t *testing.T) {
 	require.NoError(t, err)
 	queueArn := attrResp.Attributes[string(sqstypes.QueueAttributeNameQueueArn)]
 
-	// Subscribe SQS queue to SNS topic
 	_, err = snsClient.Subscribe(ctx, &sns.SubscribeInput{
 		Protocol: aws.String("sqs"),
 		TopicArn: aws.String(topicArn),
@@ -78,37 +82,47 @@ func TestSNSPublisherIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Create publisher configuration
-	cfg := &Configuration{
-		Enabled:     true,
-		Region:      region,
-		TopicArn:    topicArn,
-		TopicPrefix: "solar",
+	return &snsTestFixture{
+		topicArn:  topicArn,
+		queueURL:  queueURL,
+		snsClient: snsClient,
+		sqsClient: sqsClient,
+		awsCfg:    awsCfg,
 	}
+}
 
-	// Create publisher with custom AWS config
-	publisher, err := newPublisherWithConfig(cfg, "solar", awsCfg)
-	require.NoError(t, err)
-	require.NotNil(t, publisher.client)
-	defer publisher.Close()
+func TestSNSPublisherIntegration(t *testing.T) {
+	// Start LocalStack container (shared across subtests)
+	localStack := containers.StartLocalStack(t)
 
 	t.Run("PublishSingleMessage", func(t *testing.T) {
-		// Publish a message
+		f := setupSNSFixture(t, localStack, "single-message")
+		ctx := context.Background()
+
+		cfg := &Configuration{
+			Enabled:     true,
+			Region:      f.awsCfg.Region,
+			TopicArn:    f.topicArn,
+			TopicPrefix: "solar",
+		}
+
+		publisher, err := newPublisherWithConfig(cfg, "solar", f.awsCfg)
+		require.NoError(t, err)
+		defer publisher.Close()
+
 		topicSuffix := "controller-1/epever/battery-voltage"
 		payload := `{"value": 12.8, "unit": "volts", "timestamp": 1699000000}`
 
 		publisher.Publish(topicSuffix, payload)
 
-		// Receive message from SQS (WaitTimeSeconds handles waiting for delivery)
-		msgResp, err := sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(queueURL),
+		msgResp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(f.queueURL),
 			MaxNumberOfMessages: 1,
 			WaitTimeSeconds:     5,
 		})
 		require.NoError(t, err)
 		require.Len(t, msgResp.Messages, 1)
 
-		// Parse SNS notification
 		var snsNotification struct {
 			Type      string `json:"Type"`
 			MessageId string `json:"MessageId"`
@@ -120,29 +134,33 @@ func TestSNSPublisherIntegration(t *testing.T) {
 		err = json.Unmarshal([]byte(*msgResp.Messages[0].Body), &snsNotification)
 		require.NoError(t, err)
 
-		// Verify SNS message content
 		assert.Equal(t, "Notification", snsNotification.Type)
-		assert.Equal(t, topicArn, snsNotification.TopicArn)
+		assert.Equal(t, f.topicArn, snsNotification.TopicArn)
 		assert.Equal(t, "solar/controller-1/epever/battery-voltage", snsNotification.Subject)
 		assert.Equal(t, payload, snsNotification.Message)
 
-		// Verify payload is valid JSON
 		var metricPayload map[string]interface{}
 		err = json.Unmarshal([]byte(snsNotification.Message), &metricPayload)
 		require.NoError(t, err)
 		assert.Equal(t, 12.8, metricPayload["value"])
 		assert.Equal(t, "volts", metricPayload["unit"])
-
-		// Clean up message
-		_, err = sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-			QueueUrl:      aws.String(queueURL),
-			ReceiptHandle: msgResp.Messages[0].ReceiptHandle,
-		})
-		require.NoError(t, err)
 	})
 
 	t.Run("PublishMultipleMessages", func(t *testing.T) {
-		// Publish multiple messages
+		f := setupSNSFixture(t, localStack, "multiple-messages")
+		ctx := context.Background()
+
+		cfg := &Configuration{
+			Enabled:     true,
+			Region:      f.awsCfg.Region,
+			TopicArn:    f.topicArn,
+			TopicPrefix: "solar",
+		}
+
+		publisher, err := newPublisherWithConfig(cfg, "solar", f.awsCfg)
+		require.NoError(t, err)
+		defer publisher.Close()
+
 		metrics := []struct {
 			topicSuffix string
 			payload     string
@@ -156,16 +174,14 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			publisher.Publish(m.topicSuffix, m.payload)
 		}
 
-		// Receive all messages from SQS (WaitTimeSeconds handles waiting for delivery)
-		msgResp, err := sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(queueURL),
+		msgResp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(f.queueURL),
 			MaxNumberOfMessages: 10,
 			WaitTimeSeconds:     5,
 		})
 		require.NoError(t, err)
 		assert.Len(t, msgResp.Messages, 3, "should receive all 3 messages")
 
-		// Verify each message
 		subjects := make(map[string]string)
 		for _, msg := range msgResp.Messages {
 			var snsNotification struct {
@@ -174,66 +190,48 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			}
 			err = json.Unmarshal([]byte(*msg.Body), &snsNotification)
 			require.NoError(t, err)
-
 			subjects[snsNotification.Subject] = snsNotification.Message
-
-			// Clean up
-			_, err = sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-				QueueUrl:      aws.String(queueURL),
-				ReceiptHandle: msg.ReceiptHandle,
-			})
-			require.NoError(t, err)
 		}
 
-		// Verify all expected subjects were received
 		assert.Contains(t, subjects, "solar/controller-1/epever/array-voltage")
 		assert.Contains(t, subjects, "solar/controller-1/epever/battery-soc")
 		assert.Contains(t, subjects, "solar/controller-1/epever/charging-power")
 	})
 
 	t.Run("CustomTopicPrefix", func(t *testing.T) {
-		// Create publisher with custom topic prefix
+		f := setupSNSFixture(t, localStack, "custom-prefix")
+		ctx := context.Background()
+
 		customCfg := &Configuration{
 			Enabled:     true,
-			Region:      region,
-			TopicArn:    topicArn,
+			Region:      f.awsCfg.Region,
+			TopicArn:    f.topicArn,
 			TopicPrefix: "custom-prefix",
 		}
 
-		customPublisher, err := newPublisherWithConfig(customCfg, "default-prefix", awsCfg)
+		customPublisher, err := newPublisherWithConfig(customCfg, "default-prefix", f.awsCfg)
 		require.NoError(t, err)
 		defer customPublisher.Close()
 
-		// Publish message
 		topicSuffix := "controller-1/epever/device-temp"
 		payload := `{"value": 35, "unit": "celsius", "timestamp": 1699000004}`
 
 		customPublisher.Publish(topicSuffix, payload)
 
-		// Receive message (WaitTimeSeconds handles waiting for delivery)
-		msgResp, err := sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(queueURL),
+		msgResp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(f.queueURL),
 			MaxNumberOfMessages: 1,
 			WaitTimeSeconds:     5,
 		})
 		require.NoError(t, err)
 		require.Len(t, msgResp.Messages, 1)
 
-		// Parse and verify
 		var snsNotification struct {
 			Subject string `json:"Subject"`
 		}
 		err = json.Unmarshal([]byte(*msgResp.Messages[0].Body), &snsNotification)
 		require.NoError(t, err)
 
-		// Should use default prefix since TopicPrefix in config is set
 		assert.Equal(t, "custom-prefix/controller-1/epever/device-temp", snsNotification.Subject)
-
-		// Clean up
-		_, err = sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-			QueueUrl:      aws.String(queueURL),
-			ReceiptHandle: msgResp.Messages[0].ReceiptHandle,
-		})
-		require.NoError(t, err)
 	})
 }
