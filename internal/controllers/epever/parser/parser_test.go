@@ -225,6 +225,14 @@ func TestParseFloat32(t *testing.T) {
 			want: 1200.00,
 		},
 		{
+			name: "non-zero high and low words with inline bytes",
+			// Value 120000 (= 1200.00 kWh after /100)
+			// Low word: 0xD4C0 (54464), High word: 0x0001
+			// Epever wire format: [low_hi, low_lo, high_hi, high_lo]
+			data: []byte{0xD4, 0xC0, 0x00, 0x01},
+			want: 1200.00,
+		},
+		{
 			name:    "insufficient data",
 			data:    []byte{0x00, 0x00, 0x00},
 			wantErr: true,
