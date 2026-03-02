@@ -3,6 +3,12 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/file"
+	"github.com/lumberbarons/solar-controller/internal/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/sns"
+	"github.com/lumberbarons/solar-controller/internal/solace"
 )
 
 func TestLoad(t *testing.T) {
@@ -494,6 +500,58 @@ solarController:
 				}
 			},
 		},
+		{
+			name: "DeviceID defaults to controller-1 when not specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.DeviceID != "controller-1" {
+					t.Errorf("DeviceID = %s, want controller-1 (default)", c.SolarController.DeviceID)
+				}
+			},
+		},
+		{
+			name: "SNS TopicPrefix defaults to solar when not specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  sns:
+    enabled: true
+    region: us-east-1
+    topicArn: "arn:aws:sns:us-east-1:123456789012:test"
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.SNS.TopicPrefix != "solar" {
+					t.Errorf("SNS TopicPrefix = %s, want solar (default)", c.SolarController.SNS.TopicPrefix)
+				}
+			},
+		},
+		{
+			name: "RemoteWrite TopicPrefix defaults to solar when not specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  remoteWrite:
+    enabled: true
+    url: http://prometheus:9090/api/v1/write
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.RemoteWrite.TopicPrefix != "solar" {
+					t.Errorf("RemoteWrite TopicPrefix = %s, want solar (default)", c.SolarController.RemoteWrite.TopicPrefix)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -574,6 +632,94 @@ func TestConfig_Validate(t *testing.T) {
 				},
 			},
 			wantErr: false,
+		},
+		{
+			name: "MQTT enabled but no host",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Mqtt:     mqtt.Configuration{Enabled: true, Host: ""},
+				},
+			},
+			wantErr: true,
+			errMsg:  "MQTT host is required",
+		},
+		{
+			name: "Solace enabled but no host",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Solace:   solace.Configuration{Enabled: true, Host: "", VpnName: "default"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "solace host is required",
+		},
+		{
+			name: "Solace enabled but no VPN name",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Solace:   solace.Configuration{Enabled: true, Host: "tcp://broker:55555", VpnName: ""},
+				},
+			},
+			wantErr: true,
+			errMsg:  "solace VPN name is required",
+		},
+		{
+			name: "SNS enabled but no topic ARN",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					SNS:      sns.Configuration{Enabled: true, Region: "us-east-1", TopicArn: ""},
+				},
+			},
+			wantErr: true,
+			errMsg:  "SNS topic ARN is required",
+		},
+		{
+			name: "SNS enabled but no region",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					SNS:      sns.Configuration{Enabled: true, Region: "", TopicArn: "arn:aws:sns:us-east-1:123:test"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "SNS region is required",
+		},
+		{
+			name: "File enabled but no filename",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					File:     file.Configuration{Enabled: true, Filename: ""},
+				},
+			},
+			wantErr: true,
+			errMsg:  "file filename is required",
+		},
+		{
+			name: "Epever enabled but no serial port",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Epever:   epever.Configuration{Enabled: true, SerialPort: "", PublishPeriod: 60},
+				},
+			},
+			wantErr: true,
+			errMsg:  "epever serial port is required",
+		},
+		{
+			name: "Epever enabled but zero publish period",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Epever:   epever.Configuration{Enabled: true, SerialPort: "/dev/ttyUSB0", PublishPeriod: 0},
+				},
+			},
+			wantErr: true,
+			errMsg:  "epever publish period must be positive",
 		},
 	}
 
