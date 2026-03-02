@@ -175,6 +175,8 @@ func TestApplication_SPAFallback(t *testing.T) {
 			assert.Equal(t, http.StatusOK, w.Code)
 			// The response should be HTML (index.html), not JSON
 			assert.NotContains(t, w.Header().Get("Content-Type"), "application/json")
+			// The response body should contain HTML content
+			assert.Contains(t, w.Body.String(), "<!doctype html>", "response body should contain HTML")
 		})
 	}
 }
