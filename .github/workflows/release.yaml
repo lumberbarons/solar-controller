@@ -29,7 +29,7 @@ jobs:
         run: make build-frontend
 
       - name: Upload site build artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: site-build
           path: internal/static/build
@@ -93,7 +93,7 @@ jobs:
           cd ..
 
       - name: Upload binary artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: |
@@ -161,7 +161,7 @@ jobs:
           nfpm package --packager ${{ matrix.format }} --target dist/
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: package-${{ matrix.arch }}-${{ matrix.format }}
           path: dist/*.${{ matrix.format }}
@@ -233,7 +233,7 @@ jobs:
           touch /tmp/digests/${digest#sha256:}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ matrix.arch }}
           path: /tmp/digests/*
