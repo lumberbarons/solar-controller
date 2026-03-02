@@ -8,8 +8,10 @@ A Go-based service that collects metrics from solar power equipment (Epever) and
 - Multiple publishing options:
   - **MQTT** - Lightweight message broker for home automation systems
   - **Solace** - Enterprise-grade messaging with Solace PubSub+
+  - **AWS SNS** - Push notifications via Amazon Simple Notification Service
   - **File** - JSON log files with automatic rotation and optional compression
   - **Prometheus Remote Write** - Push metrics to Prometheus, Grafana Cloud, VictoriaMetrics, etc.
+- Multiple publishers can be enabled simultaneously (fan-out)
 - Prometheus metrics export via scraping endpoint
 - Web-based monitoring UI (React SPA)
 - RESTful API for metrics and configuration
@@ -29,15 +31,31 @@ A Go-based service that collects metrics from solar power equipment (Epever) and
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/lumberbarons/solar-controller.git
 cd solar-controller
 
 # Build everything (frontend + backend)
 make build
 
-# Run with configuration
+# Create a minimal config file
+cat > config.yaml <<EOF
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+EOF
+
+# Run the controller
 ./bin/solar-controller -config config.yaml
 ```
+
+You should see output like:
+```
+INFO Solar Controller starting    version=...
+INFO Starting HTTP server          port=8080
+```
+
+The web UI is then available at `http://localhost:8080`.
 
 ### Building
 
@@ -158,31 +176,38 @@ solarController:
   httpPort: 8080
   debug: false          # Enable debug logging (can also use -debug flag)
   deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
-  topicPrefix: solar            # Topic prefix for all publishers (default: "solar")
 
-  # Message Publishers (choose one - mutually exclusive)
+  # Message Publishers (multiple can be enabled simultaneously)
   mqtt:
-    enabled: true  # Only one of mqtt, solace, file, or remoteWrite can be enabled
+    enabled: true
     host: mqtt://broker:1883
     username: user
     password: pass
+    topicPrefix: solar  # Optional (default: "solar")
 
   solace:
-    enabled: false  # Enterprise messaging with Solace PubSub+
+    enabled: false
     host: tcp://solace-broker:55555
     username: user
     password: pass
     vpnName: default
+    topicPrefix: solar  # Optional (default: "solar")
+
+  sns:
+    enabled: false
+    region: us-east-1
+    topicArn: arn:aws:sns:us-east-1:123456789012:solar-metrics
+    topicPrefix: solar  # Optional (default: "solar")
 
   file:
-    enabled: false  # Write metrics to rotating log files
+    enabled: false
     filename: /var/log/solar-controller/metrics.log
     maxSizeMB: 10      # Max size per file before rotation (default: 10)
     maxBackups: 10     # Number of old files to keep (default: 10)
     compress: false    # Compress rotated files with gzip (default: false)
 
   remoteWrite:
-    enabled: false  # Push to Prometheus, Grafana Cloud, VictoriaMetrics, etc.
+    enabled: false
     url: http://prometheus:9090/api/v1/write
     timeout: 30s    # Optional (default: 30s)
     basicAuth:      # Optional (mutually exclusive with bearerToken)
@@ -191,6 +216,7 @@ solarController:
     bearerToken: token123  # Optional (mutually exclusive with basicAuth)
     headers:        # Optional custom headers
       X-Scope-OrgID: tenant1
+    topicPrefix: solar  # Optional (default: "solar")
 
   # Hardware Controllers
   epever:
@@ -207,14 +233,15 @@ solarController:
 - If required fields are missing (serialPort for epever), a warning will be logged and the controller won't start
 
 **Message Publishers:**
-- Only one publisher (mqtt, solace, file, or remoteWrite) can be enabled at a time
-- If multiple publishers are enabled, configuration validation will fail
+- Multiple publishers can be enabled simultaneously — metrics are published to all enabled publishers (fan-out)
 - If no publisher is enabled, metrics are still collected and exposed via Prometheus/HTTP but not published
-- The `deviceId` and `topicPrefix` are global settings used by all publishers
+- Each publisher has its own `topicPrefix` configuration (default: `"solar"`)
+- `deviceId` is a global setting used by all publishers
 
 **Publisher Options:**
 - **MQTT**: Lightweight message broker integration (QoS 0, 5s timeout)
 - **Solace**: Enterprise messaging with VPN support (direct messaging, 5s timeout)
+- **AWS SNS**: Push notifications to an SNS topic (5s timeout, standard AWS credential chain)
 - **File**: JSON log files with rotation, compression, and configurable retention
 - **Remote Write**: Push to Prometheus-compatible endpoints with authentication and custom headers
 
@@ -274,7 +301,7 @@ The simulator provides realistic Epever solar charge controller data including:
 - Equipment temperature
 - Battery configuration parameters (type, capacity, voltage thresholds)
 
-You can modify `testdata/simulator/solar-charger.json` to simulate different device states and values.
+You can modify `testdata/simulator/epever.json` to simulate different device states and values.
 
 ## Architecture
 
@@ -370,7 +397,7 @@ curl -X PATCH http://localhost:8080/api/epever/charging-parameters \
 
 ## Message Publishing
 
-The application supports flexible message publishing with four backend options:
+The application supports flexible message publishing with five backend options:
 
 ### Topic Structure
 
@@ -411,16 +438,16 @@ All metrics from each collection cycle are batched into a single WriteRequest fo
 To test Prometheus remote_write locally:
 ```bash
 # Start VictoriaMetrics test server
-cd testing && ./test-remotewrite.sh
+cd testing/remotewrite && ./test-remotewrite.sh
 
 # In another terminal, run solar-controller
 make build-backend
-./bin/solar-controller -config testing/config-remotewrite-test.yaml
+./bin/solar-controller -config testing/remotewrite/config.yaml
 
 # View metrics at http://localhost:8428/vmui
 ```
 
-See `testing/README.md` for details.
+See `testing/remotewrite/README.md` for details.
 
 ## Project Structure
 
@@ -428,12 +455,15 @@ See `testing/README.md` for details.
 - `internal/controllers/` - Hardware controller implementations (epever)
 - `internal/mqtt/` - MQTT publishing functionality
 - `internal/solace/` - Solace publishing functionality
+- `internal/sns/` - AWS SNS publishing functionality
 - `internal/file/` - File publishing with log rotation
 - `internal/remotewrite/` - Prometheus remote_write publishing
 - `internal/publishers/` - Publisher factory and abstraction
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
 - `testing/` - Remote write testing setup and utilities
+- `testdata/` - Modbus simulator configuration files
+- `docs/` - Modbus register documentation
 - `package/` - Packaging files for system packages (deb, rpm, etc.)
 
 ## License

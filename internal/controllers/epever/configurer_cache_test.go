@@ -2,6 +2,7 @@ package epever
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -63,12 +64,24 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 			t.Error("Expected modbus calls to fetch config, got 0")
 		}
 
-		// Verify config values
+		// Verify config values across all field categories
 		if config1.BatteryType != "userDefined" {
 			t.Errorf("BatteryType = %v, want userDefined", config1.BatteryType)
 		}
 		if config1.BatteryCapacity != 100 {
 			t.Errorf("BatteryCapacity = %v, want 100", config1.BatteryCapacity)
+		}
+		if config1.OverVoltDisconnectVoltage != 16.0 {
+			t.Errorf("OverVoltDisconnectVoltage = %v, want 16.0", config1.OverVoltDisconnectVoltage)
+		}
+		if config1.BoostVoltage != 14.4 {
+			t.Errorf("BoostVoltage = %v, want 14.4", config1.BoostVoltage)
+		}
+		if config1.FloatVoltage != 13.8 {
+			t.Errorf("FloatVoltage = %v, want 13.8", config1.FloatVoltage)
+		}
+		if config1.BatteryTempUpperLimit != 45.0 {
+			t.Errorf("BatteryTempUpperLimit = %v, want 45.0", config1.BatteryTempUpperLimit)
 		}
 	})
 
@@ -132,12 +145,9 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 				callCount, firstCallCount)
 		}
 
-		// Verify both configs are equal
-		if config1.BatteryType != config2.BatteryType {
-			t.Error("Cached config should match original")
-		}
-		if config1.BatteryCapacity != config2.BatteryCapacity {
-			t.Error("Cached config should match original")
+		// Verify all fields of both configs are equal
+		if !reflect.DeepEqual(*config1, *config2) {
+			t.Errorf("Cached config should match original.\ngot:  %+v\nwant: %+v", *config2, *config1)
 		}
 
 		// Verify they are different pointers (copies, not same reference)

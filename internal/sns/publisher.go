@@ -48,14 +48,22 @@ func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
+	return newPublisherWithConfig(cfg, topicPrefix, &awsCfg)
+}
+
+// newPublisherWithConfig creates a publisher with a custom AWS config
+// This allows dependency injection for testing
+func newPublisherWithConfig(cfg *Configuration, topicPrefix string, awsCfg *aws.Config) (*Publisher, error) {
 	// Create SNS client
-	client := sns.NewFromConfig(awsCfg)
+	client := sns.NewFromConfig(*awsCfg)
+
+	topicPrefix = resolveTopicPrefix(cfg.TopicPrefix, topicPrefix)
 
 	// Verify topic exists by getting its attributes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err = client.GetTopicAttributes(ctx, &sns.GetTopicAttributesInput{
+	_, err := client.GetTopicAttributes(ctx, &sns.GetTopicAttributesInput{
 		TopicArn: aws.String(cfg.TopicArn),
 	})
 	if err != nil {
@@ -71,6 +79,18 @@ func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 	}
 
 	return publisher, nil
+}
+
+// resolveTopicPrefix returns the effective topic prefix using the priority:
+// paramPrefix > configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix, paramPrefix string) string {
+	if paramPrefix != "" {
+		return paramPrefix
+	}
+	if configPrefix != "" {
+		return configPrefix
+	}
+	return "solar"
 }
 
 func (p *Publisher) Publish(topicSuffix, payload string) {

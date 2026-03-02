@@ -6,6 +6,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT, Solace, AWS SNS, file logging, or Prometheus remote_write, with metrics also exposed via Prometheus scraping. It includes a React-based web UI for monitoring.
 
+## Project Navigation
+
+| Directory | What | When to read |
+|-----------|------|--------------|
+| `cmd/controller/` | Application entry point | Changing startup, flags, or controller wiring |
+| `internal/controllers/` | Hardware controller implementations (epever) | Adding controllers, modifying collection or publishing logic |
+| `internal/publishers/` | Publisher factory, MultiPublisher, MessagePublisher interface | Adding a new publisher or changing fan-out behavior |
+| `internal/mqtt/` | MQTT publisher | Modifying MQTT publishing |
+| `internal/solace/` | Solace publisher | Modifying Solace publishing |
+| `internal/sns/` | AWS SNS publisher | Modifying SNS publishing |
+| `internal/file/` | File publisher with log rotation | Modifying file publishing |
+| `internal/remotewrite/` | Prometheus remote_write publisher | Modifying remote write publishing |
+| `internal/config/` | YAML configuration structs and validation | Changing configuration options |
+| `internal/app/` | Application bootstrap and HTTP server | Changing server setup or middleware |
+| `internal/static/` | Embedded React frontend (`//go:embed`) | Changing how the frontend is served |
+| `internal/testing/` | Integration test container helpers | Adding integration tests |
+| `site/` | React frontend source | Modifying the web UI |
+| `testing/` | Remote write test setup (VictoriaMetrics) | Testing remote write locally |
+| `testdata/` | Modbus simulator configuration | Testing with simulated hardware |
+| `docs/` | Modbus register documentation | Understanding Epever register mappings |
+| `package/` | System packaging (deb, rpm) via nfpm | Changing release packaging |
+| `Makefile` | Build, test, deploy orchestration | Modifying build targets or CI commands |
+| `Dockerfile` | Production container image | Changing container build or runtime |
+| `Dockerfile.build` | Cross-compilation build container | Changing ARM64 cross-build process |
+| `nfpm.yaml` | Package metadata (deb, rpm) | Changing package version, dependencies, or scripts |
+| `go.mod` | Go module and dependency versions | Adding or updating dependencies |
+
 ## Development Commands
 
 ### Using Make (Recommended)
@@ -42,11 +69,8 @@ make clean
 ### Backend (Go)
 
 ```bash
-# Build the application (requires frontend to be built first)
-go build -o bin/solar-controller ./cmd/controller
-
-# Build with CGO enabled (required for Solace support)
-make build-with-cgo
+# Build the application with CGO enabled (requires frontend to be built first)
+CGO_ENABLED=1 go build -o bin/solar-controller ./cmd/controller
 
 # Run with configuration
 ./bin/solar-controller -config path/to/config.yaml
@@ -54,8 +78,17 @@ make build-with-cgo
 # Run in debug mode
 ./bin/solar-controller -config path/to/config.yaml -debug
 
-# Run tests
+# Run unit tests
 go test ./...
+
+# Run unit tests (via Makefile)
+make test-unit
+
+# Run integration tests (requires Docker)
+make test-int
+
+# Run all tests (unit + integration)
+make test-all
 
 # Install dependencies
 go get -d -v ./...
@@ -64,7 +97,12 @@ go get -d -v ./...
 go mod tidy
 ```
 
-**Note:** The Solace messaging library requires CGO to be enabled. When building locally with Solace support, use `make build-with-cgo` or set `CGO_ENABLED=1` when running `go build`.
+**Note:** The Solace messaging library requires CGO to be enabled. Use `make build-backend` (which enables CGO automatically) or set `CGO_ENABLED=1` when running `go build` directly.
+
+**Testing:**
+- **Unit tests**: Run without build tags, use mocks for external dependencies
+- **Integration tests**: Require Docker, use `//go:build integration` tag, test with real services via testcontainers
+- Integration tests are automatically skipped when running `make test` or `go test ./...`
 
 ### Frontend (React)
 
@@ -419,31 +457,104 @@ To test Prometheus remote_write locally without Grafana Cloud:
 
 ```bash
 # Start VictoriaMetrics
-cd testing && ./test-remotewrite.sh
+cd testing/remotewrite && ./test-remotewrite.sh
 
 # In another terminal, run solar-controller
 make build-backend
-./bin/solar-controller -config testing/config-remotewrite-test.yaml
+./bin/solar-controller -config testing/remotewrite/config.yaml
 
 # View metrics at http://localhost:8428/vmui
 ```
 
-See `testing/README.md` for details.
+See `testing/remotewrite/README.md` for details.
 
-## Project Structure
+### Integration Testing
 
-- `cmd/controller/` - Main application entry point
-- `internal/controllers/` - Hardware controller implementations (epever)
-- `internal/mqtt/` - MQTT publishing functionality
-- `internal/solace/` - Solace publishing functionality
-- `internal/sns/` - AWS SNS publishing functionality
-- `internal/file/` - File publishing functionality with log rotation
-- `internal/remotewrite/` - Prometheus remote_write publishing functionality
-- `internal/publishers/` - Publisher factory and abstraction layer
-- `internal/static/` - Static file embedding (React frontend)
-- `site/` - React frontend source code
-- `testing/` - Remote write testing setup and utilities
-- `package/` - Packaging files for system packages (deb, rpm, etc.)
+The project uses [testcontainers-go](https://golang.testcontainers.org/) for integration testing with real service dependencies. Integration tests are marked with the `//go:build integration` build tag to separate them from unit tests.
+
+#### Running Integration Tests
+
+**Prerequisites:**
+- Docker daemon running locally
+- Docker socket accessible (typically `/var/run/docker.sock`)
+- Sufficient Docker resources allocated
+
+**Commands:**
+```bash
+# Run only integration tests
+make test-int
+
+# Run all tests (unit + integration)
+make test-all
+
+# Run integration tests directly with go test
+go test -v -tags=integration ./...
+
+# Run specific integration test
+go test -v -tags=integration ./internal/sns -run TestSNSPublisherIntegration
+```
+
+#### Available Integration Tests
+
+**SNS Publisher Integration** (`internal/sns/integration_test.go`):
+- Uses LocalStack testcontainer to simulate AWS SNS
+- Tests message publishing to SNS topics
+- Verifies message format and delivery via SQS subscription
+- Tests custom topic prefixes
+
+**Test Coverage:**
+- Single message publishing
+- Multiple message batching
+- Custom topic prefix configuration
+- Message payload format validation
+- SNS subject (topic path) verification
+
+#### Architecture
+
+**Helper Package** (`internal/testing/containers/`):
+- `localstack.go` - LocalStack container setup and helpers
+- `helpers.go` - Common test utilities
+
+**Container Lifecycle:**
+1. Test starts container using testcontainers-go
+2. Container is configured with service-specific settings
+3. Test runs against real service in container
+4. Container is automatically cleaned up after test (via `t.Cleanup()`)
+
+**Benefits:**
+- **Production parity**: Tests run against same service images as production
+- **Automated**: No manual setup required, containers start automatically
+- **Isolated**: Each test gets unique port mappings for parallel execution
+- **Reproducible**: Consistent test environment across machines and CI/CD
+- **Real protocols**: Catches issues that mocks can't detect
+
+#### CI/CD Integration
+
+Integration tests can run in GitHub Actions or other CI systems with Docker support:
+
+```yaml
+integration-tests:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+    - name: Run integration tests
+      run: make test-int
+```
+
+#### Future Integration Tests
+
+**Planned:**
+- **MQTT**: Mosquitto container for MQTT publisher testing
+- **Solace**: Official Solace PubSub+ container (supports both MQTT and SMF protocols)
+- **Epever End-to-End**: Full collection → publish → verify flow using built-in Modbus simulator
+
+**Design Principles:**
+1. Use build tags to separate integration from unit tests
+2. One integration test file per publisher/component
+3. Reusable container helpers in `internal/testing/containers/`
+4. Parallel test support via dynamic port mapping
+5. Comprehensive cleanup with `t.Cleanup()`
 
 ## Important Notes
 

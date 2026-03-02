@@ -19,3 +19,7 @@ testing/config-local.yaml
 
 # Temporary files
 tmp/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db

@@ -82,6 +82,29 @@ func NewController(
 	return controller, nil
 }
 
+// newControllerForTest creates a Controller without starting the scheduler or background goroutine.
+// This allows tests to call collectAndPublish synchronously without racing.
+func newControllerForTest(
+	client controllers.ModbusClient,
+	collector *Collector,
+	configurer *Configurer,
+	publisher controllers.MessagePublisher,
+	prometheusCollector controllers.MetricsCollector,
+	deviceID string,
+) *Controller {
+	if deviceID == "" {
+		deviceID = "controller-1"
+	}
+	return &Controller{
+		client:              client,
+		collector:           collector,
+		configurer:          configurer,
+		prometheusCollector: prometheusCollector,
+		publisher:           publisher,
+		deviceID:            deviceID,
+	}
+}
+
 // NewControllerFromConfig creates a new Epever controller from configuration.
 // This is the production entry point that creates all concrete dependencies.
 func NewControllerFromConfig(config Configuration, publisher controllers.MessagePublisher, deviceID string) (*Controller, error) {

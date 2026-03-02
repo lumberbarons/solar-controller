@@ -1,4 +1,4 @@
-.PHONY: help build test clean build-frontend build-backend build-linux-arm64-docker docker deploy
+.PHONY: help build test test-unit test-int test-all lint clean build-frontend build-backend build-linux-arm64-docker docker deploy
 
 .DEFAULT_GOAL := help
 
@@ -40,8 +40,20 @@ build-linux-arm64-docker: build-frontend ## Build Linux ARM64 binary using Docke
 		.
 	@echo "Binary built successfully: bin/solar-controller-linux-arm64"
 
-test: ## Run tests
-	go test ./...
+test: test-unit ## Run unit tests (default)
+
+test-unit: ## Run unit tests only
+	go test -v -race ./...
+
+test-int: ## Run integration tests (requires Docker)
+	go test -v -race -tags=integration ./...
+
+lint: ## Run golangci-lint
+	golangci-lint run ./...
+
+test-all: ## Run all tests (unit + integration)
+	go test -v -race ./...
+	go test -v -race -tags=integration ./...
 
 clean: ## Clean build artifacts
 	rm -f bin/solar-controller

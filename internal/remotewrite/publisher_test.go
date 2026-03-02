@@ -319,9 +319,9 @@ func TestPublishWithMockServer(t *testing.T) {
 		assert.Equal(t, "0.1.0", req.headers.Get("X-Prometheus-Remote-Write-Version"))
 		assert.Equal(t, "tenant1", req.headers.Get("X-Scope-OrgID"))
 
-		// Verify basic auth header is present
+		// Verify basic auth header matches configured credentials (testuser:testpass)
 		authHeader := req.headers.Get("Authorization")
-		assert.NotEmpty(t, authHeader, "Authorization header should be present")
+		assert.Equal(t, "Basic dGVzdHVzZXI6dGVzdHBhc3M=", authHeader)
 
 		// Verify timeseries count
 		assert.Equal(t, 12, len(req.writeRequest.Timeseries), "Expected 12 time series")
@@ -388,8 +388,15 @@ func TestPublishWithBearerToken(t *testing.T) {
 }
 
 func TestPublishError(t *testing.T) {
+	// Track requests received by the server despite returning errors
+	var requestCount int
+	var mu sync.Mutex
+
 	// Server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("Internal server error")) // nolint:errcheck // Test code
 	}))
@@ -404,7 +411,7 @@ func TestPublishError(t *testing.T) {
 	require.NoError(t, err)
 	defer publisher.Close()
 
-	// This should not panic, just log the error
+	// First batch: publish enough metrics to trigger batch send
 	for i := 0; i < 12; i++ {
 		publisher.Publish(
 			fmt.Sprintf("controller-1/epever/metric-%d", i),
@@ -413,7 +420,26 @@ func TestPublishError(t *testing.T) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	// Test passes if no panic
+
+	mu.Lock()
+	firstCount := requestCount
+	mu.Unlock()
+	assert.GreaterOrEqual(t, firstCount, 1, "Server should have received at least one request despite returning 500")
+
+	// Second batch: publisher should still function after errors
+	for i := 0; i < 12; i++ {
+		publisher.Publish(
+			fmt.Sprintf("controller-1/epever/metric-%d", i),
+			fmt.Sprintf(`{"value": %d, "unit": "test", "timestamp": 1699000000}`, i),
+		)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	finalCount := requestCount
+	mu.Unlock()
+	assert.Greater(t, finalCount, firstCount, "Publisher should continue sending requests after errors")
 }
 
 func TestToFloat64(t *testing.T) {

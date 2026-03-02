@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sirupsen/logrus"
+	"solace.dev/go/messaging/pkg/solace/config"
 )
 
 func init() {
@@ -78,71 +79,78 @@ func TestNewPublisher_MissingVpnName(t *testing.T) {
 	}
 }
 
-func TestNewPublisher_TopicPrefix(t *testing.T) {
+func TestResolveTopicPrefix(t *testing.T) {
 	tests := []struct {
-		name              string
-		configTopicPrefix string
-		paramTopicPrefix  string
+		name           string
+		configPrefix   string
+		paramPrefix    string
+		expectedPrefix string
 	}{
 		{
-			name:              "Use parameter when provided",
-			configTopicPrefix: "config-prefix",
-			paramTopicPrefix:  "param-prefix",
+			name:           "Use parameter when provided",
+			configPrefix:   "config-prefix",
+			paramPrefix:    "param-prefix",
+			expectedPrefix: "param-prefix",
 		},
 		{
-			name:              "Use config when parameter empty",
-			configTopicPrefix: "config-prefix",
-			paramTopicPrefix:  "",
+			name:           "Use config when parameter empty",
+			configPrefix:   "config-prefix",
+			paramPrefix:    "",
+			expectedPrefix: "config-prefix",
 		},
 		{
-			name:              "Use default when both empty",
-			configTopicPrefix: "",
-			paramTopicPrefix:  "",
+			name:           "Use default when both empty",
+			configPrefix:   "",
+			paramPrefix:    "",
+			expectedPrefix: "solar",
+		},
+		{
+			name:           "Use parameter over default",
+			configPrefix:   "",
+			paramPrefix:    "custom",
+			expectedPrefix: "custom",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &Configuration{
-				Enabled:     false, // Disabled to avoid connection attempt
-				Host:        "tcp://localhost:55555",
-				VpnName:     "default",
-				TopicPrefix: tt.configTopicPrefix,
-			}
-
-			pub, err := NewPublisher(config, tt.paramTopicPrefix)
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			// For disabled publishers, topicPrefix should be empty
-			if pub.topicPrefix != "" {
-				t.Errorf("Expected empty prefix for disabled publisher, got: %s", pub.topicPrefix)
+			result := resolveTopicPrefix(tt.configPrefix, tt.paramPrefix)
+			if result != tt.expectedPrefix {
+				t.Errorf("resolveTopicPrefix(%q, %q) = %q, want %q",
+					tt.configPrefix, tt.paramPrefix, result, tt.expectedPrefix)
 			}
 		})
 	}
 }
 
-func TestPublish_DisabledPublisher(_ *testing.T) {
+func TestPublish_DisabledPublisher(t *testing.T) {
 	pub := &Publisher{
 		publisher:        nil,
 		messagingService: nil,
 		topicPrefix:      "",
 	}
 
-	// Should not panic when publishing to disabled publisher
+	// Should not panic and fields should remain nil (no side effects)
 	pub.Publish("test/topic", "test payload")
+
+	if pub.publisher != nil {
+		t.Error("Expected publisher to remain nil after publishing to disabled publisher")
+	}
 }
 
-func TestClose_DisabledPublisher(_ *testing.T) {
+func TestClose_DisabledPublisher(t *testing.T) {
 	pub := &Publisher{
 		publisher:        nil,
 		messagingService: nil,
 		topicPrefix:      "",
 	}
 
-	// Should not panic when closing disabled publisher
+	// Should not panic and fields should remain nil (no side effects)
 	pub.Close()
+
+	if pub.publisher != nil {
+		t.Error("Expected publisher to remain nil after closing disabled publisher")
+	}
 }
 
 func TestServicePropertyMap(t *testing.T) {
@@ -178,9 +186,18 @@ func TestServicePropertyMap(t *testing.T) {
 				t.Fatal("Expected non-nil property map")
 			}
 
-			// Verify that ServicePropertyMap returns a valid config.ServicePropertyMap
-			// The actual validation happens when Solace SDK uses it
-			// We just verify it doesn't panic and returns something
+			if got := propMap[config.TransportLayerPropertyHost]; got != tt.host {
+				t.Errorf("Host = %v, want %v", got, tt.host)
+			}
+			if got := propMap[config.ServicePropertyVPNName]; got != tt.vpnName {
+				t.Errorf("VPNName = %v, want %v", got, tt.vpnName)
+			}
+			if got := propMap[config.AuthenticationPropertySchemeBasicUserName]; got != tt.username {
+				t.Errorf("Username = %v, want %v", got, tt.username)
+			}
+			if got := propMap[config.AuthenticationPropertySchemeBasicPassword]; got != tt.password {
+				t.Errorf("Password = %v, want %v", got, tt.password)
+			}
 		})
 	}
 }

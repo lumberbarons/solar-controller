@@ -22,26 +22,15 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 		collector := NewCollector(mockClient, mockMetrics)
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
-		controller, err := NewController(
+		controller := newControllerForTest(
 			mockClient,
 			collector,
 			configurer,
 			mockPublisher,
 			mockMetrics,
 			"test-device-1",
-			60,
 		)
-		if err != nil {
-			t.Fatalf("NewController() error = %v", err)
-		}
-		defer controller.Close()
 
-		// Wait for the initial collection to complete (triggered in NewController)
-		// The collectAndPublish runs asynchronously, so we need to give it time
-		// In a real test, we'd use a more sophisticated synchronization mechanism
-		// but for now we'll just check the state after the goroutine runs
-
-		// Manually trigger collection to ensure it runs synchronously in test
 		controller.collectAndPublish()
 
 		// Verify failure counter was incremented
@@ -64,8 +53,7 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 
 		// Check payload structure
 		var payload MetricPayload
-		err = json.Unmarshal([]byte(call.Payload), &payload)
-		if err != nil {
+		if err := json.Unmarshal([]byte(call.Payload), &payload); err != nil {
 			t.Fatalf("Failed to unmarshal payload: %v", err)
 		}
 
@@ -92,10 +80,10 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 					if quantity == 18 {
 						return testingpkg.CreateModbusResponse(
 							1850, 520, // Array V/I
-							0, 962, // Array power (32-bit)
+							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
 							480,    // Charging current
-							0, 614, // Charging power (32-bit)
+							614, 0, // Charging power (32-bit: low word, high word)
 							0, 0, 0, 0, 0, 0, 0, 0, // Unused registers
 							2500, 3200, // Battery temp, Device temp
 						), nil
@@ -104,7 +92,7 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 				case regBatterySOC:
 					return testingpkg.CreateModbusResponse(85), nil
 				case regEnergyGeneratedDaily:
-					return testingpkg.CreateModbusResponse(0, 1550), nil
+					return testingpkg.CreateModbusResponse(1550, 0), nil // low word, high word
 				case regControllerStatus:
 					return testingpkg.CreateModbusResponse(0x0004), nil
 				default:
@@ -119,21 +107,15 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 		collector := NewCollector(mockClient, mockMetrics)
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
-		controller, err := NewController(
+		controller := newControllerForTest(
 			mockClient,
 			collector,
 			configurer,
 			mockPublisher,
 			mockMetrics,
 			"test-device-1",
-			60,
 		)
-		if err != nil {
-			t.Fatalf("NewController() error = %v", err)
-		}
-		defer controller.Close()
 
-		// Manually trigger collection
 		controller.collectAndPublish()
 
 		// Verify failure counter was NOT incremented
@@ -173,6 +155,39 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 			}
 			if !found {
 				t.Errorf("Expected metric %q not found in publish calls", expectedMetric)
+			}
+		}
+
+		// Verify payload values for key metrics
+		payloadChecks := []struct {
+			metric string
+			value  float64
+			unit   string
+		}{
+			{"array-voltage", 18.5, "volts"},
+			{"battery-soc", 85, "percent"},
+			{"battery-voltage", 12.8, "volts"},
+		}
+
+		for _, pc := range payloadChecks {
+			suffix := "test-device-1/epever/" + pc.metric
+			for _, call := range mockPublisher.PublishCalls {
+				if call.TopicSuffix == suffix {
+					var payload MetricPayload
+					if err := json.Unmarshal([]byte(call.Payload), &payload); err != nil {
+						t.Fatalf("Failed to unmarshal %s payload: %v", pc.metric, err)
+					}
+					if payload.Value != pc.value {
+						t.Errorf("%s: value = %v, want %v", pc.metric, payload.Value, pc.value)
+					}
+					if payload.Unit != pc.unit {
+						t.Errorf("%s: unit = %q, want %q", pc.metric, payload.Unit, pc.unit)
+					}
+					if payload.Timestamp == 0 {
+						t.Errorf("%s: timestamp should be non-zero", pc.metric)
+					}
+					break
+				}
 			}
 		}
 	})

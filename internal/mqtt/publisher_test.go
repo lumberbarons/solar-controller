@@ -1,6 +1,8 @@
 package mqtt
 
 import (
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -92,9 +94,13 @@ func (m *MockMQTTClient) OptionsReader() mqtt.ClientOptionsReader {
 	return mqtt.ClientOptionsReader{}
 }
 
-func init() {
-	// Suppress log output during tests
-	logrus.SetLevel(logrus.ErrorLevel)
+func TestMain(m *testing.M) {
+	// Suppress log output during tests without mutating the global level
+	origOutput := logrus.StandardLogger().Out
+	logrus.SetOutput(io.Discard)
+	code := m.Run()
+	logrus.SetOutput(origOutput)
+	os.Exit(code)
 }
 
 func TestNewPublisher_Disabled(t *testing.T) {
@@ -137,70 +143,62 @@ func TestNewPublisher_MissingHost(t *testing.T) {
 	}
 }
 
-func TestNewPublisher_TopicPrefix(t *testing.T) {
+func TestResolveTopicPrefix(t *testing.T) {
 	tests := []struct {
-		name              string
-		configTopicPrefix string
-		paramTopicPrefix  string
-		expectedPrefix    string
+		name           string
+		configPrefix   string
+		paramPrefix    string
+		expectedPrefix string
 	}{
 		{
-			name:              "Use parameter when provided",
-			configTopicPrefix: "config-prefix",
-			paramTopicPrefix:  "param-prefix",
-			expectedPrefix:    "param-prefix",
+			name:           "Use parameter when provided",
+			configPrefix:   "config-prefix",
+			paramPrefix:    "param-prefix",
+			expectedPrefix: "param-prefix",
 		},
 		{
-			name:              "Use config when parameter empty",
-			configTopicPrefix: "config-prefix",
-			paramTopicPrefix:  "",
-			expectedPrefix:    "config-prefix",
+			name:           "Use config when parameter empty",
+			configPrefix:   "config-prefix",
+			paramPrefix:    "",
+			expectedPrefix: "config-prefix",
 		},
 		{
-			name:              "Use default when both empty",
-			configTopicPrefix: "",
-			paramTopicPrefix:  "",
-			expectedPrefix:    "solar",
+			name:           "Use default when both empty",
+			configPrefix:   "",
+			paramPrefix:    "",
+			expectedPrefix: "solar",
 		},
 		{
-			name:              "Use parameter over default",
-			configTopicPrefix: "",
-			paramTopicPrefix:  "custom",
-			expectedPrefix:    "custom",
+			name:           "Use parameter over default",
+			configPrefix:   "",
+			paramPrefix:    "custom",
+			expectedPrefix: "custom",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &Configuration{
-				Enabled:     false, // Disabled to avoid connection attempt
-				Host:        "tcp://localhost:1883",
-				TopicPrefix: tt.configTopicPrefix,
-			}
-
-			pub, err := NewPublisher(config, tt.paramTopicPrefix)
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			// Even for disabled publishers, topicPrefix logic should work (though it's empty for disabled)
-			// To test this properly, we'd need to mock the client creation
-			// For now, we verify the disabled case returns empty
-			if pub.topicPrefix != "" {
-				t.Errorf("Expected empty prefix for disabled publisher, got: %s", pub.topicPrefix)
+			result := resolveTopicPrefix(tt.configPrefix, tt.paramPrefix)
+			if result != tt.expectedPrefix {
+				t.Errorf("resolveTopicPrefix(%q, %q) = %q, want %q",
+					tt.configPrefix, tt.paramPrefix, result, tt.expectedPrefix)
 			}
 		})
 	}
 }
 
-func TestPublish_DisabledPublisher(_ *testing.T) {
+func TestPublish_DisabledPublisher(t *testing.T) {
 	pub := &Publisher{
 		client:      nil,
 		topicPrefix: "",
 	}
 
-	// Should not panic when publishing to disabled publisher
+	// Should not panic and client should remain nil (no side effects)
 	pub.Publish("test/topic", "test payload")
+
+	if pub.client != nil {
+		t.Error("Expected client to remain nil after publishing to disabled publisher")
+	}
 }
 
 func TestPublish_TopicFormation(t *testing.T) {
@@ -324,19 +322,13 @@ func TestPublish_MultipleMessages(t *testing.T) {
 	}
 }
 
-func TestClose_DisabledPublisher(t *testing.T) {
-	mockClient := &MockMQTTClient{}
-
+func TestClose_NilClient_DoesNotPanic(_ *testing.T) {
 	pub := &Publisher{
-		client:      mockClient,
-		topicPrefix: "",
+		client: nil,
 	}
 
+	// Should not panic
 	pub.Close()
-
-	if mockClient.disconnectCalls != 1 {
-		t.Errorf("Expected 1 disconnect call, got: %d", mockClient.disconnectCalls)
-	}
 }
 
 func TestClose_ValidPublisher(t *testing.T) {
