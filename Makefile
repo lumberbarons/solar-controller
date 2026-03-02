@@ -1,4 +1,4 @@
-.PHONY: help build test test-unit test-int test-all clean build-frontend build-backend build-linux-arm64-docker docker deploy
+.PHONY: help build test test-unit test-int test-all lint clean build-frontend build-backend build-linux-arm64-docker docker deploy
 
 .DEFAULT_GOAL := help
 
@@ -47,6 +47,9 @@ test-unit: ## Run unit tests only
 
 test-int: ## Run integration tests (requires Docker)
 	go test -v -race -tags=integration ./...
+
+lint: ## Run golangci-lint
+	golangci-lint run ./...
 
 test-all: ## Run all tests (unit + integration)
 	go test -v -race ./...
