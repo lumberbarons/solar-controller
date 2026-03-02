@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.10
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.10
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.12
-	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.14
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.22
 	github.com/docker/go-connections v0.6.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gin-contrib/static v1.1.5
