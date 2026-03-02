@@ -7,7 +7,7 @@ import (
 )
 
 // WaitForContainer waits for a container to be ready with a timeout
-func WaitForContainer(ctx context.Context, timeout time.Duration, checkFunc func() error) error {
+func WaitForContainer(_ context.Context, timeout time.Duration, checkFunc func() error) error {
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {

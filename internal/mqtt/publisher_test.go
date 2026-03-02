@@ -322,7 +322,7 @@ func TestPublish_MultipleMessages(t *testing.T) {
 	}
 }
 
-func TestClose_NilClient_DoesNotPanic(t *testing.T) {
+func TestClose_NilClient_DoesNotPanic(_ *testing.T) {
 	pub := &Publisher{
 		client: nil,
 	}

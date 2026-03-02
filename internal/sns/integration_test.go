@@ -106,7 +106,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			TopicPrefix: "solar",
 		}
 
-		publisher, err := newPublisherWithConfig(cfg, "solar", f.awsCfg)
+		publisher, err := newPublisherWithConfig(cfg, "solar", &f.awsCfg)
 		require.NoError(t, err)
 		defer publisher.Close()
 
@@ -157,7 +157,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			TopicPrefix: "solar",
 		}
 
-		publisher, err := newPublisherWithConfig(cfg, "solar", f.awsCfg)
+		publisher, err := newPublisherWithConfig(cfg, "solar", &f.awsCfg)
 		require.NoError(t, err)
 		defer publisher.Close()
 
@@ -209,7 +209,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			TopicPrefix: "custom-prefix",
 		}
 
-		customPublisher, err := newPublisherWithConfig(customCfg, "default-prefix", f.awsCfg)
+		customPublisher, err := newPublisherWithConfig(customCfg, "default-prefix", &f.awsCfg)
 		require.NoError(t, err)
 		defer customPublisher.Close()
 
