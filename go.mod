@@ -26,7 +26,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/localstack v0.40.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
-	solace.dev/go/messaging v1.10.0
+	solace.dev/go/messaging v1.10.1
 )
 
 require (
