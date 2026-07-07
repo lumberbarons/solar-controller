@@ -3,7 +3,7 @@
 package publish
 
 // MessagePublisher defines the interface for publishing messages to a message broker.
-// This abstraction allows for testing without a real MQTT broker.
+// This abstraction allows for testing without a real message broker.
 type MessagePublisher interface {
 	// Publish publishes a message with the given topic suffix and payload.
 	Publish(topicSuffix, payload string)

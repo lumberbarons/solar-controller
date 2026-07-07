@@ -43,7 +43,7 @@ func TestNewApplication(t *testing.T) {
 
 	assert.NotNil(t, app.router)
 	assert.Equal(t, cfg, app.config)
-	assert.Equal(t, mockPublisher, app.mqtt)
+	assert.Equal(t, mockPublisher, app.publisher)
 }
 
 func TestApplication_MetricsEndpoint(t *testing.T) {
