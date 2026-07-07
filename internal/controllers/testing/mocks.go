@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/lumberbarons/solar-controller/internal/controllers"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 )
 
 // MockModbusClient is a mock implementation of the ModbusClient interface for testing.
@@ -149,7 +150,7 @@ type PublishCall struct {
 }
 
 // Verify MockMessagePublisher implements MessagePublisher
-var _ controllers.MessagePublisher = (*MockMessagePublisher)(nil)
+var _ publish.MessagePublisher = (*MockMessagePublisher)(nil)
 
 func (m *MockMessagePublisher) Publish(topicSuffix, payload string) {
 	m.mu.Lock()

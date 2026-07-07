@@ -1,19 +1,19 @@
 package publishers
 
 import (
-	"github.com/lumberbarons/solar-controller/internal/controllers"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 	"github.com/sirupsen/logrus"
 )
 
 // MultiPublisher implements MessagePublisher by fanning out to multiple publishers.
 // It provides best-effort delivery: if one publisher fails, others continue to receive messages.
 type MultiPublisher struct {
-	publishers []controllers.MessagePublisher
+	publishers []publish.MessagePublisher
 	logger     *logrus.Logger
 }
 
 // NewMultiPublisher creates a new MultiPublisher that fans out to all provided publishers.
-func NewMultiPublisher(publishers []controllers.MessagePublisher, logger *logrus.Logger) *MultiPublisher {
+func NewMultiPublisher(publishers []publish.MessagePublisher, logger *logrus.Logger) *MultiPublisher {
 	return &MultiPublisher{
 		publishers: publishers,
 		logger:     logger,

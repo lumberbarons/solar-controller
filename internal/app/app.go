@@ -8,6 +8,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/config"
 	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 	staticfs "github.com/lumberbarons/solar-controller/internal/static"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -18,7 +19,7 @@ import (
 type Application struct {
 	config      *config.Config
 	router      *gin.Engine
-	mqtt        controllers.MessagePublisher
+	mqtt        publish.MessagePublisher
 	controllers []controllers.SolarController
 	version     VersionInfo
 }
@@ -32,7 +33,7 @@ type VersionInfo struct {
 
 // NewApplication creates and initializes a new Application instance.
 // It sets up the HTTP router, initializes controllers, and registers endpoints.
-func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublisher, version VersionInfo) (*Application, error) {
+func NewApplication(cfg *config.Config, mqttPublisher publish.MessagePublisher, version VersionInfo) (*Application, error) {
 	app := &Application{
 		config:  cfg,
 		mqtt:    mqttPublisher,

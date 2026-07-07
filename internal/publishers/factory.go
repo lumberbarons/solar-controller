@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/lumberbarons/solar-controller/internal/config"
-	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/file"
 	"github.com/lumberbarons/solar-controller/internal/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 	"github.com/lumberbarons/solar-controller/internal/remotewrite"
 	"github.com/lumberbarons/solar-controller/internal/sns"
 	"github.com/lumberbarons/solar-controller/internal/solace"
@@ -16,8 +16,8 @@ import (
 // NewPublisher creates a message publisher based on the configuration.
 // It returns a MultiPublisher wrapping all enabled publishers, or a no-op publisher if none is enabled.
 // Returns an error if publisher creation fails.
-func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.MessagePublisher, error) {
-	var publishers []controllers.MessagePublisher
+func NewPublisher(cfg *config.SolarControllerConfiguration) (publish.MessagePublisher, error) {
+	var publishers []publish.MessagePublisher
 
 	// Create MQTT publisher if enabled
 	if cfg.Mqtt.Enabled {
@@ -72,7 +72,7 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.Message
 	// If no publishers enabled, return no-op publisher
 	if len(publishers) == 0 {
 		log.Info("No message publisher enabled")
-		return &NoOpPublisher{}, nil
+		return &publish.NoOpPublisher{}, nil
 	}
 
 	// If only one publisher, return it directly (no need for MultiPublisher wrapper)
@@ -83,16 +83,4 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (controllers.Message
 	// Multiple publishers - wrap in MultiPublisher
 	log.Infof("Creating MultiPublisher with %d publishers", len(publishers))
 	return NewMultiPublisher(publishers, log.StandardLogger()), nil
-}
-
-// NoOpPublisher is a publisher that does nothing.
-// Used when neither MQTT nor Solace is configured.
-type NoOpPublisher struct{}
-
-func (n *NoOpPublisher) Publish(_, _ string) {
-	// Do nothing
-}
-
-func (n *NoOpPublisher) Close() {
-	// Do nothing
 }

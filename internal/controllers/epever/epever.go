@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
 	"github.com/lumberbarons/solar-controller/internal/controllers"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,7 +28,7 @@ type Controller struct {
 	client              controllers.ModbusClient
 	collector           *Collector
 	configurer          *Configurer
-	publisher           controllers.MessagePublisher
+	publisher           publish.MessagePublisher
 	prometheusCollector controllers.MetricsCollector
 	scheduler           *gocron.Scheduler
 	deviceID            string
@@ -43,7 +44,7 @@ func NewController(
 	client controllers.ModbusClient,
 	collector *Collector,
 	configurer *Configurer,
-	publisher controllers.MessagePublisher,
+	publisher publish.MessagePublisher,
 	prometheusCollector controllers.MetricsCollector,
 	deviceID string,
 	publishPeriod int,
@@ -88,7 +89,7 @@ func newControllerForTest(
 	client controllers.ModbusClient,
 	collector *Collector,
 	configurer *Configurer,
-	publisher controllers.MessagePublisher,
+	publisher publish.MessagePublisher,
 	prometheusCollector controllers.MetricsCollector,
 	deviceID string,
 ) *Controller {
@@ -107,7 +108,7 @@ func newControllerForTest(
 
 // NewControllerFromConfig creates a new Epever controller from configuration.
 // This is the production entry point that creates all concrete dependencies.
-func NewControllerFromConfig(config Configuration, publisher controllers.MessagePublisher, deviceID string) (*Controller, error) {
+func NewControllerFromConfig(config Configuration, publisher publish.MessagePublisher, deviceID string) (*Controller, error) {
 	if !config.Enabled {
 		log.Info("epever disabled via configuration")
 		return &Controller{}, nil

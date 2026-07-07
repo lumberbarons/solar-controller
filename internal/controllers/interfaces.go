@@ -44,16 +44,6 @@ type ModbusClient interface {
 	Close()
 }
 
-// MessagePublisher defines the interface for publishing messages to a message broker.
-// This abstraction allows for testing without a real MQTT broker.
-type MessagePublisher interface {
-	// Publish publishes a message with the given topic suffix and payload.
-	Publish(topicSuffix, payload string)
-
-	// Close closes the publisher connection.
-	Close()
-}
-
 // MetricsCollector defines the interface for collecting and exposing metrics.
 // This abstraction allows for testing without the Prometheus global registry.
 type MetricsCollector interface {
