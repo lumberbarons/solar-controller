@@ -112,14 +112,14 @@ cd site
 # Install dependencies
 npm install
 
-# Run development server (proxies to backend on port 8000)
+# Run vite development server (proxies /api to backend on port 8080)
 npm start
 
-# Build for production
+# Build for production (output in site/build)
 npm run build
 
-# Run tests
-npm test
+# Run linter
+npm run lint
 ```
 
 ### Docker

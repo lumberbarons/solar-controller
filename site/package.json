@@ -2,7 +2,6 @@
   "name": "solar-controller-site",
   "version": "0.1.0",
   "private": true,
-  "proxy": "http://localhost:8080",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
@@ -13,36 +12,24 @@
     "@mui/lab": "^7.0.1-beta.25",
     "@mui/material": "^7.3.4",
     "axios": "^1.18.1",
+    "prop-types": "^15.8.1",
     "qs": "^6.15.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1",
-    "react-scripts": "5.0.1",
-    "web-vitals": "^5.3.0"
+    "react-router-dom": "^7.18.1"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint --ext .js,.jsx src/",
+    "lint:fix": "eslint --ext .js,.jsx src/ --fix"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1"
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "vite": "^8.1.3"
   }
 }

@@ -125,14 +125,14 @@ cd site
 # Install dependencies
 npm install
 
-# Run development server (proxies to backend on port 8000)
+# Run vite development server (proxies /api to backend on port 8080)
 npm start
 
-# Build for production
+# Build for production (output in site/build)
 npm run build
 
-# Run tests
-npm test
+# Run linter
+npm run lint
 ```
 
 ### Docker
@@ -438,16 +438,16 @@ All metrics from each collection cycle are batched into a single WriteRequest fo
 To test Prometheus remote_write locally:
 ```bash
 # Start VictoriaMetrics test server
-cd testing/remotewrite && ./test-remotewrite.sh
+cd examples/remotewrite && ./test-remotewrite.sh
 
 # In another terminal, run solar-controller
 make build-backend
-./bin/solar-controller -config testing/remotewrite/config.yaml
+./bin/solar-controller -config examples/remotewrite/config.yaml
 
 # View metrics at http://localhost:8428/vmui
 ```
 
-See `testing/remotewrite/README.md` for details.
+See `examples/remotewrite/README.md` for details.
 
 ## Project Structure
 
@@ -461,7 +461,7 @@ See `testing/remotewrite/README.md` for details.
 - `internal/publishers/` - Publisher factory and abstraction
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code
-- `testing/` - Remote write testing setup and utilities
+- `examples/` - Remote write example setup and utilities
 - `testdata/` - Modbus simulator configuration files
 - `docs/` - Modbus register documentation
 - `package/` - Packaging files for system packages (deb, rpm, etc.)
