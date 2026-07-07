@@ -12,11 +12,11 @@ import (
 func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 	t.Run("publishes failure metric when collection fails", func(t *testing.T) {
 		// Create a mock client that always fails
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: testingpkg.CreateModbusError("connection timeout"),
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		mockPublisher := &testingpkg.MockMessagePublisher{}
 
 		collector := NewCollector(mockClient, mockMetrics)
@@ -73,7 +73,7 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 
 	t.Run("publishes normal metrics when collection succeeds", func(t *testing.T) {
 		// Create a mock client that succeeds
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				switch address {
 				case regArrayVoltage:
@@ -101,7 +101,7 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		mockPublisher := &testingpkg.MockMessagePublisher{}
 
 		collector := NewCollector(mockClient, mockMetrics)

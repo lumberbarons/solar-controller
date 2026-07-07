@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lumberbarons/solar-controller/internal/controllers"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -55,14 +54,14 @@ type cachedConfig struct {
 }
 
 type Configurer struct {
-	modbusClient        controllers.ModbusClient
-	prometheusCollector controllers.MetricsCollector
+	modbusClient        ModbusClient
+	prometheusCollector MetricsCollector
 	cache               *cachedConfig
 	cacheMutex          sync.RWMutex
 	cacheTTL            time.Duration
 }
 
-func NewConfigurer(client controllers.ModbusClient, prometheusCollector controllers.MetricsCollector) *Configurer {
+func NewConfigurer(client ModbusClient, prometheusCollector MetricsCollector) *Configurer {
 	return &Configurer{
 		modbusClient:        client,
 		prometheusCollector: prometheusCollector,

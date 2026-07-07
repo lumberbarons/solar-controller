@@ -14,7 +14,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache miss - fetches from device", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				// Return minimal valid data for getConfig()
@@ -48,7 +48,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		// First call should fetch from device
@@ -87,7 +87,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache hit - no device fetch", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
@@ -120,7 +120,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		// First call - populates cache
@@ -158,7 +158,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache expiration - refetches after TTL", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
@@ -191,7 +191,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 		// Set a very short TTL for testing
 		configurer.cacheTTL = 1 * time.Millisecond
@@ -220,7 +220,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache invalidation", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
@@ -253,7 +253,7 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		// First call - populates cache
@@ -279,13 +279,13 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 	})
 
 	t.Run("modbus error propagates", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, _, _ uint16) ([]byte, error) {
 				return nil, &testingpkg.ModbusTestError{Message: "device timeout"}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		_, err := configurer.getCachedConfig(ctx)
@@ -296,8 +296,8 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 }
 
 func TestConfigurer_invalidateCache(t *testing.T) {
-	mockClient := &testingpkg.MockModbusClient{}
-	mockMetrics := &testingpkg.MockMetricsCollector{}
+	mockClient := &MockModbusClient{}
+	mockMetrics := &MockMetricsCollector{}
 	configurer := NewConfigurer(mockClient, mockMetrics)
 
 	// Manually set cache

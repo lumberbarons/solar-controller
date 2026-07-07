@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
-	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/publish"
 	log "github.com/sirupsen/logrus"
 )
@@ -25,11 +24,11 @@ type Configuration struct {
 }
 
 type Controller struct {
-	client              controllers.ModbusClient
+	client              ModbusClient
 	collector           *Collector
 	configurer          *Configurer
 	publisher           publish.MessagePublisher
-	prometheusCollector controllers.MetricsCollector
+	prometheusCollector MetricsCollector
 	scheduler           *gocron.Scheduler
 	deviceID            string
 	lastStatus          *ControllerStatus
@@ -41,11 +40,11 @@ type Controller struct {
 // NewController creates a new Epever controller with dependency injection for testing.
 // For production use, call NewControllerFromConfig instead.
 func NewController(
-	client controllers.ModbusClient,
+	client ModbusClient,
 	collector *Collector,
 	configurer *Configurer,
 	publisher publish.MessagePublisher,
-	prometheusCollector controllers.MetricsCollector,
+	prometheusCollector MetricsCollector,
 	deviceID string,
 	publishPeriod int,
 ) (*Controller, error) {
@@ -86,11 +85,11 @@ func NewController(
 // newControllerForTest creates a Controller without starting the scheduler or background goroutine.
 // This allows tests to call collectAndPublish synchronously without racing.
 func newControllerForTest(
-	client controllers.ModbusClient,
+	client ModbusClient,
 	collector *Collector,
 	configurer *Configurer,
 	publisher publish.MessagePublisher,
-	prometheusCollector controllers.MetricsCollector,
+	prometheusCollector MetricsCollector,
 	deviceID string,
 ) *Controller {
 	if deviceID == "" {
@@ -119,7 +118,7 @@ func NewControllerFromConfig(config Configuration, publisher publish.MessagePubl
 		return &Controller{}, nil
 	}
 
-	client, err := NewModbusClient(config.SerialPort)
+	client, err := NewSerialModbusClient(config.SerialPort)
 	if err != nil {
 		return nil, err
 	}

@@ -11,7 +11,7 @@ func TestCollector_GetStatus(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful status collection", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				// Return realistic test data based on the address and quantity
 				switch address {
@@ -51,7 +51,7 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		status, err := collector.GetStatus(ctx)
 
@@ -106,7 +106,7 @@ func TestCollector_GetStatus(t *testing.T) {
 	})
 
 	t.Run("modbus read failure for batch data", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				if address == regArrayVoltage {
 					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
@@ -115,7 +115,7 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
@@ -125,7 +125,7 @@ func TestCollector_GetStatus(t *testing.T) {
 	})
 
 	t.Run("modbus read failure for battery SOC", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				if address == regBatterySOC {
 					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
@@ -141,7 +141,7 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
@@ -151,7 +151,7 @@ func TestCollector_GetStatus(t *testing.T) {
 	})
 
 	t.Run("modbus read failure for energy generated daily", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				if address == regEnergyGeneratedDaily {
 					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
@@ -170,7 +170,7 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
@@ -180,7 +180,7 @@ func TestCollector_GetStatus(t *testing.T) {
 	})
 
 	t.Run("modbus read failure for controller status", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				if address == regControllerStatus {
 					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
@@ -202,7 +202,7 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
@@ -212,7 +212,7 @@ func TestCollector_GetStatus(t *testing.T) {
 	})
 
 	t.Run("negative temperature handling", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				switch address {
 				case regArrayVoltage: // Batch read with negative temperatures
@@ -241,7 +241,7 @@ func TestCollector_GetStatus(t *testing.T) {
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		status, err := collector.GetStatus(ctx)
 
@@ -259,14 +259,14 @@ func TestCollector_GetStatus(t *testing.T) {
 	})
 
 	t.Run("insufficient data from modbus", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, _, _ uint16) ([]byte, error) {
 				// Return insufficient data (1 byte instead of expected 2+ bytes)
 				return []byte{0x00}, nil
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		collector := NewCollector(mockClient, mockMetrics)
 		_, err := collector.GetStatus(ctx)
 
