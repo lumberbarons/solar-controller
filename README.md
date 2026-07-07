@@ -453,11 +453,11 @@ See `testing/remotewrite/README.md` for details.
 
 - `cmd/controller/` - Main application entry point
 - `internal/controllers/` - Hardware controller implementations (epever)
-- `internal/mqtt/` - MQTT publishing functionality
-- `internal/solace/` - Solace publishing functionality
-- `internal/sns/` - AWS SNS publishing functionality
-- `internal/file/` - File publishing with log rotation
-- `internal/remotewrite/` - Prometheus remote_write publishing
+- `internal/publishers/mqtt/` - MQTT publishing functionality
+- `internal/publishers/solace/` - Solace publishing functionality
+- `internal/publishers/sns/` - AWS SNS publishing functionality
+- `internal/publishers/file/` - File publishing with log rotation
+- `internal/publishers/remotewrite/` - Prometheus remote_write publishing
 - `internal/publishers/` - Publisher factory and abstraction
 - `internal/static/` - Static file embedding (React frontend)
 - `site/` - React frontend source code

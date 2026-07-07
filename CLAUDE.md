@@ -13,11 +13,11 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `cmd/controller/` | Application entry point | Changing startup, flags, or controller wiring |
 | `internal/controllers/` | Hardware controller implementations (epever) | Adding controllers, modifying collection or publishing logic |
 | `internal/publishers/` | Publisher factory, MultiPublisher, MessagePublisher interface | Adding a new publisher or changing fan-out behavior |
-| `internal/mqtt/` | MQTT publisher | Modifying MQTT publishing |
-| `internal/solace/` | Solace publisher | Modifying Solace publishing |
-| `internal/sns/` | AWS SNS publisher | Modifying SNS publishing |
-| `internal/file/` | File publisher with log rotation | Modifying file publishing |
-| `internal/remotewrite/` | Prometheus remote_write publisher | Modifying remote write publishing |
+| `internal/publishers/mqtt/` | MQTT publisher | Modifying MQTT publishing |
+| `internal/publishers/solace/` | Solace publisher | Modifying Solace publishing |
+| `internal/publishers/sns/` | AWS SNS publisher | Modifying SNS publishing |
+| `internal/publishers/file/` | File publisher with log rotation | Modifying file publishing |
+| `internal/publishers/remotewrite/` | Prometheus remote_write publisher | Modifying remote write publishing |
 | `internal/config/` | YAML configuration structs and validation | Changing configuration options |
 | `internal/app/` | Application bootstrap and HTTP server | Changing server setup or middleware |
 | `internal/static/` | Embedded React frontend (`//go:embed`) | Changing how the frontend is served |
@@ -491,12 +491,12 @@ make test-all
 go test -v -tags=integration ./...
 
 # Run specific integration test
-go test -v -tags=integration ./internal/sns -run TestSNSPublisherIntegration
+go test -v -tags=integration ./internal/publishers/sns -run TestSNSPublisherIntegration
 ```
 
 #### Available Integration Tests
 
-**SNS Publisher Integration** (`internal/sns/integration_test.go`):
+**SNS Publisher Integration** (`internal/publishers/sns/integration_test.go`):
 - Uses LocalStack testcontainer to simulate AWS SNS
 - Tests message publishing to SNS topics
 - Verifies message format and delivery via SQS subscription

@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
-	"github.com/lumberbarons/solar-controller/internal/file"
-	"github.com/lumberbarons/solar-controller/internal/mqtt"
-	"github.com/lumberbarons/solar-controller/internal/sns"
-	"github.com/lumberbarons/solar-controller/internal/solace"
+	"github.com/lumberbarons/solar-controller/internal/publishers/file"
+	"github.com/lumberbarons/solar-controller/internal/publishers/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/publishers/sns"
+	"github.com/lumberbarons/solar-controller/internal/publishers/solace"
 )
 
 func TestLoad(t *testing.T) {
