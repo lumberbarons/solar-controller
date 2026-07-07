@@ -14,8 +14,6 @@ build-errors.log
 # Dependencies
 node_modules
 
-# Local config
-testing/config-local.yaml
 
 # Temporary files
 tmp/

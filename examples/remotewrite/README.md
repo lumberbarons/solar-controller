@@ -5,13 +5,13 @@ Test Prometheus remote_write locally with VictoriaMetrics.
 ## Quick Start
 
 ```bash
-# From the testing/remotewrite/ directory, start VictoriaMetrics:
-cd testing/remotewrite
+# From the examples/remotewrite/ directory, start VictoriaMetrics:
+cd examples/remotewrite
 ./test-remotewrite.sh
 
 # In another terminal, build and run solar-controller:
 make build-backend
-./bin/solar-controller -config testing/remotewrite/config.yaml
+./bin/solar-controller -config examples/remotewrite/config.yaml
 
 # Open VictoriaMetrics UI:
 open http://localhost:8428/vmui
