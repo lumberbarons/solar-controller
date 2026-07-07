@@ -22,7 +22,7 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (publish.MessagePubl
 	// Create MQTT publisher if enabled
 	if cfg.Mqtt.Enabled {
 		log.Info("Creating MQTT publisher")
-		publisher, err := mqtt.NewPublisher(&cfg.Mqtt, cfg.Mqtt.TopicPrefix)
+		publisher, err := mqtt.NewPublisher(&cfg.Mqtt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create MQTT publisher: %w", err)
 		}
@@ -32,7 +32,7 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (publish.MessagePubl
 	// Create Solace publisher if enabled
 	if cfg.Solace.Enabled {
 		log.Info("Creating Solace publisher")
-		publisher, err := solace.NewPublisher(&cfg.Solace, cfg.Solace.TopicPrefix)
+		publisher, err := solace.NewPublisher(&cfg.Solace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Solace publisher: %w", err)
 		}
@@ -42,7 +42,7 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (publish.MessagePubl
 	// Create SNS publisher if enabled
 	if cfg.SNS.Enabled {
 		log.Info("Creating SNS publisher")
-		publisher, err := sns.NewPublisher(&cfg.SNS, cfg.SNS.TopicPrefix)
+		publisher, err := sns.NewPublisher(&cfg.SNS)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create SNS publisher: %w", err)
 		}
@@ -62,7 +62,7 @@ func NewPublisher(cfg *config.SolarControllerConfiguration) (publish.MessagePubl
 	// Create RemoteWrite publisher if enabled
 	if cfg.RemoteWrite.Enabled {
 		log.Info("Creating Prometheus RemoteWrite publisher")
-		publisher, err := remotewrite.NewPublisher(&cfg.RemoteWrite, cfg.RemoteWrite.TopicPrefix, cfg.DeviceID)
+		publisher, err := remotewrite.NewPublisher(&cfg.RemoteWrite, cfg.DeviceID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create RemoteWrite publisher: %w", err)
 		}

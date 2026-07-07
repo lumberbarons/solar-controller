@@ -109,7 +109,7 @@ func TestNewPublisher_Disabled(t *testing.T) {
 		Host:    "tcp://localhost:1883",
 	}
 
-	pub, err := NewPublisher(config, "solar")
+	pub, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("Expected no error for disabled publisher, got: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestNewPublisher_MissingHost(t *testing.T) {
 		Host:    "",
 	}
 
-	pub, err := NewPublisher(config, "solar")
+	pub, err := NewPublisher(config)
 	if err != nil {
 		t.Fatalf("Expected no error for missing host (returns empty publisher), got: %v", err)
 	}
@@ -147,41 +147,26 @@ func TestResolveTopicPrefix(t *testing.T) {
 	tests := []struct {
 		name           string
 		configPrefix   string
-		paramPrefix    string
 		expectedPrefix string
 	}{
 		{
-			name:           "Use parameter when provided",
+			name:           "Use config when provided",
 			configPrefix:   "config-prefix",
-			paramPrefix:    "param-prefix",
-			expectedPrefix: "param-prefix",
-		},
-		{
-			name:           "Use config when parameter empty",
-			configPrefix:   "config-prefix",
-			paramPrefix:    "",
 			expectedPrefix: "config-prefix",
 		},
 		{
-			name:           "Use default when both empty",
+			name:           "Use default when config empty",
 			configPrefix:   "",
-			paramPrefix:    "",
 			expectedPrefix: "solar",
-		},
-		{
-			name:           "Use parameter over default",
-			configPrefix:   "",
-			paramPrefix:    "custom",
-			expectedPrefix: "custom",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := resolveTopicPrefix(tt.configPrefix, tt.paramPrefix)
+			result := resolveTopicPrefix(tt.configPrefix)
 			if result != tt.expectedPrefix {
-				t.Errorf("resolveTopicPrefix(%q, %q) = %q, want %q",
-					tt.configPrefix, tt.paramPrefix, result, tt.expectedPrefix)
+				t.Errorf("resolveTopicPrefix(%q) = %q, want %q",
+					tt.configPrefix, result, tt.expectedPrefix)
 			}
 		})
 	}

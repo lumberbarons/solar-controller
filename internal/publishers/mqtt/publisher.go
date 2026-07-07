@@ -22,7 +22,7 @@ type Publisher struct {
 	topicPrefix string
 }
 
-func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error) {
+func NewPublisher(config *Configuration) (*Publisher, error) {
 	if !config.Enabled {
 		log.Info("MQTT publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -53,18 +53,15 @@ func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error)
 	publisher := &Publisher{
 		client:      client,
 		config:      *config,
-		topicPrefix: resolveTopicPrefix(config.TopicPrefix, topicPrefix),
+		topicPrefix: resolveTopicPrefix(config.TopicPrefix),
 	}
 
 	return publisher, nil
 }
 
 // resolveTopicPrefix returns the effective topic prefix using the priority:
-// paramPrefix > configPrefix > "solar" default.
-func resolveTopicPrefix(configPrefix, paramPrefix string) string {
-	if paramPrefix != "" {
-		return paramPrefix
-	}
+// configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix string) string {
 	if configPrefix != "" {
 		return configPrefix
 	}

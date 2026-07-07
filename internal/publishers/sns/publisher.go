@@ -24,7 +24,7 @@ type Publisher struct {
 	topicPrefix string
 }
 
-func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
+func NewPublisher(cfg *Configuration) (*Publisher, error) {
 	if !cfg.Enabled {
 		log.Info("SNS publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -48,16 +48,16 @@ func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	return newPublisherWithConfig(cfg, topicPrefix, &awsCfg)
+	return newPublisherWithConfig(cfg, &awsCfg)
 }
 
 // newPublisherWithConfig creates a publisher with a custom AWS config
 // This allows dependency injection for testing
-func newPublisherWithConfig(cfg *Configuration, topicPrefix string, awsCfg *aws.Config) (*Publisher, error) {
+func newPublisherWithConfig(cfg *Configuration, awsCfg *aws.Config) (*Publisher, error) {
 	// Create SNS client
 	client := sns.NewFromConfig(*awsCfg)
 
-	topicPrefix = resolveTopicPrefix(cfg.TopicPrefix, topicPrefix)
+	topicPrefix := resolveTopicPrefix(cfg.TopicPrefix)
 
 	// Verify topic exists by getting its attributes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -82,11 +82,8 @@ func newPublisherWithConfig(cfg *Configuration, topicPrefix string, awsCfg *aws.
 }
 
 // resolveTopicPrefix returns the effective topic prefix using the priority:
-// paramPrefix > configPrefix > "solar" default.
-func resolveTopicPrefix(configPrefix, paramPrefix string) string {
-	if paramPrefix != "" {
-		return paramPrefix
-	}
+// configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix string) string {
 	if configPrefix != "" {
 		return configPrefix
 	}

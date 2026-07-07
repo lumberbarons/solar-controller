@@ -45,7 +45,16 @@ type MetricPayload struct {
 }
 
 // NewPublisher creates a new remote_write publisher.
-func NewPublisher(config *Configuration, topicPrefix, deviceID string) (*Publisher, error) {
+// resolveTopicPrefix returns the effective topic prefix using the priority:
+// configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix string) string {
+	if configPrefix != "" {
+		return configPrefix
+	}
+	return "solar"
+}
+
+func NewPublisher(config *Configuration, deviceID string) (*Publisher, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid remote_write configuration: %w", err)
 	}
@@ -62,7 +71,7 @@ func NewPublisher(config *Configuration, topicPrefix, deviceID string) (*Publish
 	p := &Publisher{
 		config:          config,
 		httpClient:      httpClient,
-		topicPrefix:     topicPrefix,
+		topicPrefix:     resolveTopicPrefix(config.TopicPrefix),
 		deviceID:        deviceID,
 		batchBuffer:     make([]metricData, 0, 20), // Pre-allocate for ~12 metrics
 		batchTimeout:    5 * time.Second,           // Max time to hold metrics before sending
@@ -72,7 +81,7 @@ func NewPublisher(config *Configuration, topicPrefix, deviceID string) (*Publish
 	log.WithFields(log.Fields{
 		"url":         config.URL,
 		"timeout":     config.GetTimeout(),
-		"topicPrefix": topicPrefix,
+		"topicPrefix": p.topicPrefix,
 		"deviceID":    deviceID,
 	}).Info("Remote write publisher initialized")
 

@@ -19,7 +19,6 @@ func TestNewPublisher(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      *Configuration
-		topicPrefix string
 		deviceID    string
 		wantErr     bool
 		errContains string
@@ -34,9 +33,8 @@ func TestNewPublisher(t *testing.T) {
 					Password: "pass",
 				},
 			},
-			topicPrefix: "solar",
-			deviceID:    "controller-1",
-			wantErr:     false,
+			deviceID: "controller-1",
+			wantErr:  false,
 		},
 		{
 			name: "valid configuration with bearer token",
@@ -45,25 +43,22 @@ func TestNewPublisher(t *testing.T) {
 				URL:         "https://prometheus.example.com/api/v1/write",
 				BearerToken: "token123",
 			},
-			topicPrefix: "solar",
-			deviceID:    "controller-1",
-			wantErr:     false,
+			deviceID: "controller-1",
+			wantErr:  false,
 		},
 		{
 			name: "disabled publisher",
 			config: &Configuration{
 				Enabled: false,
 			},
-			topicPrefix: "solar",
-			deviceID:    "controller-1",
-			wantErr:     false,
+			deviceID: "controller-1",
+			wantErr:  false,
 		},
 		{
 			name: "missing URL",
 			config: &Configuration{
 				Enabled: true,
 			},
-			topicPrefix: "solar",
 			deviceID:    "controller-1",
 			wantErr:     true,
 			errContains: "url is required",
@@ -74,7 +69,6 @@ func TestNewPublisher(t *testing.T) {
 				Enabled: true,
 				URL:     "ftp://localhost/api/v1/write",
 			},
-			topicPrefix: "solar",
 			deviceID:    "controller-1",
 			wantErr:     true,
 			errContains: "must use http or https",
@@ -90,7 +84,6 @@ func TestNewPublisher(t *testing.T) {
 					Password: "pass",
 				},
 			},
-			topicPrefix: "solar",
 			deviceID:    "controller-1",
 			wantErr:     true,
 			errContains: "mutually exclusive",
@@ -99,7 +92,7 @@ func TestNewPublisher(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			publisher, err := NewPublisher(tt.config, tt.topicPrefix, tt.deviceID)
+			publisher, err := NewPublisher(tt.config, tt.deviceID)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -116,8 +109,7 @@ func TestNewPublisher(t *testing.T) {
 
 func TestParseMetric(t *testing.T) {
 	publisher := &Publisher{
-		topicPrefix: "solar",
-		deviceID:    "controller-1",
+		deviceID: "controller-1",
 	}
 
 	tests := []struct {
@@ -274,7 +266,7 @@ func TestPublishWithMockServer(t *testing.T) {
 		},
 	}
 
-	publisher, err := NewPublisher(config, "solar", "controller-123")
+	publisher, err := NewPublisher(config, "controller-123")
 	require.NoError(t, err)
 	defer publisher.Close()
 
@@ -370,7 +362,7 @@ func TestPublishWithBearerToken(t *testing.T) {
 		BearerToken: "mytoken123",
 	}
 
-	publisher, err := NewPublisher(config, "solar", "controller-1")
+	publisher, err := NewPublisher(config, "controller-1")
 	require.NoError(t, err)
 	defer publisher.Close()
 
@@ -407,7 +399,7 @@ func TestPublishError(t *testing.T) {
 		URL:     server.URL,
 	}
 
-	publisher, err := NewPublisher(config, "solar", "controller-1")
+	publisher, err := NewPublisher(config, "controller-1")
 	require.NoError(t, err)
 	defer publisher.Close()
 
