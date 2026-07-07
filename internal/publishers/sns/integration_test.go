@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/lumberbarons/solar-controller/internal/testing/containers"
+	"github.com/lumberbarons/solar-controller/internal/testutil/containers"
 )
 
 // snsTestFixture holds per-subtest SNS/SQS resources

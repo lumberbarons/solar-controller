@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	testingpkg "github.com/lumberbarons/solar-controller/internal/controllers/testing"
+	"github.com/lumberbarons/solar-controller/internal/testutil"
 )
 
 func TestCollector_GetStatus(t *testing.T) {
@@ -27,7 +27,7 @@ func TestCollector_GetStatus(t *testing.T) {
 						// 0x3108-0x310F: Unused (8 registers, set to 0)
 						// 0x3110: Battery temp (2500 = 25°C)
 						// 0x3111: Device temp (3200 = 32°C)
-						return testingpkg.CreateModbusResponse(
+						return testutil.CreateModbusResponse(
 							1850, 520, // Array V/I
 							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
@@ -37,13 +37,13 @@ func TestCollector_GetStatus(t *testing.T) {
 							2500, 3200, // Battery temp, Device temp
 						), nil
 					}
-					return testingpkg.CreateModbusResponse(1850, 520), nil // Legacy fallback
+					return testutil.CreateModbusResponse(1850, 520), nil // Legacy fallback
 				case regBatterySOC: // Battery SOC (1 register)
-					return testingpkg.CreateModbusResponse(85), nil // 85%
+					return testutil.CreateModbusResponse(85), nil // 85%
 				case regEnergyGeneratedDaily: // Daily energy (2 registers for 32-bit)
-					return testingpkg.CreateModbusResponse(1550, 0), nil // 15.5 kWh (low word, high word)
+					return testutil.CreateModbusResponse(1550, 0), nil // 15.5 kWh (low word, high word)
 				case regControllerStatus: // Controller status (1 register)
-					return testingpkg.CreateModbusResponse(0x0004), nil // Charging status bits
+					return testutil.CreateModbusResponse(0x0004), nil // Charging status bits
 				default:
 					t.Fatalf("unexpected register address: 0x%X", address)
 					return nil, nil
@@ -109,9 +109,9 @@ func TestCollector_GetStatus(t *testing.T) {
 		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				if address == regArrayVoltage {
-					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+					return nil, &testutil.ModbusTestError{Message: "timeout"}
 				}
-				return testingpkg.CreateModbusResponse(0), nil
+				return testutil.CreateModbusResponse(0), nil
 			},
 		}
 
@@ -128,16 +128,16 @@ func TestCollector_GetStatus(t *testing.T) {
 		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				if address == regBatterySOC {
-					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+					return nil, &testutil.ModbusTestError{Message: "timeout"}
 				}
 				if address == regArrayVoltage && quantity == 18 {
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1850, 520, 962, 0, 1280, 480, 614, 0,
 						0, 0, 0, 0, 0, 0, 0, 0,
 						2500, 3200,
 					), nil
 				}
-				return testingpkg.CreateModbusResponse(0), nil
+				return testutil.CreateModbusResponse(0), nil
 			},
 		}
 
@@ -154,19 +154,19 @@ func TestCollector_GetStatus(t *testing.T) {
 		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				if address == regEnergyGeneratedDaily {
-					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+					return nil, &testutil.ModbusTestError{Message: "timeout"}
 				}
 				if address == regArrayVoltage && quantity == 18 {
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1850, 520, 962, 0, 1280, 480, 614, 0,
 						0, 0, 0, 0, 0, 0, 0, 0,
 						2500, 3200,
 					), nil
 				}
 				if address == regBatterySOC {
-					return testingpkg.CreateModbusResponse(85), nil
+					return testutil.CreateModbusResponse(85), nil
 				}
-				return testingpkg.CreateModbusResponse(0), nil
+				return testutil.CreateModbusResponse(0), nil
 			},
 		}
 
@@ -183,22 +183,22 @@ func TestCollector_GetStatus(t *testing.T) {
 		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				if address == regControllerStatus {
-					return nil, &testingpkg.ModbusTestError{Message: "timeout"}
+					return nil, &testutil.ModbusTestError{Message: "timeout"}
 				}
 				if address == regArrayVoltage && quantity == 18 {
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1850, 520, 962, 0, 1280, 480, 614, 0,
 						0, 0, 0, 0, 0, 0, 0, 0,
 						2500, 3200,
 					), nil
 				}
 				if address == regBatterySOC {
-					return testingpkg.CreateModbusResponse(85), nil
+					return testutil.CreateModbusResponse(85), nil
 				}
 				if address == regEnergyGeneratedDaily {
-					return testingpkg.CreateModbusResponse(1550, 0), nil
+					return testutil.CreateModbusResponse(1550, 0), nil
 				}
-				return testingpkg.CreateModbusResponse(0), nil
+				return testutil.CreateModbusResponse(0), nil
 			},
 		}
 
@@ -218,7 +218,7 @@ func TestCollector_GetStatus(t *testing.T) {
 				case regArrayVoltage: // Batch read with negative temperatures
 					if quantity == 18 {
 						// Same as successful test but with negative temperatures
-						return testingpkg.CreateModbusResponse(
+						return testutil.CreateModbusResponse(
 							1850, 520, // Array V/I
 							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
@@ -228,15 +228,15 @@ func TestCollector_GetStatus(t *testing.T) {
 							64536, 65036, // Battery temp (-10°C), Device temp (-5°C)
 						), nil
 					}
-					return testingpkg.CreateModbusResponse(1850, 520), nil
+					return testutil.CreateModbusResponse(1850, 520), nil
 				case regBatterySOC:
-					return testingpkg.CreateModbusResponse(85), nil
+					return testutil.CreateModbusResponse(85), nil
 				case regEnergyGeneratedDaily:
-					return testingpkg.CreateModbusResponse(0, 1550), nil
+					return testutil.CreateModbusResponse(0, 1550), nil
 				case regControllerStatus:
-					return testingpkg.CreateModbusResponse(0x0004), nil
+					return testutil.CreateModbusResponse(0x0004), nil
 				default:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				}
 			},
 		}
