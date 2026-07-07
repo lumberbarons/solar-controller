@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
 )
@@ -48,7 +47,7 @@ func (l *LocalStackContainer) GetSNSEndpoint(t *testing.T) string {
 	ctx := context.Background()
 
 	// Get mapped port for LocalStack (uses 4566 internally)
-	mappedPort, err := l.Container.MappedPort(ctx, nat.Port("4566/tcp"))
+	mappedPort, err := l.Container.MappedPort(ctx, "4566/tcp")
 	if err != nil {
 		t.Fatalf("failed to get mapped port: %v", err)
 	}
