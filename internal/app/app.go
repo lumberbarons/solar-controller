@@ -149,11 +149,19 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
-// Run starts the HTTP server and blocks until it exits.
+// Run starts the HTTP server and blocks until it exits. When a TLS
+// certificate pair is configured the server serves HTTPS instead.
 func (a *Application) Run() error {
 	addr := fmt.Sprintf("%s:%v", a.config.SolarController.BindAddress, a.config.SolarController.HTTPPort)
+	srv := newHTTPServer(addr, a.router)
+
+	if tls := a.config.SolarController.TLS; tls.Enabled() {
+		log.Infof("starting HTTPS server on %s", addr)
+		return srv.ListenAndServeTLS(tls.CertFile, tls.KeyFile)
+	}
+
 	log.Infof("starting server on %s", addr)
-	return newHTTPServer(addr, a.router).ListenAndServe()
+	return srv.ListenAndServe()
 }
 
 // Close performs cleanup of all application resources.

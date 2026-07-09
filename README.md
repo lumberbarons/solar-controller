@@ -177,6 +177,9 @@ solarController:
   bindAddress: 127.0.0.1  # Address the HTTP server listens on (default: "127.0.0.1"; set to 0.0.0.0 to expose on all interfaces)
   auth:
     token: change-me    # Optional: when set, /api routes require "Authorization: Bearer <token>"
+  tls:                  # Optional: when set, the server serves HTTPS instead of HTTP
+    certFile: /etc/solar-controller/cert.pem
+    keyFile: /etc/solar-controller/key.pem
   debug: false          # Enable debug logging (can also use -debug flag)
   deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
 
@@ -233,6 +236,7 @@ solarController:
 **HTTP Server:**
 - `bindAddress` defaults to `127.0.0.1`, so the API and web UI are only reachable from the device itself. To reach them over the network, front the service with a reverse proxy/VPN, or set `bindAddress: 0.0.0.0` deliberately.
 - When `auth.token` is set, every `/api` request must send `Authorization: Bearer <token>`; requests without it get `401`. The SPA static assets stay public.
+- When `tls.certFile` and `tls.keyFile` are both set, the server serves HTTPS; otherwise it serves plain HTTP. A TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front of the plain HTTP server is an equally good option.
 
 **Hardware Controllers:**
 - Each controller (e.g., epever) has an `enabled` boolean field

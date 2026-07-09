@@ -20,6 +20,7 @@ type SolarControllerConfiguration struct {
 	HTTPPort    int                       `yaml:"httpPort"`
 	BindAddress string                    `yaml:"bindAddress"`
 	Auth        AuthConfiguration         `yaml:"auth"`
+	TLS         TLSConfiguration          `yaml:"tls"`
 	Debug       bool                      `yaml:"debug"`
 	DeviceID    string                    `yaml:"deviceId"`
 	Mqtt        mqtt.Configuration        `yaml:"mqtt"`
@@ -34,6 +35,19 @@ type SolarControllerConfiguration struct {
 // requests to /api routes must carry it as a bearer token.
 type AuthConfiguration struct {
 	Token string `yaml:"token"`
+}
+
+// TLSConfiguration holds the certificate pair for serving HTTPS. When both
+// paths are set the HTTP server serves TLS; when both are empty it serves
+// plain HTTP.
+type TLSConfiguration struct {
+	CertFile string `yaml:"certFile"`
+	KeyFile  string `yaml:"keyFile"`
+}
+
+// Enabled reports whether a TLS certificate pair is configured.
+func (t TLSConfiguration) Enabled() bool {
+	return t.CertFile != "" && t.KeyFile != ""
 }
 
 // Load parses and validates configuration from YAML bytes.
@@ -89,6 +103,12 @@ func (c *Config) applyDefaults() {
 func (c *Config) Validate() error {
 	if c.SolarController.HTTPPort <= 0 || c.SolarController.HTTPPort > 65535 {
 		return fmt.Errorf("invalid HTTP port: %d (must be 1-65535)", c.SolarController.HTTPPort)
+	}
+
+	// TLS requires both halves of the certificate pair
+	tls := c.SolarController.TLS
+	if (tls.CertFile == "") != (tls.KeyFile == "") {
+		return fmt.Errorf("tls.certFile and tls.keyFile must both be set to enable TLS")
 	}
 
 	// Note: Multiple publishers can now be enabled simultaneously
