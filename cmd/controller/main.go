@@ -38,6 +38,10 @@ func main() {
 
 	controllerConfig := loadConfigFile()
 
+	// Gin always runs in release mode: the debug flag controls application
+	// log verbosity only, not Gin's verbose route dumps and stack traces
+	gin.SetMode(gin.ReleaseMode)
+
 	// Command line flag takes precedence over config file
 	debugEnabled := *debugMode || controllerConfig.SolarController.Debug
 
@@ -46,7 +50,6 @@ func main() {
 		log.Debug("debug mode enabled")
 	} else {
 		log.SetLevel(log.InfoLevel)
-		gin.SetMode(gin.ReleaseMode)
 	}
 
 	publisher, err := publishers.NewPublisher(&controllerConfig.SolarController)
