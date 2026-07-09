@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/config"
@@ -272,6 +274,40 @@ func TestApplication_NoAuthTokenLeavesAPIOpen(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/api/info", nil)
 	app.Router().ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestApplication_GracefulShutdown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort:    0, // let the OS pick a free port
+			BindAddress: "127.0.0.1",
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- app.Run() }()
+
+	// Give the listener a moment to start, then shut down
+	time.Sleep(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Shutdown(ctx))
+
+	select {
+	case err := <-runErr:
+		assert.NoError(t, err, "Run should return nil on clean shutdown")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after Shutdown")
+	}
 }
 
 func TestNewHTTPServer_SetsTimeouts(t *testing.T) {

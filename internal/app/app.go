@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,6 +25,7 @@ import (
 type Application struct {
 	config      *config.Config
 	router      *gin.Engine
+	server      *http.Server
 	publisher   publish.MessagePublisher
 	controllers []controllers.SolarController
 	version     VersionInfo
@@ -63,6 +66,9 @@ func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, vers
 
 	// Setup routes
 	app.setupRoutes()
+
+	addr := fmt.Sprintf("%s:%v", cfg.SolarController.BindAddress, cfg.SolarController.HTTPPort)
+	app.server = newHTTPServer(addr, app.router)
 
 	return app, nil
 }
@@ -152,17 +158,27 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 // Run starts the HTTP server and blocks until it exits. When a TLS
 // certificate pair is configured the server serves HTTPS instead.
+// A clean shutdown via Shutdown returns nil rather than an error.
 func (a *Application) Run() error {
-	addr := fmt.Sprintf("%s:%v", a.config.SolarController.BindAddress, a.config.SolarController.HTTPPort)
-	srv := newHTTPServer(addr, a.router)
-
+	var err error
 	if tls := a.config.SolarController.TLS; tls.Enabled() {
-		log.Infof("starting HTTPS server on %s", addr)
-		return srv.ListenAndServeTLS(tls.CertFile, tls.KeyFile)
+		log.Infof("starting HTTPS server on %s", a.server.Addr)
+		err = a.server.ListenAndServeTLS(tls.CertFile, tls.KeyFile)
+	} else {
+		log.Infof("starting server on %s", a.server.Addr)
+		err = a.server.ListenAndServe()
 	}
 
-	log.Infof("starting server on %s", addr)
-	return srv.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+// Shutdown gracefully stops the HTTP server, letting in-flight requests
+// (including Modbus-writing PATCH handlers) finish before returning.
+func (a *Application) Shutdown(ctx context.Context) error {
+	return a.server.Shutdown(ctx)
 }
 
 // Close performs cleanup of all application resources.

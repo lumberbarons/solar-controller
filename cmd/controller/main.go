@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/app"
@@ -70,6 +74,21 @@ func main() {
 	defer func() {
 		if err := application.Close(); err != nil {
 			log.Errorf("failed to close application: %v", err)
+		}
+	}()
+
+	// On SIGINT/SIGTERM, drain in-flight HTTP requests (including Modbus
+	// EEPROM writes) before the process exits
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		log.Info("shutdown signal received, draining connections")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := application.Shutdown(shutdownCtx); err != nil {
+			log.Errorf("graceful shutdown failed: %v", err)
 		}
 	}()
 
