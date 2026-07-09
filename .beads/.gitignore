@@ -19,6 +19,11 @@ redirect
 # These files are machine-specific and should not be shared across clones
 .sync.lock
 export-state/
+export-state.json
+
+# Local environment / credentials
+.env
+.beads-credential-key
 
 # Ephemeral store (SQLite - wisps/molecules, intentionally not versioned)
 ephemeral.sqlite3
@@ -30,6 +35,16 @@ ephemeral.sqlite3-shm
 dolt-server.pid
 dolt-server.log
 dolt-server.lock
+dolt-server.port
+dolt-server.activity
+dolt-monitor.pid
+daemon.*
+*.lock
+*.corrupt.backup/
+embeddeddolt/
+
+# Local Dolt backups (binary archives, machine-local)
+backup/
 
 # Legacy files (from pre-Dolt versions)
 *.db
