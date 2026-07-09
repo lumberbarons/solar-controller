@@ -18,12 +18,13 @@ contents:
     file_info:
       mode: 0755
 
-  # Configuration file
+  # Configuration file: not world-readable, it may hold broker credentials.
+  # Group ownership is fixed up in postinstall once the service user exists.
   - src: package/config.yaml
     dst: /etc/solar-controller/config.yaml
     type: config
     file_info:
-      mode: 0644
+      mode: 0640
 
   # Systemd service file
   - src: package/solar-controller.service
