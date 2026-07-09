@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	testingpkg "github.com/lumberbarons/solar-controller/internal/controllers/testing"
+	"github.com/lumberbarons/solar-controller/internal/testutil"
 )
 
 // newPatchTestRouter returns a router with all four config PATCH handlers
 // registered against a mock modbus client that reports a userDefined battery.
-func newPatchTestRouter(mockClient *testingpkg.MockModbusClient) *gin.Engine {
+func newPatchTestRouter(mockClient *MockModbusClient) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	configurer := NewConfigurer(mockClient, &testingpkg.MockMetricsCollector{})
+	configurer := NewConfigurer(mockClient, &MockMetricsCollector{})
 
 	router := gin.New()
 	router.PATCH("/api/epever/config", configurer.ConfigPatch())
@@ -27,27 +27,27 @@ func newPatchTestRouter(mockClient *testingpkg.MockModbusClient) *gin.Engine {
 
 // fullConfigMockClient serves a complete, valid register map so handlers can
 // run their read-modify-write flow; writes are recorded but not applied.
-func fullConfigMockClient() *testingpkg.MockModbusClient {
-	return &testingpkg.MockModbusClient{
+func fullConfigMockClient() *MockModbusClient {
+	return &MockModbusClient{
 		ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 			switch address {
 			case regBatteryType:
-				return testingpkg.CreateModbusResponse(batteryTypeUserDefined, 100, 3), nil
+				return testutil.CreateModbusResponse(batteryTypeUserDefined, 100, 3), nil
 			case regRealTimeClock:
 				return []byte{0, 0, 1, 12, 25, 1}, nil
 			case regOverVoltDisconnect:
-				return testingpkg.CreateModbusResponse(
+				return testutil.CreateModbusResponse(
 					1600, 1500, 1500, 1460, 1440, 1380,
 					1320, 1260, 1220, 1200, 1110, 1080,
 				), nil
 			case regEqualizationChargingCycle:
-				return testingpkg.CreateModbusResponse(30), nil
+				return testutil.CreateModbusResponse(30), nil
 			case regEqualizationChargingTime:
-				return testingpkg.CreateModbusResponse(120, 120), nil
+				return testutil.CreateModbusResponse(120, 120), nil
 			case regBatteryTempUpperLimit:
-				return testingpkg.CreateModbusResponse(4500, 65436, 4500, 4000), nil
+				return testutil.CreateModbusResponse(4500, 65436, 4500, 4000), nil
 			default:
-				return testingpkg.CreateModbusResponse(0), nil
+				return testutil.CreateModbusResponse(0), nil
 			}
 		},
 		WriteMultipleRegistersFunc: func(_ context.Context, _, _ uint16, _ []byte) ([]byte, error) {
@@ -230,10 +230,10 @@ func TestPatchHandlers_RejectOversizedBody(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
-			mockClient := &testingpkg.MockModbusClient{
+			mockClient := &MockModbusClient{
 				ReadHoldingRegistersFunc: func(_ context.Context, _, _ uint16) ([]byte, error) {
 					// Battery type userDefined so handlers proceed to binding
-					return testingpkg.CreateModbusResponse(batteryTypeUserDefined), nil
+					return testutil.CreateModbusResponse(batteryTypeUserDefined), nil
 				},
 			}
 			router := newPatchTestRouter(mockClient)

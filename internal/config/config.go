@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
-	"github.com/lumberbarons/solar-controller/internal/file"
-	"github.com/lumberbarons/solar-controller/internal/mqtt"
-	"github.com/lumberbarons/solar-controller/internal/remotewrite"
-	"github.com/lumberbarons/solar-controller/internal/sns"
-	"github.com/lumberbarons/solar-controller/internal/solace"
+	"github.com/lumberbarons/solar-controller/internal/publishers/file"
+	"github.com/lumberbarons/solar-controller/internal/publishers/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/publishers/remotewrite"
+	"github.com/lumberbarons/solar-controller/internal/publishers/sns"
+	"github.com/lumberbarons/solar-controller/internal/publishers/solace"
 	"gopkg.in/yaml.v3"
 )
 

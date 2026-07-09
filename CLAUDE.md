@@ -13,17 +13,17 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `cmd/controller/` | Application entry point | Changing startup, flags, or controller wiring |
 | `internal/controllers/` | Hardware controller implementations (epever) | Adding controllers, modifying collection or publishing logic |
 | `internal/publishers/` | Publisher factory, MultiPublisher, MessagePublisher interface | Adding a new publisher or changing fan-out behavior |
-| `internal/mqtt/` | MQTT publisher | Modifying MQTT publishing |
-| `internal/solace/` | Solace publisher | Modifying Solace publishing |
-| `internal/sns/` | AWS SNS publisher | Modifying SNS publishing |
-| `internal/file/` | File publisher with log rotation | Modifying file publishing |
-| `internal/remotewrite/` | Prometheus remote_write publisher | Modifying remote write publishing |
+| `internal/publishers/mqtt/` | MQTT publisher | Modifying MQTT publishing |
+| `internal/publishers/solace/` | Solace publisher | Modifying Solace publishing |
+| `internal/publishers/sns/` | AWS SNS publisher | Modifying SNS publishing |
+| `internal/publishers/file/` | File publisher with log rotation | Modifying file publishing |
+| `internal/publishers/remotewrite/` | Prometheus remote_write publisher | Modifying remote write publishing |
 | `internal/config/` | YAML configuration structs and validation | Changing configuration options |
 | `internal/app/` | Application bootstrap and HTTP server | Changing server setup or middleware |
 | `internal/static/` | Embedded React frontend (`//go:embed`) | Changing how the frontend is served |
-| `internal/testing/` | Integration test container helpers | Adding integration tests |
+| `internal/testutil/` | Shared test helpers and integration test containers | Adding integration tests |
 | `site/` | React frontend source | Modifying the web UI |
-| `testing/` | Remote write test setup (VictoriaMetrics) | Testing remote write locally |
+| `examples/` | Remote write test setup (VictoriaMetrics) | Testing remote write locally |
 | `testdata/` | Modbus simulator configuration | Testing with simulated hardware |
 | `docs/` | Modbus register documentation | Understanding Epever register mappings |
 | `package/` | System packaging (deb, rpm) via nfpm | Changing release packaging |
@@ -112,14 +112,14 @@ cd site
 # Install dependencies
 npm install
 
-# Run development server (proxies to backend on port 8000)
+# Run vite development server (proxies /api to backend on port 8080)
 npm start
 
-# Build for production
+# Build for production (output in site/build)
 npm run build
 
-# Run tests
-npm test
+# Run linter
+npm run lint
 ```
 
 ### Docker
@@ -457,16 +457,16 @@ To test Prometheus remote_write locally without Grafana Cloud:
 
 ```bash
 # Start VictoriaMetrics
-cd testing/remotewrite && ./test-remotewrite.sh
+cd examples/remotewrite && ./test-remotewrite.sh
 
 # In another terminal, run solar-controller
 make build-backend
-./bin/solar-controller -config testing/remotewrite/config.yaml
+./bin/solar-controller -config examples/remotewrite/config.yaml
 
 # View metrics at http://localhost:8428/vmui
 ```
 
-See `testing/remotewrite/README.md` for details.
+See `examples/remotewrite/README.md` for details.
 
 ### Integration Testing
 
@@ -491,12 +491,12 @@ make test-all
 go test -v -tags=integration ./...
 
 # Run specific integration test
-go test -v -tags=integration ./internal/sns -run TestSNSPublisherIntegration
+go test -v -tags=integration ./internal/publishers/sns -run TestSNSPublisherIntegration
 ```
 
 #### Available Integration Tests
 
-**SNS Publisher Integration** (`internal/sns/integration_test.go`):
+**SNS Publisher Integration** (`internal/publishers/sns/integration_test.go`):
 - Uses LocalStack testcontainer to simulate AWS SNS
 - Tests message publishing to SNS topics
 - Verifies message format and delivery via SQS subscription
@@ -511,7 +511,7 @@ go test -v -tags=integration ./internal/sns -run TestSNSPublisherIntegration
 
 #### Architecture
 
-**Helper Package** (`internal/testing/containers/`):
+**Helper Package** (`internal/testutil/containers/`):
 - `localstack.go` - LocalStack container setup and helpers
 - `helpers.go` - Common test utilities
 
@@ -552,7 +552,7 @@ integration-tests:
 **Design Principles:**
 1. Use build tags to separate integration from unit tests
 2. One integration test file per publisher/component
-3. Reusable container helpers in `internal/testing/containers/`
+3. Reusable container helpers in `internal/testutil/containers/`
 4. Parallel test support via dynamic port mapping
 5. Comprehensive cleanup with `t.Cleanup()`
 

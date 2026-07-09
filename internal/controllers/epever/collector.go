@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever/parser"
 	log "github.com/sirupsen/logrus"
 )
@@ -33,8 +32,8 @@ const (
 )
 
 type Collector struct {
-	modbusClient        controllers.ModbusClient
-	prometheusCollector controllers.MetricsCollector
+	modbusClient        ModbusClient
+	prometheusCollector MetricsCollector
 }
 
 type ControllerStatus struct {
@@ -53,7 +52,7 @@ type ControllerStatus struct {
 	ChargingStatus       int32   `json:"chargingStatus"`
 }
 
-func NewCollector(client controllers.ModbusClient, prometheusCollector controllers.MetricsCollector) *Collector {
+func NewCollector(client ModbusClient, prometheusCollector MetricsCollector) *Collector {
 	collector := &Collector{
 		modbusClient:        client,
 		prometheusCollector: prometheusCollector,

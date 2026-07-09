@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/config"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
-	controllertesting "github.com/lumberbarons/solar-controller/internal/controllers/testing"
+	"github.com/lumberbarons/solar-controller/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +34,7 @@ func TestNewApplication(t *testing.T) {
 		},
 	}
 
-	mockPublisher := controllertesting.NewMockPublisher()
+	mockPublisher := testutil.NewMockPublisher()
 
 	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ func TestNewApplication(t *testing.T) {
 
 	assert.NotNil(t, app.router)
 	assert.Equal(t, cfg, app.config)
-	assert.Equal(t, mockPublisher, app.mqtt)
+	assert.Equal(t, mockPublisher, app.publisher)
 }
 
 func TestApplication_MetricsEndpoint(t *testing.T) {
@@ -58,7 +58,7 @@ func TestApplication_MetricsEndpoint(t *testing.T) {
 		},
 	}
 
-	mockPublisher := controllertesting.NewMockPublisher()
+	mockPublisher := testutil.NewMockPublisher()
 
 	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestApplication_InfoEndpoint(t *testing.T) {
 		},
 	}
 
-	mockPublisher := controllertesting.NewMockPublisher()
+	mockPublisher := testutil.NewMockPublisher()
 	versionInfo := getTestVersionInfo()
 
 	app, err := NewApplication(cfg, mockPublisher, versionInfo)
@@ -116,7 +116,7 @@ func TestApplication_Close(t *testing.T) {
 		},
 	}
 
-	mockPublisher := controllertesting.NewMockPublisher()
+	mockPublisher := testutil.NewMockPublisher()
 
 	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
@@ -141,7 +141,7 @@ func TestApplication_SPAFallback(t *testing.T) {
 		},
 	}
 
-	mockPublisher := controllertesting.NewMockPublisher()
+	mockPublisher := testutil.NewMockPublisher()
 
 	app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 	require.NoError(t, err)
@@ -194,7 +194,7 @@ func TestApplication_AuthMiddleware(t *testing.T) {
 		},
 	}
 
-	app, err := NewApplication(cfg, controllertesting.NewMockPublisher(), getTestVersionInfo())
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
 	require.NoError(t, err)
 	defer app.Close()
 
@@ -264,7 +264,7 @@ func TestApplication_NoAuthTokenLeavesAPIOpen(t *testing.T) {
 		},
 	}
 
-	app, err := NewApplication(cfg, controllertesting.NewMockPublisher(), getTestVersionInfo())
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
 	require.NoError(t, err)
 	defer app.Close()
 
@@ -317,7 +317,7 @@ func TestApplication_ControllerRegistration(t *testing.T) {
 				},
 			}
 
-			mockPublisher := controllertesting.NewMockPublisher()
+			mockPublisher := testutil.NewMockPublisher()
 
 			app, err := NewApplication(cfg, mockPublisher, getTestVersionInfo())
 			require.NoError(t, err)
