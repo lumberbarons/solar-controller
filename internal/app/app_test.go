@@ -274,6 +274,17 @@ func TestApplication_NoAuthTokenLeavesAPIOpen(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestNewHTTPServer_SetsTimeouts(t *testing.T) {
+	srv := newHTTPServer("127.0.0.1:0", http.NewServeMux())
+
+	assert.Equal(t, "127.0.0.1:0", srv.Addr)
+	assert.NotZero(t, srv.ReadHeaderTimeout)
+	assert.NotZero(t, srv.ReadTimeout)
+	assert.NotZero(t, srv.WriteTimeout)
+	assert.NotZero(t, srv.IdleTimeout)
+	assert.NotZero(t, srv.MaxHeaderBytes)
+}
+
 func TestApplication_ControllerRegistration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

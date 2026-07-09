@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -132,11 +133,27 @@ func (a *Application) setupRoutes() {
 	})
 }
 
+// newHTTPServer builds the http.Server used by Run. Timeouts are set
+// explicitly so slow clients cannot hold connections open indefinitely;
+// the generous read/write timeouts leave room for PATCH handlers that
+// perform multi-second Modbus writes.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 * 1024,
+	}
+}
+
 // Run starts the HTTP server and blocks until it exits.
 func (a *Application) Run() error {
 	addr := fmt.Sprintf("%s:%v", a.config.SolarController.BindAddress, a.config.SolarController.HTTPPort)
 	log.Infof("starting server on %s", addr)
-	return a.router.Run(addr)
+	return newHTTPServer(addr, a.router).ListenAndServe()
 }
 
 // Close performs cleanup of all application resources.
