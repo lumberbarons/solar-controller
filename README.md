@@ -235,7 +235,8 @@ solarController:
 
 **HTTP Server:**
 - `bindAddress` defaults to `127.0.0.1`, so the API and web UI are only reachable from the device itself. To reach them over the network, front the service with a reverse proxy/VPN, or set `bindAddress: 0.0.0.0` deliberately.
-- When `auth.token` is set, every `/api` request must send `Authorization: Bearer <token>`; requests without it get `401`. The SPA static assets stay public.
+- When `auth.token` is set, every `/api` request and `/metrics` must send `Authorization: Bearer <token>`; requests without it get `401`. The SPA static assets stay public. Prometheus can scrape an authenticated `/metrics` via its `authorization` scrape config.
+- Without `auth.token`, `/api` and `/metrics` are unauthenticated — including version/commit info at `/api/info` and Go runtime internals at `/metrics` — and are protected only by the loopback default of `bindAddress`.
 - When `tls.certFile` and `tls.keyFile` are both set, the server serves HTTPS; otherwise it serves plain HTTP. A TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front of the plain HTTP server is an equally good option.
 
 **Hardware Controllers:**

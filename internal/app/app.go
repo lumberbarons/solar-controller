@@ -56,7 +56,7 @@ func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, vers
 	if cfg.SolarController.Auth.Token != "" {
 		app.router.Use(authMiddleware(cfg.SolarController.Auth.Token))
 	} else {
-		log.Warn("no auth token configured; /api endpoints are unauthenticated")
+		log.Warn("no auth token configured; /api and /metrics endpoints are unauthenticated")
 	}
 
 	// Build controllers
@@ -73,11 +73,15 @@ func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, vers
 	return app, nil
 }
 
-// authMiddleware requires a bearer token on all /api routes. The SPA and
-// static assets remain public so the frontend can load and prompt for a token.
+// authMiddleware requires a bearer token on all /api routes and on /metrics,
+// so device metrics, version info, and Go runtime internals are not exposed
+// anonymously. The SPA and static assets remain public so the frontend can
+// load and prompt for a token. Prometheus scrapers can supply the token via
+// their authorization config.
 func authMiddleware(token string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+		path := c.Request.URL.Path
+		if !strings.HasPrefix(path, "/api") && path != "/metrics" {
 			c.Next()
 			return
 		}

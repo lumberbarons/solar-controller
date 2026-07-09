@@ -234,6 +234,19 @@ func TestApplication_AuthMiddleware(t *testing.T) {
 			wantCode:   http.StatusOK,
 		},
 		{
+			name:     "metrics without token is rejected",
+			method:   "GET",
+			path:     "/metrics",
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "metrics with valid token is allowed",
+			method:     "GET",
+			path:       "/metrics",
+			authHeader: "Bearer secret-token",
+			wantCode:   http.StatusOK,
+		},
+		{
 			name:     "spa route stays public",
 			method:   "GET",
 			path:     "/",
