@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -22,6 +23,21 @@ type Publisher struct {
 	topicPrefix string
 }
 
+// credentialsOverPlaintext reports whether credentials are configured while
+// the broker URL uses an unencrypted transport scheme.
+func credentialsOverPlaintext(config *Configuration) bool {
+	if config.Username == "" && config.Password == "" {
+		return false
+	}
+	host := strings.ToLower(config.Host)
+	for _, scheme := range []string{"ssl://", "tls://", "mqtts://", "wss://"} {
+		if strings.HasPrefix(host, scheme) {
+			return false
+		}
+	}
+	return true
+}
+
 func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error) {
 	if !config.Enabled {
 		log.Info("MQTT publisher disabled via configuration")
@@ -31,6 +47,10 @@ func NewPublisher(config *Configuration, topicPrefix string) (*Publisher, error)
 	if config.Host == "" {
 		log.Warn("MQTT enabled but no host provided, publisher disabled")
 		return &Publisher{}, nil
+	}
+
+	if credentialsOverPlaintext(config) {
+		log.Warnf("MQTT credentials are configured with plaintext broker scheme (%s); use ssl://, tls://, mqtts://, or wss:// to protect them in transit", config.Host)
 	}
 
 	mqtt.ERROR = log.New()

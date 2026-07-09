@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Configuration holds the configuration for the Prometheus remote_write publisher.
@@ -54,6 +56,10 @@ func (c *Configuration) Validate() error {
 		return fmt.Errorf("remoteWrite.url must use http or https scheme")
 	}
 
+	if c.credentialsOverPlaintext(parsedURL.Scheme) {
+		log.Warnf("remoteWrite credentials are configured with a plaintext http URL (%s); use https to protect them in transit", c.URL)
+	}
+
 	// Validate timeout if specified
 	if c.Timeout != "" {
 		if _, err := time.ParseDuration(c.Timeout); err != nil {
@@ -77,6 +83,12 @@ func (c *Configuration) Validate() error {
 	}
 
 	return nil
+}
+
+// credentialsOverPlaintext reports whether credentials are configured while
+// the remote write URL uses an unencrypted scheme.
+func (c *Configuration) credentialsOverPlaintext(scheme string) bool {
+	return scheme != "https" && (c.BasicAuth != nil || c.BearerToken != "")
 }
 
 // GetTimeout returns the configured timeout or the default (30s).

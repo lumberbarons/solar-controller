@@ -206,3 +206,35 @@ func TestServicePropertyMap(t *testing.T) {
 // interface implementations. The tests above cover the basic configuration and
 // edge case handling. For full publish/close behavior, integration tests with
 // actual Solace infrastructure or testcontainers would be more appropriate.
+
+func TestCredentialsOverPlaintext(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Configuration
+		want   bool
+	}{
+		{
+			name:   "credentials with plaintext tcp scheme",
+			config: Configuration{Host: "tcp://broker:55555", Username: "user", Password: "pass"},
+			want:   true,
+		},
+		{
+			name:   "credentials with tcps scheme",
+			config: Configuration{Host: "tcps://broker:55443", Username: "user", Password: "pass"},
+			want:   false,
+		},
+		{
+			name:   "no credentials with plaintext scheme",
+			config: Configuration{Host: "tcp://broker:55555"},
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := credentialsOverPlaintext(&tt.config); got != tt.want {
+				t.Errorf("credentialsOverPlaintext() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

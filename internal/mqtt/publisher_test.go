@@ -345,3 +345,50 @@ func TestClose_ValidPublisher(t *testing.T) {
 		t.Errorf("Expected 1 disconnect call, got: %d", mockClient.disconnectCalls)
 	}
 }
+
+func TestCredentialsOverPlaintext(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Configuration
+		want   bool
+	}{
+		{
+			name:   "credentials with plaintext mqtt scheme",
+			config: Configuration{Host: "mqtt://broker:1883", Username: "user", Password: "pass"},
+			want:   true,
+		},
+		{
+			name:   "credentials with plaintext tcp scheme",
+			config: Configuration{Host: "tcp://broker:1883", Password: "pass"},
+			want:   true,
+		},
+		{
+			name:   "credentials with ssl scheme",
+			config: Configuration{Host: "ssl://broker:8883", Username: "user", Password: "pass"},
+			want:   false,
+		},
+		{
+			name:   "credentials with mqtts scheme",
+			config: Configuration{Host: "mqtts://broker:8883", Username: "user", Password: "pass"},
+			want:   false,
+		},
+		{
+			name:   "credentials with wss scheme",
+			config: Configuration{Host: "wss://broker:443", Username: "user", Password: "pass"},
+			want:   false,
+		},
+		{
+			name:   "no credentials with plaintext scheme",
+			config: Configuration{Host: "mqtt://broker:1883"},
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := credentialsOverPlaintext(&tt.config); got != tt.want {
+				t.Errorf("credentialsOverPlaintext() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

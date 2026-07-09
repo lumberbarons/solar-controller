@@ -480,3 +480,43 @@ type receivedRequest struct {
 	headers      http.Header
 	writeRequest prompb.WriteRequest
 }
+
+func TestCredentialsOverPlaintext(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Configuration
+		scheme string
+		want   bool
+	}{
+		{
+			name:   "basic auth over http",
+			config: Configuration{BasicAuth: &BasicAuthConfig{Username: "u", Password: "p"}},
+			scheme: "http",
+			want:   true,
+		},
+		{
+			name:   "bearer token over http",
+			config: Configuration{BearerToken: "token"},
+			scheme: "http",
+			want:   true,
+		},
+		{
+			name:   "basic auth over https",
+			config: Configuration{BasicAuth: &BasicAuthConfig{Username: "u", Password: "p"}},
+			scheme: "https",
+			want:   false,
+		},
+		{
+			name:   "no credentials over http",
+			config: Configuration{},
+			scheme: "http",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.config.credentialsOverPlaintext(tt.scheme))
+		})
+	}
+}
