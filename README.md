@@ -256,6 +256,8 @@ solarController:
 - **File**: JSON log files with rotation, compression, and configurable retention
 - **Remote Write**: Push to Prometheus-compatible endpoints with authentication and custom headers
 
+When a publisher is configured with credentials, use an encrypted transport scheme so they are protected in transit: `ssl://`, `tls://`, `mqtts://`, or `wss://` for MQTT, `tcps://` for Solace, and `https://` for Remote Write. Pairing credentials with a plaintext scheme (`mqtt://`, `tcp://`, `http://`) logs a startup warning.
+
 ### Debug Mode
 
 Debug mode can be enabled in two ways:
