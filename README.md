@@ -174,6 +174,12 @@ Create a YAML configuration file with the following structure:
 ```yaml
 solarController:
   httpPort: 8080
+  bindAddress: 127.0.0.1  # Address the HTTP server listens on (default: "127.0.0.1"; set to 0.0.0.0 to expose on all interfaces)
+  auth:
+    token: change-me    # Optional: when set, /api routes require "Authorization: Bearer <token>"
+  tls:                  # Optional: when set, the server serves HTTPS instead of HTTP
+    certFile: /etc/solar-controller/cert.pem
+    keyFile: /etc/solar-controller/key.pem
   debug: false          # Enable debug logging (can also use -debug flag)
   deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
 
@@ -227,6 +233,12 @@ solarController:
 
 ### Configuration Details
 
+**HTTP Server:**
+- `bindAddress` defaults to `127.0.0.1`, so the API and web UI are only reachable from the device itself. To reach them over the network, front the service with a reverse proxy/VPN, or set `bindAddress: 0.0.0.0` deliberately.
+- When `auth.token` is set, every `/api` request and `/metrics` must send `Authorization: Bearer <token>`; requests without it get `401`. The SPA static assets stay public. Prometheus can scrape an authenticated `/metrics` via its `authorization` scrape config.
+- Without `auth.token`, `/api` and `/metrics` are unauthenticated — including version/commit info at `/api/info` and Go runtime internals at `/metrics` — and are protected only by the loopback default of `bindAddress`.
+- When `tls.certFile` and `tls.keyFile` are both set, the server serves HTTPS; otherwise it serves plain HTTP. A TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front of the plain HTTP server is an equally good option.
+
 **Hardware Controllers:**
 - Each controller (e.g., epever) has an `enabled` boolean field
 - Set `enabled: true` to activate the controller
@@ -244,6 +256,8 @@ solarController:
 - **AWS SNS**: Push notifications to an SNS topic (5s timeout, standard AWS credential chain)
 - **File**: JSON log files with rotation, compression, and configurable retention
 - **Remote Write**: Push to Prometheus-compatible endpoints with authentication and custom headers
+
+When a publisher is configured with credentials, use an encrypted transport scheme so they are protected in transit: `ssl://`, `tls://`, `mqtts://`, or `wss://` for MQTT, `tcps://` for Solace, and `https://` for Remote Write. Pairing credentials with a plaintext scheme (`mqtt://`, `tcp://`, `http://`) logs a startup warning.
 
 ### Debug Mode
 

@@ -47,6 +47,42 @@ const (
 // Conversion factor for voltage values (stored as centivolt)
 const voltageDivisor = 100.0
 
+// maxPatchBodyBytes caps config PATCH request bodies before they are
+// buffered by JSON binding; the payloads these endpoints accept are at
+// most a few hundred bytes.
+const maxPatchBodyBytes = 8 << 10
+
+// bindJSONBounded binds a JSON request body while enforcing maxPatchBodyBytes,
+// so oversized bodies are rejected instead of exhausting memory.
+func bindJSONBounded(c *gin.Context, obj any) error {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPatchBodyBytes)
+	return c.BindJSON(obj)
+}
+
+// Absolute bounds for values written to the controller. The voltage range is
+// generous enough for 12/24/48V battery systems while rejecting values that
+// would wrap the uint16 centivolt registers (overflow at 655.35 V).
+const (
+	minVoltageSetting          = 5.0
+	maxVoltageSetting          = 70.0
+	minBatteryCapacityAh       = 1
+	maxBatteryCapacityAh       = 10000
+	minTempCompCoefficient     = 0.0
+	maxTempCompCoefficient     = 10.0
+	maxChargingDurationMinutes = 600
+	maxEqualizationCycleDays   = 365
+	minRTCYear                 = 2000
+	maxRTCYear                 = 2255 // year is stored as a single byte offset from 2000
+)
+
+// validateVoltageBounds rejects voltages outside the absolute allowed range.
+func validateVoltageBounds(name string, volts float32) error {
+	if volts < minVoltageSetting || volts > maxVoltageSetting {
+		return fmt.Errorf("%s (%.2f) out of range [%.1f, %.1f] volts", name, volts, minVoltageSetting, maxVoltageSetting)
+	}
+	return nil
+}
+
 type Configurer struct {
 	modbusClient        ModbusClient
 	prometheusCollector MetricsCollector
@@ -312,20 +348,33 @@ func (sc *Configurer) writeVoltageParametersBlock(c *gin.Context, config *Contro
 		dischargingLimit = cachedConfig.DischargingLimitVoltage
 	}
 
-	// Convert all voltage values to uint16 (multiply by 100 for device format)
-	values := []uint16{
-		uint16(overVoltDisconnect * 100), // 0x9003
-		uint16(chargingLimit * 100),      // 0x9004
-		uint16(overVoltReconnect * 100),  // 0x9005
-		uint16(equalization * 100),       // 0x9006
-		uint16(boost * 100),              // 0x9007
-		uint16(floatVolt * 100),          // 0x9008
-		uint16(boostReconnect * 100),     // 0x9009
-		uint16(lowVoltReconnect * 100),   // 0x900A
-		uint16(underVoltRecover * 100),   // 0x900B
-		uint16(underVoltWarning * 100),   // 0x900C
-		uint16(lowVoltDisconnect * 100),  // 0x900D
-		uint16(dischargingLimit * 100),   // 0x900E
+	// Registers 0x9003-0x900E in ascending address order
+	merged := []struct {
+		name  string
+		volts float32
+	}{
+		{"overVoltDisconnectVoltage", overVoltDisconnect},
+		{"chargingLimitVoltage", chargingLimit},
+		{"overVoltReconnectVoltage", overVoltReconnect},
+		{"equalizationVoltage", equalization},
+		{"boostVoltage", boost},
+		{"floatVoltage", floatVolt},
+		{"boostReconnectChargingVoltage", boostReconnect},
+		{"lowVoltReconnectVoltage", lowVoltReconnect},
+		{"underVoltWarningReconnectVoltage", underVoltRecover},
+		{"underVoltWarningVoltage", underVoltWarning},
+		{"lowVoltDisconnectVoltage", lowVoltDisconnect},
+		{"dischargingLimitVoltage", dischargingLimit},
+	}
+
+	// Convert all voltage values to uint16 (multiply by 100 for device
+	// format), rejecting anything that would overflow the register
+	values := make([]uint16, len(merged))
+	for i, m := range merged {
+		if err := validateVoltageBounds(m.name, m.volts); err != nil {
+			return err
+		}
+		values[i] = uint16(m.volts * voltageDivisor)
 	}
 
 	// Build byte array for all 12 registers (24 bytes)
@@ -352,24 +401,40 @@ func (sc *Configurer) writeVoltageParametersBlock(c *gin.Context, config *Contro
 func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var config ControllerConfig
-		err := c.BindJSON(&config)
+		err := bindJSONBounded(c, &config)
 		if err != nil {
 			log.Warn("Config patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		userDefined := false
-		if config.BatteryType != "" {
-			batteryType := batteryTypeToInt(config.BatteryType)
-			if err := sc.writeSingle(c, regBatteryType, batteryType, "battery type"); err != nil {
+		// Validate before any write so an invalid request changes nothing
+		var requestedType uint16
+		typeRequested := config.BatteryType != ""
+		if typeRequested {
+			requestedType, err = parseBatteryType(config.BatteryType)
+			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			// Invalidate cache when battery type is changed
-			sc.invalidateCache()
+		}
+		if config.EqualizationCycle > maxEqualizationCycleDays {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("equalizationCycle (%d) out of range [0, %d] days", config.EqualizationCycle, maxEqualizationCycleDays)})
+			return
+		}
+		if config.EqualizationDuration > maxChargingDurationMinutes {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("equalizationDuration (%d) out of range [0, %d] minutes", config.EqualizationDuration, maxChargingDurationMinutes)})
+			return
+		}
+		if config.BoostDuration > maxChargingDurationMinutes {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("boostDuration (%d) out of range [0, %d] minutes", config.BoostDuration, maxChargingDurationMinutes)})
+			return
+		}
 
-			userDefined = batteryType == batteryTypeUserDefined
+		// Determine the effective battery type without writing anything yet
+		userDefined := false
+		if typeRequested {
+			userDefined = requestedType == batteryTypeUserDefined
 		} else {
 			data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regBatteryType, 1)
 			if err != nil {
@@ -380,6 +445,8 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			userDefined = binary.BigEndian.Uint16(data[0:2]) == batteryTypeUserDefined
 		}
 
+		var proposedConfig ControllerConfig
+		voltageParamsPresent := false
 		if userDefined {
 			// Get current configuration for validation
 			currentConfig, err := sc.getCachedConfig(c.Request.Context())
@@ -390,7 +457,7 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			}
 
 			// Create a copy of the current config to apply proposed changes
-			proposedConfig := *currentConfig
+			proposedConfig = *currentConfig
 
 			// Apply requested changes to proposed config for validation
 			if config.ChargingLimitVoltage > 0 {
@@ -421,12 +488,24 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			}
 
 			// Check if any voltage parameters are present
-			voltageParamsPresent := config.ChargingLimitVoltage > 0 ||
+			voltageParamsPresent = config.ChargingLimitVoltage > 0 ||
 				config.EqualizationVoltage > 0 ||
 				config.BoostVoltage > 0 ||
 				config.FloatVoltage > 0 ||
 				config.BoostReconnectChargingVoltage > 0
+		}
 
+		// All validation passed: perform the writes
+		if typeRequested {
+			if err := sc.writeSingle(c, regBatteryType, requestedType, "battery type"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			// Invalidate cache when battery type is changed
+			sc.invalidateCache()
+		}
+
+		if userDefined {
 			// If voltage parameters are present, write the entire block
 			if voltageParamsPresent {
 				if err := sc.writeVoltageParametersBlock(c, &proposedConfig); err != nil {
@@ -471,9 +550,34 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 	}
 }
 
-// validateVoltageParameters validates voltage relationships according to modbus register documentation
-// Returns an error if any of the 4 voltage relationship rules are violated
+// validateVoltageParameters validates voltage magnitudes and relationships
+// according to modbus register documentation. Returns an error if any value
+// falls outside the absolute bounds or violates a voltage relationship rule.
 func validateVoltageParameters(config *ControllerConfig) error {
+	// Absolute bounds: every writable voltage register must be in range
+	voltages := []struct {
+		name  string
+		volts float32
+	}{
+		{"overVoltDisconnectVoltage", config.OverVoltDisconnectVoltage},
+		{"chargingLimitVoltage", config.ChargingLimitVoltage},
+		{"overVoltReconnectVoltage", config.OverVoltReconnectVoltage},
+		{"equalizationVoltage", config.EqualizationVoltage},
+		{"boostVoltage", config.BoostVoltage},
+		{"floatVoltage", config.FloatVoltage},
+		{"boostReconnectChargingVoltage", config.BoostReconnectChargingVoltage},
+		{"lowVoltReconnectVoltage", config.LowVoltReconnectVoltage},
+		{"underVoltWarningReconnectVoltage", config.UnderVoltReconnectVoltage},
+		{"underVoltWarningVoltage", config.UnderVoltWarningVoltage},
+		{"lowVoltDisconnectVoltage", config.LowVoltDisconnectVoltage},
+		{"dischargingLimitVoltage", config.DischargingLimitVoltage},
+	}
+	for _, v := range voltages {
+		if err := validateVoltageBounds(v.name, v.volts); err != nil {
+			return err
+		}
+	}
+
 	// Rule 1: Charging voltage chain
 	// Over voltage disconnect > Charge limit > Equalize charging > Boost charging > Float charging > Boost reconnect charging
 	if !(config.OverVoltDisconnectVoltage > config.ChargingLimitVoltage &&

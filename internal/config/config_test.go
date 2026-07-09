@@ -516,6 +516,72 @@ solarController:
 			},
 		},
 		{
+			name: "BindAddress defaults to loopback when not specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.BindAddress != "127.0.0.1" {
+					t.Errorf("BindAddress = %s, want 127.0.0.1 (default)", c.SolarController.BindAddress)
+				}
+			},
+		},
+		{
+			name: "BindAddress and auth token are parsed when specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  bindAddress: 0.0.0.0
+  auth:
+    token: secret
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.BindAddress != "0.0.0.0" {
+					t.Errorf("BindAddress = %s, want 0.0.0.0", c.SolarController.BindAddress)
+				}
+				if c.SolarController.Auth.Token != "secret" {
+					t.Errorf("Auth.Token = %s, want secret", c.SolarController.Auth.Token)
+				}
+			},
+		},
+		{
+			name: "TLS cert without key is rejected",
+			yaml: `
+solarController:
+  httpPort: 8080
+  tls:
+    certFile: /etc/ssl/cert.pem
+  epever:
+    enabled: false
+`,
+			wantErr: true,
+		},
+		{
+			name: "TLS cert and key pair is accepted",
+			yaml: `
+solarController:
+  httpPort: 8080
+  tls:
+    certFile: /etc/ssl/cert.pem
+    keyFile: /etc/ssl/key.pem
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if !c.SolarController.TLS.Enabled() {
+					t.Error("TLS should be enabled when both certFile and keyFile are set")
+				}
+			},
+		},
+		{
 			name: "SNS TopicPrefix defaults to solar when not specified",
 			yaml: `
 solarController:

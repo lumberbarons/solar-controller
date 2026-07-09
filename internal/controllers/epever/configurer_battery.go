@@ -2,6 +2,7 @@ package epever
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -16,18 +17,18 @@ type BatteryProfile struct {
 	TempCompCoefficient *float32 `json:"tempCompCoefficient,omitempty"`
 }
 
-func batteryTypeToInt(batteryType string) uint16 {
+func parseBatteryType(batteryType string) (uint16, error) {
 	switch batteryType {
 	case "userDefined":
-		return 0
+		return 0, nil
 	case "sealed":
-		return 1
+		return 1, nil
 	case "gel":
-		return 2
+		return 2, nil
 	case "flooded":
-		return 3
+		return 3, nil
 	default:
-		return 4
+		return 0, fmt.Errorf("unknown battery type %q (expected userDefined, sealed, gel, or flooded)", batteryType)
 	}
 }
 
@@ -69,51 +70,83 @@ func (sc *Configurer) BatteryProfileGet() gin.HandlerFunc {
 func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var rawData map[string]json.RawMessage
-		if err := c.BindJSON(&rawData); err != nil {
+		if err := bindJSONBounded(c, &rawData); err != nil {
 			log.Warn("Battery profile patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
+		// Parse and validate every provided field before writing anything,
+		// so a malformed or out-of-range request performs no writes
+		var batteryType *uint16
+		if raw, ok := rawData["batteryType"]; ok {
+			var typeName string
+			if err := json.Unmarshal(raw, &typeName); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid batteryType: %v", err)})
+				return
+			}
+			typeValue, err := parseBatteryType(typeName)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			batteryType = &typeValue
+		}
+
+		var batteryCapacity *uint16
+		if raw, ok := rawData["batteryCapacity"]; ok {
+			var capacity uint16
+			if err := json.Unmarshal(raw, &capacity); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid batteryCapacity: %v", err)})
+				return
+			}
+			if capacity < minBatteryCapacityAh || capacity > maxBatteryCapacityAh {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("batteryCapacity (%d) out of range [%d, %d] Ah", capacity, minBatteryCapacityAh, maxBatteryCapacityAh)})
+				return
+			}
+			batteryCapacity = &capacity
+		}
+
+		var tempCompCoefficient *uint16
+		if raw, ok := rawData["tempCompCoefficient"]; ok {
+			var coefficient float32
+			if err := json.Unmarshal(raw, &coefficient); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid tempCompCoefficient: %v", err)})
+				return
+			}
+			if coefficient < minTempCompCoefficient || coefficient > maxTempCompCoefficient {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("tempCompCoefficient (%.2f) out of range [%.1f, %.1f]", coefficient, float64(minTempCompCoefficient), float64(maxTempCompCoefficient))})
+				return
+			}
+			registerValue := uint16(coefficient * voltageDivisor)
+			tempCompCoefficient = &registerValue
+		}
+
 		// Track if any writes succeeded
 		writeSucceeded := false
 
-		// Check and write battery type if present
-		if batteryTypeRaw, ok := rawData["batteryType"]; ok {
-			var batteryType string
-			if err := json.Unmarshal(batteryTypeRaw, &batteryType); err == nil {
-				batteryTypeInt := batteryTypeToInt(batteryType)
-				if err := sc.writeSingle(c, regBatteryType, batteryTypeInt, "battery type"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if batteryType != nil {
+			if err := sc.writeSingle(c, regBatteryType, *batteryType, "battery type"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		// Check and write battery capacity if present
-		if batteryCapacityRaw, ok := rawData["batteryCapacity"]; ok {
-			var batteryCapacity uint16
-			if err := json.Unmarshal(batteryCapacityRaw, &batteryCapacity); err == nil {
-				if err := sc.writeSingle(c, regBatteryCapacity, batteryCapacity, "battery capacity"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if batteryCapacity != nil {
+			if err := sc.writeSingle(c, regBatteryCapacity, *batteryCapacity, "battery capacity"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		// Check and write temperature compensation coefficient if present
-		if tempCompCoefficientRaw, ok := rawData["tempCompCoefficient"]; ok {
-			var tempCompCoefficient float32
-			if err := json.Unmarshal(tempCompCoefficientRaw, &tempCompCoefficient); err == nil {
-				tempCompCoefficientInt := uint16(tempCompCoefficient * voltageDivisor)
-				if err := sc.writeSingle(c, regTempCompCoefficient, tempCompCoefficientInt, "temperature compensation coefficient"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if tempCompCoefficient != nil {
+			if err := sc.writeSingle(c, regTempCompCoefficient, *tempCompCoefficient, "temperature compensation coefficient"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
 		// Invalidate cache after successful write

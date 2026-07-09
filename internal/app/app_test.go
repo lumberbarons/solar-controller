@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lumberbarons/solar-controller/internal/config"
@@ -179,6 +181,157 @@ func TestApplication_SPAFallback(t *testing.T) {
 			assert.Contains(t, w.Body.String(), "<!doctype html>", "response body should contain HTML")
 		})
 	}
+}
+
+func TestApplication_AuthMiddleware(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Auth:     config.AuthConfiguration{Token: "secret-token"},
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		authHeader string
+		wantCode   int
+	}{
+		{
+			name:     "api request without token is rejected",
+			method:   "GET",
+			path:     "/api/info",
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "api request with wrong token is rejected",
+			method:     "GET",
+			path:       "/api/info",
+			authHeader: "Bearer wrong-token",
+			wantCode:   http.StatusUnauthorized,
+		},
+		{
+			name:     "api write request without token is rejected",
+			method:   "PATCH",
+			path:     "/api/epever/battery-profile",
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "api request with valid token is allowed",
+			method:     "GET",
+			path:       "/api/info",
+			authHeader: "Bearer secret-token",
+			wantCode:   http.StatusOK,
+		},
+		{
+			name:     "metrics without token is rejected",
+			method:   "GET",
+			path:     "/metrics",
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "metrics with valid token is allowed",
+			method:     "GET",
+			path:       "/metrics",
+			authHeader: "Bearer secret-token",
+			wantCode:   http.StatusOK,
+		},
+		{
+			name:     "spa route stays public",
+			method:   "GET",
+			path:     "/",
+			wantCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(tt.method, tt.path, nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			app.Router().ServeHTTP(w, req)
+			assert.Equal(t, tt.wantCode, w.Code)
+		})
+	}
+}
+
+func TestApplication_NoAuthTokenLeavesAPIOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/info", nil)
+	app.Router().ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestApplication_GracefulShutdown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort:    0, // let the OS pick a free port
+			BindAddress: "127.0.0.1",
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- app.Run() }()
+
+	// Give the listener a moment to start, then shut down
+	time.Sleep(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Shutdown(ctx))
+
+	select {
+	case err := <-runErr:
+		assert.NoError(t, err, "Run should return nil on clean shutdown")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after Shutdown")
+	}
+}
+
+func TestNewHTTPServer_SetsTimeouts(t *testing.T) {
+	srv := newHTTPServer("127.0.0.1:0", http.NewServeMux())
+
+	assert.Equal(t, "127.0.0.1:0", srv.Addr)
+	assert.NotZero(t, srv.ReadHeaderTimeout)
+	assert.NotZero(t, srv.ReadTimeout)
+	assert.NotZero(t, srv.WriteTimeout)
+	assert.NotZero(t, srv.IdleTimeout)
+	assert.NotZero(t, srv.MaxHeaderBytes)
 }
 
 func TestApplication_ControllerRegistration(t *testing.T) {

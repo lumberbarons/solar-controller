@@ -1,7 +1,13 @@
 package app
 
 import (
+	"context"
+	"crypto/subtle"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -19,6 +25,7 @@ import (
 type Application struct {
 	config      *config.Config
 	router      *gin.Engine
+	server      *http.Server
 	publisher   publish.MessagePublisher
 	controllers []controllers.SolarController
 	version     VersionInfo
@@ -46,6 +53,12 @@ func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, vers
 		log.Warnf("failed to set trusted proxies: %v", err)
 	}
 
+	if cfg.SolarController.Auth.Token != "" {
+		app.router.Use(authMiddleware(cfg.SolarController.Auth.Token))
+	} else {
+		log.Warn("no auth token configured; /api and /metrics endpoints are unauthenticated")
+	}
+
 	// Build controllers
 	if err := app.buildControllers(); err != nil {
 		return nil, fmt.Errorf("failed to build controllers: %w", err)
@@ -54,7 +67,32 @@ func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, vers
 	// Setup routes
 	app.setupRoutes()
 
+	addr := fmt.Sprintf("%s:%v", cfg.SolarController.BindAddress, cfg.SolarController.HTTPPort)
+	app.server = newHTTPServer(addr, app.router)
+
 	return app, nil
+}
+
+// authMiddleware requires a bearer token on all /api routes and on /metrics,
+// so device metrics, version info, and Go runtime internals are not exposed
+// anonymously. The SPA and static assets remain public so the frontend can
+// load and prompt for a token. Prometheus scrapers can supply the token via
+// their authorization config.
+func authMiddleware(token string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if !strings.HasPrefix(path, "/api") && path != "/metrics" {
+			c.Next()
+			return
+		}
+		expected := "Bearer " + token
+		provided := c.GetHeader("Authorization")
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		c.Next()
+	}
 }
 
 // buildControllers initializes all solar equipment controllers based on configuration.
@@ -106,10 +144,45 @@ func (a *Application) setupRoutes() {
 	})
 }
 
-// Run starts the HTTP server and blocks until it exits.
+// newHTTPServer builds the http.Server used by Run. Timeouts are set
+// explicitly so slow clients cannot hold connections open indefinitely;
+// the generous read/write timeouts leave room for PATCH handlers that
+// perform multi-second Modbus writes.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 * 1024,
+	}
+}
+
+// Run starts the HTTP server and blocks until it exits. When a TLS
+// certificate pair is configured the server serves HTTPS instead.
+// A clean shutdown via Shutdown returns nil rather than an error.
 func (a *Application) Run() error {
-	log.Infof("starting server on port %v", a.config.SolarController.HTTPPort)
-	return a.router.Run(fmt.Sprintf(":%v", a.config.SolarController.HTTPPort))
+	var err error
+	if tls := a.config.SolarController.TLS; tls.Enabled() {
+		log.Infof("starting HTTPS server on %s", a.server.Addr)
+		err = a.server.ListenAndServeTLS(tls.CertFile, tls.KeyFile)
+	} else {
+		log.Infof("starting server on %s", a.server.Addr)
+		err = a.server.ListenAndServe()
+	}
+
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+// Shutdown gracefully stops the HTTP server, letting in-flight requests
+// (including Modbus-writing PATCH handlers) finish before returning.
+func (a *Application) Shutdown(ctx context.Context) error {
+	return a.server.Shutdown(ctx)
 }
 
 // Close performs cleanup of all application resources.

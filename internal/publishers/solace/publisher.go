@@ -2,6 +2,7 @@ package solace
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"solace.dev/go/messaging"
@@ -28,6 +29,15 @@ type Publisher struct {
 	topicPrefix      string
 }
 
+// credentialsOverPlaintext reports whether credentials are configured while
+// the broker URL uses an unencrypted transport scheme.
+func credentialsOverPlaintext(cfg *Configuration) bool {
+	if cfg.Username == "" && cfg.Password == "" {
+		return false
+	}
+	return !strings.HasPrefix(strings.ToLower(cfg.Host), "tcps://")
+}
+
 func NewPublisher(cfg *Configuration) (*Publisher, error) {
 	if !cfg.Enabled {
 		log.Info("Solace publisher disabled via configuration")
@@ -42,6 +52,10 @@ func NewPublisher(cfg *Configuration) (*Publisher, error) {
 	if cfg.VpnName == "" {
 		log.Warn("Solace enabled but no VPN name provided, publisher disabled")
 		return &Publisher{}, nil
+	}
+
+	if credentialsOverPlaintext(cfg) {
+		log.Warnf("Solace credentials are configured with plaintext broker scheme (%s); use tcps:// to protect them in transit", cfg.Host)
 	}
 
 	// Build messaging service configuration

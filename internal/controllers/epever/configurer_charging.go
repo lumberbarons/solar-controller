@@ -3,6 +3,7 @@ package epever
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -85,7 +86,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		}
 
 		var rawData map[string]json.RawMessage
-		if err := c.BindJSON(&rawData); err != nil {
+		if err := bindJSONBounded(c, &rawData); err != nil {
 			log.Warn("Charging parameters patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -102,39 +103,50 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		// Create a copy of the current config to apply proposed changes
 		proposedConfig := *currentConfig
 
-		// Apply requested changes to proposed config for validation
-		if val, ok := rawData["chargingLimitVoltage"]; ok {
-			var chargingLimitVoltage float32
-			if err := json.Unmarshal(val, &chargingLimitVoltage); err == nil {
-				proposedConfig.ChargingLimitVoltage = chargingLimitVoltage
+		// Apply requested changes to proposed config for validation,
+		// rejecting malformed fields instead of silently skipping them
+		voltageTargets := map[string]*float32{
+			"chargingLimitVoltage":          &proposedConfig.ChargingLimitVoltage,
+			"equalizationVoltage":           &proposedConfig.EqualizationVoltage,
+			"boostVoltage":                  &proposedConfig.BoostVoltage,
+			"floatVoltage":                  &proposedConfig.FloatVoltage,
+			"boostReconnectChargingVoltage": &proposedConfig.BoostReconnectChargingVoltage,
+		}
+		for field, target := range voltageTargets {
+			if val, ok := rawData[field]; ok {
+				var voltage float32
+				if err := json.Unmarshal(val, &voltage); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid %s: %v", field, err)})
+					return
+				}
+				*target = voltage
 			}
 		}
 
-		if val, ok := rawData["equalizationVoltage"]; ok {
-			var equalizationVoltage float32
-			if err := json.Unmarshal(val, &equalizationVoltage); err == nil {
-				proposedConfig.EqualizationVoltage = equalizationVoltage
-			}
+		// Parse and bound-check the non-voltage fields before any write
+		var equalizationCycle, equalizationDuration, boostDuration *uint16
+		durationTargets := []struct {
+			field  string
+			target **uint16
+			max    uint16
+			unit   string
+		}{
+			{"equalizationCycle", &equalizationCycle, maxEqualizationCycleDays, "days"},
+			{"equalizationDuration", &equalizationDuration, maxChargingDurationMinutes, "minutes"},
+			{"boostDuration", &boostDuration, maxChargingDurationMinutes, "minutes"},
 		}
-
-		if val, ok := rawData["boostVoltage"]; ok {
-			var boostVoltage float32
-			if err := json.Unmarshal(val, &boostVoltage); err == nil {
-				proposedConfig.BoostVoltage = boostVoltage
-			}
-		}
-
-		if val, ok := rawData["floatVoltage"]; ok {
-			var floatVoltage float32
-			if err := json.Unmarshal(val, &floatVoltage); err == nil {
-				proposedConfig.FloatVoltage = floatVoltage
-			}
-		}
-
-		if val, ok := rawData["boostReconnectChargingVoltage"]; ok {
-			var boostReconnectChargingVoltage float32
-			if err := json.Unmarshal(val, &boostReconnectChargingVoltage); err == nil {
-				proposedConfig.BoostReconnectChargingVoltage = boostReconnectChargingVoltage
+		for _, d := range durationTargets {
+			if val, ok := rawData[d.field]; ok {
+				var value uint16
+				if err := json.Unmarshal(val, &value); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid %s: %v", d.field, err)})
+					return
+				}
+				if value > d.max {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("%s (%d) out of range [0, %d] %s", d.field, value, d.max, d.unit)})
+					return
+				}
+				*d.target = &value
 			}
 		}
 
@@ -169,37 +181,28 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		}
 
 		// Write non-voltage parameters individually
-		if val, ok := rawData["equalizationCycle"]; ok {
-			var equalizationCycle uint16
-			if err := json.Unmarshal(val, &equalizationCycle); err == nil {
-				if err := sc.writeSingle(c, regEqualizationChargingCycle, equalizationCycle, "equalization cycle"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if equalizationCycle != nil {
+			if err := sc.writeSingle(c, regEqualizationChargingCycle, *equalizationCycle, "equalization cycle"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		if val, ok := rawData["equalizationDuration"]; ok {
-			var equalizationDuration uint16
-			if err := json.Unmarshal(val, &equalizationDuration); err == nil {
-				if err := sc.writeSingle(c, regEqualizationChargingTime, equalizationDuration, "equalization duration"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if equalizationDuration != nil {
+			if err := sc.writeSingle(c, regEqualizationChargingTime, *equalizationDuration, "equalization duration"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		if val, ok := rawData["boostDuration"]; ok {
-			var boostDuration uint16
-			if err := json.Unmarshal(val, &boostDuration); err == nil {
-				if err := sc.writeSingle(c, regBoostChargingTime, boostDuration, "boost duration"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if boostDuration != nil {
+			if err := sc.writeSingle(c, regBoostChargingTime, *boostDuration, "boost duration"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
 		// Invalidate cache after successful write

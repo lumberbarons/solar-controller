@@ -1,6 +1,7 @@
 package epever
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -45,9 +46,15 @@ func (sc *Configurer) TimeGet() gin.HandlerFunc {
 func (sc *Configurer) TimePatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var timeConfig TimeConfig
-		if err := c.BindJSON(&timeConfig); err != nil {
+		if err := bindJSONBounded(c, &timeConfig); err != nil {
 			log.Warn("Time patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// The RTC stores the year as a single byte offset from 2000
+		if year := timeConfig.Time.Year(); year < minRTCYear || year > maxRTCYear {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("time year (%d) out of range [%d, %d]", year, minRTCYear, maxRTCYear)})
 			return
 		}
 
