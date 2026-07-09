@@ -49,6 +49,18 @@ const (
 // Conversion factor for voltage values (stored as centivolt)
 const voltageDivisor = 100.0
 
+// maxPatchBodyBytes caps config PATCH request bodies before they are
+// buffered by JSON binding; the payloads these endpoints accept are at
+// most a few hundred bytes.
+const maxPatchBodyBytes = 8 << 10
+
+// bindJSONBounded binds a JSON request body while enforcing maxPatchBodyBytes,
+// so oversized bodies are rejected instead of exhausting memory.
+func bindJSONBounded(c *gin.Context, obj any) error {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPatchBodyBytes)
+	return c.BindJSON(obj)
+}
+
 type cachedConfig struct {
 	config    *ControllerConfig
 	timestamp time.Time
@@ -462,7 +474,7 @@ func (sc *Configurer) writeVoltageParametersBlock(c *gin.Context, config *Contro
 func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var config ControllerConfig
-		err := c.BindJSON(&config)
+		err := bindJSONBounded(c, &config)
 		if err != nil {
 			log.Warn("Config patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -604,7 +616,7 @@ func (sc *Configurer) BatteryProfileGet() gin.HandlerFunc {
 func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var rawData map[string]json.RawMessage
-		if err := c.BindJSON(&rawData); err != nil {
+		if err := bindJSONBounded(c, &rawData); err != nil {
 			log.Warn("Battery profile patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -769,7 +781,7 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		}
 
 		var rawData map[string]json.RawMessage
-		if err := c.BindJSON(&rawData); err != nil {
+		if err := bindJSONBounded(c, &rawData); err != nil {
 			log.Warn("Charging parameters patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -956,7 +968,7 @@ func (sc *Configurer) TimeGet() gin.HandlerFunc {
 func (sc *Configurer) TimePatch() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var timeConfig TimeConfig
-		if err := c.BindJSON(&timeConfig); err != nil {
+		if err := bindJSONBounded(c, &timeConfig); err != nil {
 			log.Warn("Time patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
