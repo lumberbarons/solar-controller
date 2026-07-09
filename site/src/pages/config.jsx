@@ -324,7 +324,7 @@ class Config extends React.Component {
             </Typography>
             <Paper elevation={2} sx={{ p: 1.5, mb: 1, borderRadius: 2 }}>
               <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <FormControl fullWidth>
                     <InputLabel>Battery Type</InputLabel>
                     <Select
@@ -340,7 +340,7 @@ class Config extends React.Component {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     required
                     fullWidth
@@ -350,7 +350,7 @@ class Config extends React.Component {
                     onChange={this.handleBatteryProfileChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     required
                     fullWidth
@@ -412,7 +412,7 @@ class Config extends React.Component {
             </Typography>
             <Paper elevation={2} sx={{ p: 1.5, mb: 1, borderRadius: 2 }}>
               <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -423,7 +423,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -434,7 +434,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -445,7 +445,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -456,7 +456,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -467,7 +467,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -478,7 +478,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -489,7 +489,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -509,7 +509,7 @@ class Config extends React.Component {
             </Typography>
             <Paper elevation={2} sx={{ p: 1.5, mb: 1, borderRadius: 2 }}>
               <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                   <TextField
                     required
                     fullWidth
@@ -520,7 +520,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                   <TextField
                     required
                     fullWidth
@@ -531,7 +531,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                   <TextField
                     required
                     fullWidth
@@ -542,7 +542,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                   <TextField
                     required
                     fullWidth
@@ -553,7 +553,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -564,7 +564,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth
@@ -575,7 +575,7 @@ class Config extends React.Component {
                     onChange={this.handleChargingParametersChange}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     required
                     fullWidth

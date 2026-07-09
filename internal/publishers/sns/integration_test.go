@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/lumberbarons/solar-controller/internal/testing/containers"
+	"github.com/lumberbarons/solar-controller/internal/testutil/containers"
 )
 
 // snsTestFixture holds per-subtest SNS/SQS resources
@@ -106,7 +106,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			TopicPrefix: "solar",
 		}
 
-		publisher, err := newPublisherWithConfig(cfg, "solar", &f.awsCfg)
+		publisher, err := newPublisherWithConfig(cfg, &f.awsCfg)
 		require.NoError(t, err)
 		defer publisher.Close()
 
@@ -157,7 +157,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			TopicPrefix: "solar",
 		}
 
-		publisher, err := newPublisherWithConfig(cfg, "solar", &f.awsCfg)
+		publisher, err := newPublisherWithConfig(cfg, &f.awsCfg)
 		require.NoError(t, err)
 		defer publisher.Close()
 
@@ -209,7 +209,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			TopicPrefix: "custom-prefix",
 		}
 
-		customPublisher, err := newPublisherWithConfig(customCfg, "default-prefix", &f.awsCfg)
+		customPublisher, err := newPublisherWithConfig(customCfg, &f.awsCfg)
 		require.NoError(t, err)
 		defer customPublisher.Close()
 

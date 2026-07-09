@@ -3,7 +3,7 @@ package publishers
 import (
 	"testing"
 
-	"github.com/lumberbarons/solar-controller/internal/controllers"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,7 +30,7 @@ func (m *MockPublisher) Close() {
 }
 
 // Ensure MockPublisher implements MessagePublisher
-var _ controllers.MessagePublisher = (*MockPublisher)(nil)
+var _ publish.MessagePublisher = (*MockPublisher)(nil)
 
 func TestMultiPublisher_Publish_FansOutToAllPublishers(t *testing.T) {
 	// Arrange
@@ -41,7 +41,7 @@ func TestMultiPublisher_Publish_FansOutToAllPublishers(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel) // Suppress logs during test
 
-	multiPublisher := NewMultiPublisher([]controllers.MessagePublisher{mock1, mock2, mock3}, logger)
+	multiPublisher := NewMultiPublisher([]publish.MessagePublisher{mock1, mock2, mock3}, logger)
 
 	// Act
 	multiPublisher.Publish("device-1/epever/battery-voltage", `{"value":12.5,"unit":"volts","timestamp":1234567890}`)
@@ -91,7 +91,7 @@ func TestMultiPublisher_PublishMultipleTimes(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
-	multiPublisher := NewMultiPublisher([]controllers.MessagePublisher{mock1, mock2}, logger)
+	multiPublisher := NewMultiPublisher([]publish.MessagePublisher{mock1, mock2}, logger)
 
 	// Act - publish 3 different metrics
 	multiPublisher.Publish("device-1/epever/battery-voltage", `{"value":12.5}`)
@@ -127,7 +127,7 @@ func TestMultiPublisher_Close_ClosesAllPublishers(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
-	multiPublisher := NewMultiPublisher([]controllers.MessagePublisher{mock1, mock2, mock3}, logger)
+	multiPublisher := NewMultiPublisher([]publish.MessagePublisher{mock1, mock2, mock3}, logger)
 
 	// Act
 	multiPublisher.Close()
@@ -149,7 +149,7 @@ func TestMultiPublisher_EmptyPublishers(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
-	publishers := []controllers.MessagePublisher{}
+	publishers := []publish.MessagePublisher{}
 	multiPublisher := NewMultiPublisher(publishers, logger)
 
 	// Act - should not panic with zero publishers
@@ -168,7 +168,7 @@ func TestMultiPublisher_SinglePublisher(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
-	multiPublisher := NewMultiPublisher([]controllers.MessagePublisher{mock}, logger)
+	multiPublisher := NewMultiPublisher([]publish.MessagePublisher{mock}, logger)
 
 	// Act
 	multiPublisher.Publish("device-1/epever/test", `{"value":1}`)

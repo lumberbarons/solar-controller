@@ -1,11 +1,9 @@
-package testing
+package epever
 
 import (
 	"context"
 	"fmt"
 	"sync"
-
-	"github.com/lumberbarons/solar-controller/internal/controllers"
 )
 
 // MockModbusClient is a mock implementation of the ModbusClient interface for testing.
@@ -48,7 +46,7 @@ type WriteMultipleRegistersCall struct {
 }
 
 // Verify MockModbusClient implements ModbusClient
-var _ controllers.ModbusClient = (*MockModbusClient)(nil)
+var _ ModbusClient = (*MockModbusClient)(nil)
 
 func (m *MockModbusClient) ReadInputRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	m.mu.Lock()
@@ -130,47 +128,6 @@ func (m *MockModbusClient) Close() {
 	}
 }
 
-// MockMessagePublisher is a mock implementation of the MessagePublisher interface for testing.
-type MockMessagePublisher struct {
-	mu sync.RWMutex
-
-	// Function fields that can be set to customize behavior in tests
-	PublishFunc func(topicSuffix, payload string)
-	CloseFunc   func()
-
-	// Call tracking
-	PublishCalls []PublishCall
-	CloseCalls   int
-}
-
-type PublishCall struct {
-	TopicSuffix string
-	Payload     string
-}
-
-// Verify MockMessagePublisher implements MessagePublisher
-var _ controllers.MessagePublisher = (*MockMessagePublisher)(nil)
-
-func (m *MockMessagePublisher) Publish(topicSuffix, payload string) {
-	m.mu.Lock()
-	m.PublishCalls = append(m.PublishCalls, PublishCall{TopicSuffix: topicSuffix, Payload: payload})
-	m.mu.Unlock()
-
-	if m.PublishFunc != nil {
-		m.PublishFunc(topicSuffix, payload)
-	}
-}
-
-func (m *MockMessagePublisher) Close() {
-	m.mu.Lock()
-	m.CloseCalls++
-	m.mu.Unlock()
-
-	if m.CloseFunc != nil {
-		m.CloseFunc()
-	}
-}
-
 // MockMetricsCollector is a mock implementation of the MetricsCollector interface for testing.
 type MockMetricsCollector struct {
 	mu sync.RWMutex
@@ -179,14 +136,14 @@ type MockMetricsCollector struct {
 	IncrementFailuresFunc        func()
 	IncrementWriteFailuresFunc   func()
 	IncrementRegisterFailureFunc func(address uint16, registerType string)
-	SetMetricsFunc               func(status interface{})
+	SetMetricsFunc               func(status *ControllerStatus)
 
 	// Call tracking
 	FailuresCount        int
 	WriteFailuresCount   int
 	RegisterFailureCount int
 	RegisterFailures     []RegisterFailureCall
-	SetMetricsCalls      []interface{}
+	SetMetricsCalls      []*ControllerStatus
 }
 
 // RegisterFailureCall tracks individual register failure calls
@@ -196,7 +153,7 @@ type RegisterFailureCall struct {
 }
 
 // Verify MockMetricsCollector implements MetricsCollector
-var _ controllers.MetricsCollector = (*MockMetricsCollector)(nil)
+var _ MetricsCollector = (*MockMetricsCollector)(nil)
 
 func (m *MockMetricsCollector) IncrementFailures() {
 	m.mu.Lock()
@@ -232,7 +189,7 @@ func (m *MockMetricsCollector) IncrementRegisterFailure(address uint16, register
 	}
 }
 
-func (m *MockMetricsCollector) SetMetrics(status interface{}) {
+func (m *MockMetricsCollector) SetMetrics(status *ControllerStatus) {
 	m.mu.Lock()
 	m.SetMetricsCalls = append(m.SetMetricsCalls, status)
 	m.mu.Unlock()
@@ -240,20 +197,4 @@ func (m *MockMetricsCollector) SetMetrics(status interface{}) {
 	if m.SetMetricsFunc != nil {
 		m.SetMetricsFunc(status)
 	}
-}
-
-// NewMockPublisher creates a new MockMessagePublisher with a Closed tracking field.
-func NewMockPublisher() *MockPublisher {
-	return &MockPublisher{}
-}
-
-// MockPublisher extends MockMessagePublisher with a Closed field for testing.
-type MockPublisher struct {
-	MockMessagePublisher
-	Closed bool
-}
-
-func (m *MockPublisher) Close() {
-	m.Closed = true
-	m.MockMessagePublisher.Close()
 }

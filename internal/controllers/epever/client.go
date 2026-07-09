@@ -12,7 +12,7 @@ import (
 	"github.com/lumberbarons/modbus"
 )
 
-type ModbusClient struct {
+type SerialModbusClient struct {
 	handler *modbus.RTUClientHandler
 	client  modbus.Client
 	lock    sync.Mutex
@@ -22,7 +22,7 @@ const retryAttempts = 2
 const retryDelay = 2 * time.Second
 const perReadTimeout = 5 * time.Second
 
-func NewModbusClient(serialPort string) (*ModbusClient, error) {
+func NewSerialModbusClient(serialPort string) (*SerialModbusClient, error) {
 	handler := modbus.NewRTUClientHandler(serialPort)
 
 	handler.BaudRate = 115200
@@ -40,16 +40,16 @@ func NewModbusClient(serialPort string) (*ModbusClient, error) {
 
 	client := modbus.NewClient(handler)
 
-	return &ModbusClient{handler: handler, client: client}, nil
+	return &SerialModbusClient{handler: handler, client: client}, nil
 }
 
-func (c *ModbusClient) Close() {
+func (c *SerialModbusClient) Close() {
 	if c.handler != nil {
 		c.handler.Close()
 	}
 }
 
-func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
+func (c *SerialModbusClient) ReadInputRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -76,7 +76,7 @@ func (c *ModbusClient) ReadInputRegisters(ctx context.Context, address, quantity
 	return value, err
 }
 
-func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
+func (c *SerialModbusClient) ReadHoldingRegisters(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -103,7 +103,7 @@ func (c *ModbusClient) ReadHoldingRegisters(ctx context.Context, address, quanti
 	return value, err
 }
 
-func (c *ModbusClient) ReadCoils(ctx context.Context, address, quantity uint16) ([]byte, error) {
+func (c *SerialModbusClient) ReadCoils(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -126,7 +126,7 @@ func (c *ModbusClient) ReadCoils(ctx context.Context, address, quantity uint16) 
 	return value, err
 }
 
-func (c *ModbusClient) ReadDiscreteInputs(ctx context.Context, address, quantity uint16) ([]byte, error) {
+func (c *SerialModbusClient) ReadDiscreteInputs(ctx context.Context, address, quantity uint16) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -149,7 +149,7 @@ func (c *ModbusClient) ReadDiscreteInputs(ctx context.Context, address, quantity
 	return value, err
 }
 
-func (c *ModbusClient) WriteSingleRegister(ctx context.Context, address, value uint16) (results []byte, err error) {
+func (c *SerialModbusClient) WriteSingleRegister(ctx context.Context, address, value uint16) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -172,7 +172,7 @@ func (c *ModbusClient) WriteSingleRegister(ctx context.Context, address, value u
 	return result, err
 }
 
-func (c *ModbusClient) WriteMultipleRegisters(ctx context.Context, address, quantity uint16, value []byte) (results []byte, err error) {
+func (c *SerialModbusClient) WriteMultipleRegisters(ctx context.Context, address, quantity uint16, value []byte) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -195,7 +195,7 @@ func (c *ModbusClient) WriteMultipleRegisters(ctx context.Context, address, quan
 	return result, err
 }
 
-func (c *ModbusClient) WriteSingleCoil(ctx context.Context, address, value uint16) (results []byte, err error) {
+func (c *SerialModbusClient) WriteSingleCoil(ctx context.Context, address, value uint16) (results []byte, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

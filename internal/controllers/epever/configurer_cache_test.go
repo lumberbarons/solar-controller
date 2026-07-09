@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	testingpkg "github.com/lumberbarons/solar-controller/internal/controllers/testing"
+	"github.com/lumberbarons/solar-controller/internal/testutil"
 )
 
 func TestConfigurer_getCachedConfig(t *testing.T) {
@@ -14,41 +14,41 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache miss - fetches from device", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				// Return minimal valid data for getConfig()
 				switch address {
 				case regBatteryType: // Battery type, capacity, temp comp (3 registers)
-					return testingpkg.CreateModbusResponse(0, 100, 3), nil
+					return testutil.CreateModbusResponse(0, 100, 3), nil
 				case regRealTimeClock: // Time (3 registers, 6 bytes)
 					return []byte{0, 0, 1, 12, 25, 1}, nil // HH:MM, Month, Hour, Year-2000, Day
 				case regOverVoltDisconnect: // Voltage parameters (12 registers)
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1600, 1500, 1500, 1460, 1440, 1380,
 						1320, 1260, 1220, 1200, 1110, 1080,
 					), nil
 				case regEqualizationChargingCycle: // Equalization cycle (1 register)
-					return testingpkg.CreateModbusResponse(30), nil
+					return testutil.CreateModbusResponse(30), nil
 				case regEqualizationChargingTime: // Durations (2 registers)
-					return testingpkg.CreateModbusResponse(120, 120), nil
+					return testutil.CreateModbusResponse(120, 120), nil
 				case regBatteryTempUpperLimit: // Temperature limits (4 registers)
-					return testingpkg.CreateModbusResponse(4500, 65436, 4500, 4000), nil // 45°C, -10°C, 45°C, 40°C
+					return testutil.CreateModbusResponse(4500, 65436, 4500, 4000), nil // 45°C, -10°C, 45°C, 40°C
 				case 0x903A: // Power component temps (2 registers)
-					return testingpkg.CreateModbusResponse(8500, 8000), nil // 85°C, 80°C
+					return testutil.CreateModbusResponse(8500, 8000), nil // 85°C, 80°C
 				case 0x903C: // Line impedance (1 register)
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				case 0x903D: // Night/day threshold (2 registers)
-					return testingpkg.CreateModbusResponse(500, 10), nil
+					return testutil.CreateModbusResponse(500, 10), nil
 				case 0x903F: // Day threshold and delay (2 registers)
-					return testingpkg.CreateModbusResponse(600, 10), nil
+					return testutil.CreateModbusResponse(600, 10), nil
 				default:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		// First call should fetch from device
@@ -87,40 +87,40 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache hit - no device fetch", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
 				case regBatteryType:
-					return testingpkg.CreateModbusResponse(4, 100, 3), nil
+					return testutil.CreateModbusResponse(4, 100, 3), nil
 				case regRealTimeClock:
 					return []byte{0, 0, 1, 12, 25, 1}, nil
 				case regOverVoltDisconnect:
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1600, 1500, 1500, 1460, 1440, 1380,
 						1320, 1260, 1220, 1200, 1110, 1080,
 					), nil
 				case regEqualizationChargingCycle:
-					return testingpkg.CreateModbusResponse(30), nil
+					return testutil.CreateModbusResponse(30), nil
 				case regEqualizationChargingTime:
-					return testingpkg.CreateModbusResponse(120, 120), nil
+					return testutil.CreateModbusResponse(120, 120), nil
 				case regBatteryTempUpperLimit:
-					return testingpkg.CreateModbusResponse(4500, 65436, 4500, 4000), nil
+					return testutil.CreateModbusResponse(4500, 65436, 4500, 4000), nil
 				case 0x903A:
-					return testingpkg.CreateModbusResponse(8500, 8000), nil
+					return testutil.CreateModbusResponse(8500, 8000), nil
 				case 0x903C:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				case 0x903D:
-					return testingpkg.CreateModbusResponse(500, 10), nil
+					return testutil.CreateModbusResponse(500, 10), nil
 				case 0x903F:
-					return testingpkg.CreateModbusResponse(600, 10), nil
+					return testutil.CreateModbusResponse(600, 10), nil
 				default:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		// First call - populates cache
@@ -158,40 +158,40 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache expiration - refetches after TTL", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
 				case regBatteryType:
-					return testingpkg.CreateModbusResponse(4, 100, 3), nil
+					return testutil.CreateModbusResponse(4, 100, 3), nil
 				case regRealTimeClock:
 					return []byte{0, 0, 1, 12, 25, 1}, nil
 				case regOverVoltDisconnect:
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1600, 1500, 1500, 1460, 1440, 1380,
 						1320, 1260, 1220, 1200, 1110, 1080,
 					), nil
 				case regEqualizationChargingCycle:
-					return testingpkg.CreateModbusResponse(30), nil
+					return testutil.CreateModbusResponse(30), nil
 				case regEqualizationChargingTime:
-					return testingpkg.CreateModbusResponse(120, 120), nil
+					return testutil.CreateModbusResponse(120, 120), nil
 				case regBatteryTempUpperLimit:
-					return testingpkg.CreateModbusResponse(4500, 65436, 4500, 4000), nil
+					return testutil.CreateModbusResponse(4500, 65436, 4500, 4000), nil
 				case 0x903A:
-					return testingpkg.CreateModbusResponse(8500, 8000), nil
+					return testutil.CreateModbusResponse(8500, 8000), nil
 				case 0x903C:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				case 0x903D:
-					return testingpkg.CreateModbusResponse(500, 10), nil
+					return testutil.CreateModbusResponse(500, 10), nil
 				case 0x903F:
-					return testingpkg.CreateModbusResponse(600, 10), nil
+					return testutil.CreateModbusResponse(600, 10), nil
 				default:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 		// Set a very short TTL for testing
 		configurer.cacheTTL = 1 * time.Millisecond
@@ -220,40 +220,40 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 
 	t.Run("cache invalidation", func(t *testing.T) {
 		callCount := 0
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, address, _ uint16) ([]byte, error) {
 				callCount++
 				switch address {
 				case regBatteryType:
-					return testingpkg.CreateModbusResponse(4, 100, 3), nil
+					return testutil.CreateModbusResponse(4, 100, 3), nil
 				case regRealTimeClock:
 					return []byte{0, 0, 1, 12, 25, 1}, nil
 				case regOverVoltDisconnect:
-					return testingpkg.CreateModbusResponse(
+					return testutil.CreateModbusResponse(
 						1600, 1500, 1500, 1460, 1440, 1380,
 						1320, 1260, 1220, 1200, 1110, 1080,
 					), nil
 				case regEqualizationChargingCycle:
-					return testingpkg.CreateModbusResponse(30), nil
+					return testutil.CreateModbusResponse(30), nil
 				case regEqualizationChargingTime:
-					return testingpkg.CreateModbusResponse(120, 120), nil
+					return testutil.CreateModbusResponse(120, 120), nil
 				case regBatteryTempUpperLimit:
-					return testingpkg.CreateModbusResponse(4500, 65436, 4500, 4000), nil
+					return testutil.CreateModbusResponse(4500, 65436, 4500, 4000), nil
 				case 0x903A:
-					return testingpkg.CreateModbusResponse(8500, 8000), nil
+					return testutil.CreateModbusResponse(8500, 8000), nil
 				case 0x903C:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				case 0x903D:
-					return testingpkg.CreateModbusResponse(500, 10), nil
+					return testutil.CreateModbusResponse(500, 10), nil
 				case 0x903F:
-					return testingpkg.CreateModbusResponse(600, 10), nil
+					return testutil.CreateModbusResponse(600, 10), nil
 				default:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		// First call - populates cache
@@ -279,13 +279,13 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 	})
 
 	t.Run("modbus error propagates", func(t *testing.T) {
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadHoldingRegistersFunc: func(_ context.Context, _, _ uint16) ([]byte, error) {
-				return nil, &testingpkg.ModbusTestError{Message: "device timeout"}
+				return nil, &testutil.ModbusTestError{Message: "device timeout"}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
+		mockMetrics := &MockMetricsCollector{}
 		configurer := NewConfigurer(mockClient, mockMetrics)
 
 		_, err := configurer.getCachedConfig(ctx)
@@ -296,8 +296,8 @@ func TestConfigurer_getCachedConfig(t *testing.T) {
 }
 
 func TestConfigurer_invalidateCache(t *testing.T) {
-	mockClient := &testingpkg.MockModbusClient{}
-	mockMetrics := &testingpkg.MockMetricsCollector{}
+	mockClient := &MockModbusClient{}
+	mockMetrics := &MockMetricsCollector{}
 	configurer := NewConfigurer(mockClient, mockMetrics)
 
 	// Manually set cache

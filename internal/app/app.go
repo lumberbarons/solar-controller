@@ -8,17 +8,18 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/config"
 	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/publish"
 	staticfs "github.com/lumberbarons/solar-controller/internal/static"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 )
 
 // Application encapsulates the solar-controller application, including
-// the HTTP server, MQTT publisher, and solar equipment controllers.
+// the HTTP server, the message publisher, and solar equipment controllers.
 type Application struct {
 	config      *config.Config
 	router      *gin.Engine
-	mqtt        controllers.MessagePublisher
+	publisher   publish.MessagePublisher
 	controllers []controllers.SolarController
 	version     VersionInfo
 }
@@ -32,11 +33,11 @@ type VersionInfo struct {
 
 // NewApplication creates and initializes a new Application instance.
 // It sets up the HTTP router, initializes controllers, and registers endpoints.
-func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublisher, version VersionInfo) (*Application, error) {
+func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, version VersionInfo) (*Application, error) {
 	app := &Application{
-		config:  cfg,
-		mqtt:    mqttPublisher,
-		version: version,
+		config:    cfg,
+		publisher: publisher,
+		version:   version,
 	}
 
 	// Initialize router
@@ -61,7 +62,7 @@ func (a *Application) buildControllers() error {
 	var ctrlList []controllers.SolarController
 
 	// Initialize Epever controller
-	epeverController, err := epever.NewControllerFromConfig(a.config.SolarController.Epever, a.mqtt, a.config.SolarController.DeviceID)
+	epeverController, err := epever.NewControllerFromConfig(a.config.SolarController.Epever, a.publisher, a.config.SolarController.DeviceID)
 	if err != nil {
 		return fmt.Errorf("failed to create epever controller: %w", err)
 	}
@@ -112,13 +113,13 @@ func (a *Application) Run() error {
 }
 
 // Close performs cleanup of all application resources.
-// It closes the MQTT publisher and all controllers.
+// It closes the message publisher and all controllers.
 func (a *Application) Close() error {
 	log.Info("shutting down application")
 
-	// Close MQTT publisher
-	if a.mqtt != nil {
-		a.mqtt.Close()
+	// Close the message publisher
+	if a.publisher != nil {
+		a.publisher.Close()
 	}
 
 	// Close all controllers

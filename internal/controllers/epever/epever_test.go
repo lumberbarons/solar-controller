@@ -6,18 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	testingpkg "github.com/lumberbarons/solar-controller/internal/controllers/testing"
+	"github.com/lumberbarons/solar-controller/internal/testutil"
 )
 
 func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 	t.Run("publishes failure metric when collection fails", func(t *testing.T) {
 		// Create a mock client that always fails
-		mockClient := &testingpkg.MockModbusClient{
-			ReadInputRegistersFunc: testingpkg.CreateModbusError("connection timeout"),
+		mockClient := &MockModbusClient{
+			ReadInputRegistersFunc: testutil.CreateModbusError("connection timeout"),
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
-		mockPublisher := &testingpkg.MockMessagePublisher{}
+		mockMetrics := &MockMetricsCollector{}
+		mockPublisher := &testutil.MockMessagePublisher{}
 
 		collector := NewCollector(mockClient, mockMetrics)
 		configurer := NewConfigurer(mockClient, mockMetrics)
@@ -73,12 +73,12 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 
 	t.Run("publishes normal metrics when collection succeeds", func(t *testing.T) {
 		// Create a mock client that succeeds
-		mockClient := &testingpkg.MockModbusClient{
+		mockClient := &MockModbusClient{
 			ReadInputRegistersFunc: func(_ context.Context, address, quantity uint16) ([]byte, error) {
 				switch address {
 				case regArrayVoltage:
 					if quantity == 18 {
-						return testingpkg.CreateModbusResponse(
+						return testutil.CreateModbusResponse(
 							1850, 520, // Array V/I
 							962, 0, // Array power (32-bit: low word, high word)
 							1280,   // Battery voltage
@@ -88,21 +88,21 @@ func TestController_CollectAndPublish_FailureMetric(t *testing.T) {
 							2500, 3200, // Battery temp, Device temp
 						), nil
 					}
-					return testingpkg.CreateModbusResponse(1850, 520), nil
+					return testutil.CreateModbusResponse(1850, 520), nil
 				case regBatterySOC:
-					return testingpkg.CreateModbusResponse(85), nil
+					return testutil.CreateModbusResponse(85), nil
 				case regEnergyGeneratedDaily:
-					return testingpkg.CreateModbusResponse(1550, 0), nil // low word, high word
+					return testutil.CreateModbusResponse(1550, 0), nil // low word, high word
 				case regControllerStatus:
-					return testingpkg.CreateModbusResponse(0x0004), nil
+					return testutil.CreateModbusResponse(0x0004), nil
 				default:
-					return testingpkg.CreateModbusResponse(0), nil
+					return testutil.CreateModbusResponse(0), nil
 				}
 			},
 		}
 
-		mockMetrics := &testingpkg.MockMetricsCollector{}
-		mockPublisher := &testingpkg.MockMessagePublisher{}
+		mockMetrics := &MockMetricsCollector{}
+		mockPublisher := &testutil.MockMessagePublisher{}
 
 		collector := NewCollector(mockClient, mockMetrics)
 		configurer := NewConfigurer(mockClient, mockMetrics)

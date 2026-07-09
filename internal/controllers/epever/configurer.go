@@ -3,14 +3,12 @@ package epever
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lumberbarons/solar-controller/internal/controllers"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,20 +47,15 @@ const (
 // Conversion factor for voltage values (stored as centivolt)
 const voltageDivisor = 100.0
 
-type cachedConfig struct {
-	config    *ControllerConfig
-	timestamp time.Time
-}
-
 type Configurer struct {
-	modbusClient        controllers.ModbusClient
-	prometheusCollector controllers.MetricsCollector
+	modbusClient        ModbusClient
+	prometheusCollector MetricsCollector
 	cache               *cachedConfig
 	cacheMutex          sync.RWMutex
 	cacheTTL            time.Duration
 }
 
-func NewConfigurer(client controllers.ModbusClient, prometheusCollector controllers.MetricsCollector) *Configurer {
+func NewConfigurer(client ModbusClient, prometheusCollector MetricsCollector) *Configurer {
 	return &Configurer{
 		modbusClient:        client,
 		prometheusCollector: prometheusCollector,
@@ -96,40 +89,6 @@ type ControllerConfig struct {
 	ControllerTempLowerLimit      float32 `json:"controllerTempLowerLimit"`
 }
 
-// BatteryProfile contains battery identity settings
-type BatteryProfile struct {
-	BatteryType         *string  `json:"batteryType,omitempty"`
-	BatteryCapacity     *uint16  `json:"batteryCapacity,omitempty"`
-	TempCompCoefficient *float32 `json:"tempCompCoefficient,omitempty"`
-}
-
-// ChargingParameters contains all charging algorithm settings
-type ChargingParameters struct {
-	BoostDuration                 *uint16  `json:"boostDuration,omitempty"`
-	EqualizationCycle             *uint16  `json:"equalizationCycle,omitempty"`
-	EqualizationDuration          *uint16  `json:"equalizationDuration,omitempty"`
-	BoostVoltage                  *float32 `json:"boostVoltage,omitempty"`
-	BoostReconnectChargingVoltage *float32 `json:"boostReconnectChargingVoltage,omitempty"`
-	FloatVoltage                  *float32 `json:"floatVoltage,omitempty"`
-	EqualizationVoltage           *float32 `json:"equalizationVoltage,omitempty"`
-	ChargingLimitVoltage          *float32 `json:"chargingLimitVoltage,omitempty"`
-	OverVoltDisconnectVoltage     *float32 `json:"overVoltDisconnectVoltage,omitempty"`
-	OverVoltReconnectVoltage      *float32 `json:"overVoltReconnectVoltage,omitempty"`
-	LowVoltDisconnectVoltage      *float32 `json:"lowVoltDisconnectVoltage,omitempty"`
-	LowVoltReconnectVoltage       *float32 `json:"lowVoltReconnectVoltage,omitempty"`
-	UnderVoltWarningVoltage       *float32 `json:"underVoltWarningVoltage,omitempty"`
-	UnderVoltReconnectVoltage     *float32 `json:"underVoltWarningReconnectVoltage,omitempty"`
-	DischargingLimitVoltage       *float32 `json:"dischargingLimitVoltage,omitempty"`
-	BatteryTempUpperLimit         *float32 `json:"batteryTempUpperLimit,omitempty"`
-	BatteryTempLowerLimit         *float32 `json:"batteryTempLowerLimit,omitempty"`
-	ControllerTempUpperLimit      *float32 `json:"controllerTempUpperLimit,omitempty"`
-	ControllerTempLowerLimit      *float32 `json:"controllerTempLowerLimit,omitempty"`
-}
-
-type TimeConfig struct {
-	Time time.Time `json:"time"`
-}
-
 func (sc *Configurer) ConfigGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		config, err := sc.getConfig(c.Request.Context())
@@ -149,45 +108,6 @@ func (sc *Configurer) getFloatValue(data []byte, index int) float32 {
 		return 0
 	}
 	return float32(binary.BigEndian.Uint16(data[offset:offset+2])) / voltageDivisor
-}
-
-// getCachedConfig returns the cached config if valid, otherwise fetches from device
-func (sc *Configurer) getCachedConfig(ctx context.Context) (*ControllerConfig, error) {
-	sc.cacheMutex.RLock()
-	if sc.cache != nil && time.Since(sc.cache.timestamp) < sc.cacheTTL {
-		// Return a copy to prevent external modification of cached data
-		configCopy := *sc.cache.config
-		sc.cacheMutex.RUnlock()
-		log.Trace("Using cached config")
-		return &configCopy, nil
-	}
-	sc.cacheMutex.RUnlock()
-
-	// Cache miss or expired - fetch from device
-	config, err := sc.getConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update cache with a copy
-	configCopy := config
-	sc.cacheMutex.Lock()
-	sc.cache = &cachedConfig{
-		config:    &configCopy,
-		timestamp: time.Now(),
-	}
-	sc.cacheMutex.Unlock()
-
-	log.Trace("Fetched and cached config from device")
-	return &config, nil
-}
-
-// invalidateCache clears the cache, forcing the next read to fetch from device
-func (sc *Configurer) invalidateCache() {
-	sc.cacheMutex.Lock()
-	sc.cache = nil
-	sc.cacheMutex.Unlock()
-	log.Trace("Config cache invalidated")
 }
 
 func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
@@ -309,36 +229,6 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 		ControllerTempUpperLimit:      controllerTempUpperLimit,
 		ControllerTempLowerLimit:      controllerTempLowerLimit,
 	}, nil
-}
-
-func batteryTypeToInt(batteryType string) uint16 {
-	switch batteryType {
-	case "userDefined":
-		return 0
-	case "sealed":
-		return 1
-	case "gel":
-		return 2
-	case "flooded":
-		return 3
-	default:
-		return 4
-	}
-}
-
-func batteryTypeToString(batteryType uint16) string {
-	switch batteryType {
-	case 0:
-		return "userDefined"
-	case 1:
-		return "sealed"
-	case 2:
-		return "gel"
-	case 3:
-		return "flooded"
-	default:
-		return "unknown"
-	}
 }
 
 func (sc *Configurer) writeSingle(c *gin.Context, address, value uint16, description string) error {
@@ -581,99 +471,6 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 	}
 }
 
-// BatteryProfileGet returns the battery profile (type and capacity)
-func (sc *Configurer) BatteryProfileGet() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		config, err := sc.getCachedConfig(c.Request.Context())
-		if err != nil {
-			log.Warn("Failed to get battery profile", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		profile := gin.H{
-			"batteryType":         config.BatteryType,
-			"batteryCapacity":     config.BatteryCapacity,
-			"tempCompCoefficient": config.TempCompCoefficient,
-		}
-		c.JSON(http.StatusOK, profile)
-	}
-}
-
-// BatteryProfilePatch updates the battery profile (only fields present in request)
-func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var rawData map[string]json.RawMessage
-		if err := c.BindJSON(&rawData); err != nil {
-			log.Warn("Battery profile patch bad json request", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Track if any writes succeeded
-		writeSucceeded := false
-
-		// Check and write battery type if present
-		if batteryTypeRaw, ok := rawData["batteryType"]; ok {
-			var batteryType string
-			if err := json.Unmarshal(batteryTypeRaw, &batteryType); err == nil {
-				batteryTypeInt := batteryTypeToInt(batteryType)
-				if err := sc.writeSingle(c, regBatteryType, batteryTypeInt, "battery type"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		// Check and write battery capacity if present
-		if batteryCapacityRaw, ok := rawData["batteryCapacity"]; ok {
-			var batteryCapacity uint16
-			if err := json.Unmarshal(batteryCapacityRaw, &batteryCapacity); err == nil {
-				if err := sc.writeSingle(c, regBatteryCapacity, batteryCapacity, "battery capacity"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		// Check and write temperature compensation coefficient if present
-		if tempCompCoefficientRaw, ok := rawData["tempCompCoefficient"]; ok {
-			var tempCompCoefficient float32
-			if err := json.Unmarshal(tempCompCoefficientRaw, &tempCompCoefficient); err == nil {
-				tempCompCoefficientInt := uint16(tempCompCoefficient * voltageDivisor)
-				if err := sc.writeSingle(c, regTempCompCoefficient, tempCompCoefficientInt, "temperature compensation coefficient"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		// Invalidate cache after successful write
-		if writeSucceeded {
-			sc.invalidateCache()
-			// Allow device time to fully commit all changes to EEPROM before reading back
-			time.Sleep(500 * time.Millisecond)
-		}
-
-		// Return updated profile (this will fetch fresh data from device)
-		config, err := sc.getCachedConfig(c.Request.Context())
-		if err != nil {
-			log.Warn("Failed to retrieve updated profile after write", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Profile updated but failed to read back"})
-			return
-		}
-		profile := gin.H{
-			"batteryType":         config.BatteryType,
-			"batteryCapacity":     config.BatteryCapacity,
-			"tempCompCoefficient": config.TempCompCoefficient,
-		}
-		c.JSON(http.StatusOK, profile)
-	}
-}
-
 // validateVoltageParameters validates voltage relationships according to modbus register documentation
 // Returns an error if any of the 4 voltage relationship rules are violated
 func validateVoltageParameters(config *ControllerConfig) error {
@@ -714,301 +511,4 @@ func validateVoltageParameters(config *ControllerConfig) error {
 	}
 
 	return nil
-}
-
-// ChargingParametersGet returns all charging parameters
-func (sc *Configurer) ChargingParametersGet() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		config, err := sc.getCachedConfig(c.Request.Context())
-		if err != nil {
-			log.Warn("Failed to get charging parameters", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		params := gin.H{
-			"boostDuration":                    config.BoostDuration,
-			"equalizationCycle":                config.EqualizationCycle,
-			"equalizationDuration":             config.EqualizationDuration,
-			"boostVoltage":                     config.BoostVoltage,
-			"boostReconnectChargingVoltage":    config.BoostReconnectChargingVoltage,
-			"floatVoltage":                     config.FloatVoltage,
-			"equalizationVoltage":              config.EqualizationVoltage,
-			"chargingLimitVoltage":             config.ChargingLimitVoltage,
-			"overVoltDisconnectVoltage":        config.OverVoltDisconnectVoltage,
-			"overVoltReconnectVoltage":         config.OverVoltReconnectVoltage,
-			"lowVoltDisconnectVoltage":         config.LowVoltDisconnectVoltage,
-			"lowVoltReconnectVoltage":          config.LowVoltReconnectVoltage,
-			"underVoltWarningVoltage":          config.UnderVoltWarningVoltage,
-			"underVoltWarningReconnectVoltage": config.UnderVoltReconnectVoltage,
-			"dischargingLimitVoltage":          config.DischargingLimitVoltage,
-			"batteryTempUpperLimit":            config.BatteryTempUpperLimit,
-			"batteryTempLowerLimit":            config.BatteryTempLowerLimit,
-			"controllerTempUpperLimit":         config.ControllerTempUpperLimit,
-			"controllerTempLowerLimit":         config.ControllerTempLowerLimit,
-		}
-		c.JSON(http.StatusOK, params)
-	}
-}
-
-// ChargingParametersPatch updates charging parameters (only fields present in request, only if userDefined)
-func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// First check if battery type is userDefined
-		data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regBatteryType, 1)
-		if err != nil {
-			log.Warn("Failed to read battery type", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read battery type"})
-			return
-		}
-
-		batteryType := binary.BigEndian.Uint16(data[0:2])
-		if batteryType != batteryTypeUserDefined {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Charging parameters can only be modified when battery type is 'userDefined'"})
-			return
-		}
-
-		var rawData map[string]json.RawMessage
-		if err := c.BindJSON(&rawData); err != nil {
-			log.Warn("Charging parameters patch bad json request", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Get current configuration from device
-		currentConfig, err := sc.getCachedConfig(c.Request.Context())
-		if err != nil {
-			log.Warn("Failed to read current config for validation", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read current configuration"})
-			return
-		}
-
-		// Create a copy of the current config to apply proposed changes
-		proposedConfig := *currentConfig
-
-		// Apply requested changes to proposed config for validation
-		if val, ok := rawData["chargingLimitVoltage"]; ok {
-			var chargingLimitVoltage float32
-			if err := json.Unmarshal(val, &chargingLimitVoltage); err == nil {
-				proposedConfig.ChargingLimitVoltage = chargingLimitVoltage
-			}
-		}
-
-		if val, ok := rawData["equalizationVoltage"]; ok {
-			var equalizationVoltage float32
-			if err := json.Unmarshal(val, &equalizationVoltage); err == nil {
-				proposedConfig.EqualizationVoltage = equalizationVoltage
-			}
-		}
-
-		if val, ok := rawData["boostVoltage"]; ok {
-			var boostVoltage float32
-			if err := json.Unmarshal(val, &boostVoltage); err == nil {
-				proposedConfig.BoostVoltage = boostVoltage
-			}
-		}
-
-		if val, ok := rawData["floatVoltage"]; ok {
-			var floatVoltage float32
-			if err := json.Unmarshal(val, &floatVoltage); err == nil {
-				proposedConfig.FloatVoltage = floatVoltage
-			}
-		}
-
-		if val, ok := rawData["boostReconnectChargingVoltage"]; ok {
-			var boostReconnectChargingVoltage float32
-			if err := json.Unmarshal(val, &boostReconnectChargingVoltage); err == nil {
-				proposedConfig.BoostReconnectChargingVoltage = boostReconnectChargingVoltage
-			}
-		}
-
-		// Validate the proposed configuration
-		if err := validateVoltageParameters(&proposedConfig); err != nil {
-			log.Warn("Voltage parameter validation failed", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Track if any writes succeeded
-		writeSucceeded := false
-		voltageParamsPresent := false
-
-		// Check if any voltage parameters are present in the request
-		voltageFields := []string{"chargingLimitVoltage", "equalizationVoltage", "boostVoltage",
-			"floatVoltage", "boostReconnectChargingVoltage"}
-		for _, field := range voltageFields {
-			if _, ok := rawData[field]; ok {
-				voltageParamsPresent = true
-				break
-			}
-		}
-
-		// If any voltage parameters are present, write the entire voltage block
-		if voltageParamsPresent {
-			if err := sc.writeVoltageParametersBlock(c, &proposedConfig); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			writeSucceeded = true
-		}
-
-		// Write non-voltage parameters individually
-		if val, ok := rawData["equalizationCycle"]; ok {
-			var equalizationCycle uint16
-			if err := json.Unmarshal(val, &equalizationCycle); err == nil {
-				if err := sc.writeSingle(c, regEqualizationChargingCycle, equalizationCycle, "equalization cycle"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		if val, ok := rawData["equalizationDuration"]; ok {
-			var equalizationDuration uint16
-			if err := json.Unmarshal(val, &equalizationDuration); err == nil {
-				if err := sc.writeSingle(c, regEqualizationChargingTime, equalizationDuration, "equalization duration"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		if val, ok := rawData["boostDuration"]; ok {
-			var boostDuration uint16
-			if err := json.Unmarshal(val, &boostDuration); err == nil {
-				if err := sc.writeSingle(c, regBoostChargingTime, boostDuration, "boost duration"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
-			}
-		}
-
-		// Invalidate cache after successful write
-		if writeSucceeded {
-			sc.invalidateCache()
-		}
-
-		// Return updated parameters (this will fetch fresh data from device)
-		config, err := sc.getCachedConfig(c.Request.Context())
-		if err != nil {
-			log.Warn("Failed to retrieve updated charging parameters after write", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Parameters updated but failed to read back"})
-			return
-		}
-		params := gin.H{
-			"boostDuration":                    config.BoostDuration,
-			"equalizationCycle":                config.EqualizationCycle,
-			"equalizationDuration":             config.EqualizationDuration,
-			"boostVoltage":                     config.BoostVoltage,
-			"boostReconnectChargingVoltage":    config.BoostReconnectChargingVoltage,
-			"floatVoltage":                     config.FloatVoltage,
-			"equalizationVoltage":              config.EqualizationVoltage,
-			"chargingLimitVoltage":             config.ChargingLimitVoltage,
-			"overVoltDisconnectVoltage":        config.OverVoltDisconnectVoltage,
-			"overVoltReconnectVoltage":         config.OverVoltReconnectVoltage,
-			"lowVoltDisconnectVoltage":         config.LowVoltDisconnectVoltage,
-			"lowVoltReconnectVoltage":          config.LowVoltReconnectVoltage,
-			"underVoltWarningVoltage":          config.UnderVoltWarningVoltage,
-			"underVoltWarningReconnectVoltage": config.UnderVoltReconnectVoltage,
-			"dischargingLimitVoltage":          config.DischargingLimitVoltage,
-			"batteryTempUpperLimit":            config.BatteryTempUpperLimit,
-			"batteryTempLowerLimit":            config.BatteryTempLowerLimit,
-			"controllerTempUpperLimit":         config.ControllerTempUpperLimit,
-			"controllerTempLowerLimit":         config.ControllerTempLowerLimit,
-		}
-		c.JSON(http.StatusOK, params)
-	}
-}
-
-// TimeGet returns the current time from the controller
-func (sc *Configurer) TimeGet() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regRealTimeClock, 3)
-		if err != nil {
-			log.Warn("Failed to read time from controller", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read time from controller"})
-			return
-		}
-		if len(data) < 6 {
-			log.Warnf("Insufficient time data: expected 6 bytes, got %d", len(data))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Insufficient time data from controller"})
-			return
-		}
-
-		// Parse time: min, sec, day, hour, month, year
-		year := int(data[4]) + 2000
-		month := time.Month(data[5])
-		day := int(data[2])
-		hour := int(data[3])
-		minute := int(data[0])
-		second := int(data[1])
-
-		controllerTime := time.Date(year, month, day, hour, minute, second, 0, time.UTC)
-
-		c.JSON(http.StatusOK, gin.H{"time": controllerTime})
-	}
-}
-
-// TimePatch updates the controller time
-func (sc *Configurer) TimePatch() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var timeConfig TimeConfig
-		if err := c.BindJSON(&timeConfig); err != nil {
-			log.Warn("Time patch bad json request", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// min, sec, day, hour, year, month
-		data := []byte{
-			byte(timeConfig.Time.Minute()),
-			byte(timeConfig.Time.Second()),
-			byte(timeConfig.Time.Day()),
-			byte(timeConfig.Time.Hour()),
-			byte(timeConfig.Time.Year() - 2000),
-			byte(timeConfig.Time.Month()),
-		}
-
-		_, err := sc.modbusClient.WriteMultipleRegisters(c.Request.Context(), regRealTimeClock, 3, data)
-		if err != nil {
-			log.Warn("Failed to write time to controller", err)
-			if sc.prometheusCollector != nil {
-				sc.prometheusCollector.IncrementWriteFailures()
-			}
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Invalidate cache after time write
-		sc.invalidateCache()
-		// Allow device time to fully commit changes to EEPROM before reading back
-		time.Sleep(500 * time.Millisecond)
-
-		// Return the updated time
-		data, err = sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regRealTimeClock, 3)
-		if err != nil {
-			log.Warn("Failed to read time from controller after write", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read time from controller"})
-			return
-		}
-		if len(data) < 6 {
-			log.Warnf("Insufficient time data after write: expected 6 bytes, got %d", len(data))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Insufficient time data from controller"})
-			return
-		}
-
-		year := int(data[4]) + 2000
-		month := time.Month(data[5])
-		day := int(data[2])
-		hour := int(data[3])
-		minute := int(data[0])
-		second := int(data[1])
-
-		controllerTime := time.Date(year, month, day, hour, minute, second, 0, time.UTC)
-
-		c.JSON(http.StatusOK, gin.H{"time": controllerTime})
-	}
 }

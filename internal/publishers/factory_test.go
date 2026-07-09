@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/lumberbarons/solar-controller/internal/config"
-	"github.com/lumberbarons/solar-controller/internal/controllers"
-	"github.com/lumberbarons/solar-controller/internal/file"
-	"github.com/lumberbarons/solar-controller/internal/mqtt"
-	"github.com/lumberbarons/solar-controller/internal/remotewrite"
-	"github.com/lumberbarons/solar-controller/internal/sns"
-	"github.com/lumberbarons/solar-controller/internal/solace"
+	"github.com/lumberbarons/solar-controller/internal/publish"
+	"github.com/lumberbarons/solar-controller/internal/publishers/file"
+	"github.com/lumberbarons/solar-controller/internal/publishers/mqtt"
+	"github.com/lumberbarons/solar-controller/internal/publishers/remotewrite"
+	"github.com/lumberbarons/solar-controller/internal/publishers/sns"
+	"github.com/lumberbarons/solar-controller/internal/publishers/solace"
 )
 
 func TestNewPublisher(t *testing.T) {
@@ -70,8 +70,8 @@ func TestNewPublisher(t *testing.T) {
 			},
 			wantErr: false,
 			check: func(t *testing.T, pub interface{}) {
-				if _, ok := pub.(*NoOpPublisher); !ok {
-					t.Errorf("expected *NoOpPublisher, got %T", pub)
+				if _, ok := pub.(*publish.NoOpPublisher); !ok {
+					t.Errorf("expected *publish.NoOpPublisher, got %T", pub)
 				}
 			},
 		},
@@ -216,14 +216,14 @@ func TestNewPublisher(t *testing.T) {
 
 func TestNoOpPublisher(t *testing.T) {
 	// Verify NoOpPublisher satisfies MessagePublisher interface at compile time
-	var pub controllers.MessagePublisher = &NoOpPublisher{}
+	var pub publish.MessagePublisher = &publish.NoOpPublisher{}
 
 	// Should not panic when used as MessagePublisher
 	pub.Publish("test", "payload")
 	pub.Close()
 
 	// Verify the concrete type is preserved after operations
-	if _, ok := pub.(*NoOpPublisher); !ok {
-		t.Error("Expected publisher to remain a *NoOpPublisher")
+	if _, ok := pub.(*publish.NoOpPublisher); !ok {
+		t.Error("Expected publisher to remain a *publish.NoOpPublisher")
 	}
 }

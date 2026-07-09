@@ -28,7 +28,7 @@ type Publisher struct {
 	topicPrefix      string
 }
 
-func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
+func NewPublisher(cfg *Configuration) (*Publisher, error) {
 	if !cfg.Enabled {
 		log.Info("Solace publisher disabled via configuration")
 		return &Publisher{}, nil
@@ -83,18 +83,15 @@ func NewPublisher(cfg *Configuration, topicPrefix string) (*Publisher, error) {
 		messagingService: messagingService,
 		publisher:        directPublisher,
 		config:           *cfg,
-		topicPrefix:      resolveTopicPrefix(cfg.TopicPrefix, topicPrefix),
+		topicPrefix:      resolveTopicPrefix(cfg.TopicPrefix),
 	}
 
 	return publisher, nil
 }
 
 // resolveTopicPrefix returns the effective topic prefix using the priority:
-// paramPrefix > configPrefix > "solar" default.
-func resolveTopicPrefix(configPrefix, paramPrefix string) string {
-	if paramPrefix != "" {
-		return paramPrefix
-	}
+// configPrefix > "solar" default.
+func resolveTopicPrefix(configPrefix string) string {
 	if configPrefix != "" {
 		return configPrefix
 	}
