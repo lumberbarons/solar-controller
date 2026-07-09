@@ -61,6 +61,30 @@ func bindJSONBounded(c *gin.Context, obj any) error {
 	return c.BindJSON(obj)
 }
 
+// Absolute bounds for values written to the controller. The voltage range is
+// generous enough for 12/24/48V battery systems while rejecting values that
+// would wrap the uint16 centivolt registers (overflow at 655.35 V).
+const (
+	minVoltageSetting          = 5.0
+	maxVoltageSetting          = 70.0
+	minBatteryCapacityAh       = 1
+	maxBatteryCapacityAh       = 10000
+	minTempCompCoefficient     = 0.0
+	maxTempCompCoefficient     = 10.0
+	maxChargingDurationMinutes = 600
+	maxEqualizationCycleDays   = 365
+	minRTCYear                 = 2000
+	maxRTCYear                 = 2255 // year is stored as a single byte offset from 2000
+)
+
+// validateVoltageBounds rejects voltages outside the absolute allowed range.
+func validateVoltageBounds(name string, volts float32) error {
+	if volts < minVoltageSetting || volts > maxVoltageSetting {
+		return fmt.Errorf("%s (%.2f) out of range [%.1f, %.1f] volts", name, volts, minVoltageSetting, maxVoltageSetting)
+	}
+	return nil
+}
+
 type cachedConfig struct {
 	config    *ControllerConfig
 	timestamp time.Time
@@ -323,18 +347,18 @@ func (sc *Configurer) getConfig(ctx context.Context) (ControllerConfig, error) {
 	}, nil
 }
 
-func batteryTypeToInt(batteryType string) uint16 {
+func parseBatteryType(batteryType string) (uint16, error) {
 	switch batteryType {
 	case "userDefined":
-		return 0
+		return 0, nil
 	case "sealed":
-		return 1
+		return 1, nil
 	case "gel":
-		return 2
+		return 2, nil
 	case "flooded":
-		return 3
+		return 3, nil
 	default:
-		return 4
+		return 0, fmt.Errorf("unknown battery type %q (expected userDefined, sealed, gel, or flooded)", batteryType)
 	}
 }
 
@@ -434,20 +458,33 @@ func (sc *Configurer) writeVoltageParametersBlock(c *gin.Context, config *Contro
 		dischargingLimit = cachedConfig.DischargingLimitVoltage
 	}
 
-	// Convert all voltage values to uint16 (multiply by 100 for device format)
-	values := []uint16{
-		uint16(overVoltDisconnect * 100), // 0x9003
-		uint16(chargingLimit * 100),      // 0x9004
-		uint16(overVoltReconnect * 100),  // 0x9005
-		uint16(equalization * 100),       // 0x9006
-		uint16(boost * 100),              // 0x9007
-		uint16(floatVolt * 100),          // 0x9008
-		uint16(boostReconnect * 100),     // 0x9009
-		uint16(lowVoltReconnect * 100),   // 0x900A
-		uint16(underVoltRecover * 100),   // 0x900B
-		uint16(underVoltWarning * 100),   // 0x900C
-		uint16(lowVoltDisconnect * 100),  // 0x900D
-		uint16(dischargingLimit * 100),   // 0x900E
+	// Registers 0x9003-0x900E in ascending address order
+	merged := []struct {
+		name  string
+		volts float32
+	}{
+		{"overVoltDisconnectVoltage", overVoltDisconnect},
+		{"chargingLimitVoltage", chargingLimit},
+		{"overVoltReconnectVoltage", overVoltReconnect},
+		{"equalizationVoltage", equalization},
+		{"boostVoltage", boost},
+		{"floatVoltage", floatVolt},
+		{"boostReconnectChargingVoltage", boostReconnect},
+		{"lowVoltReconnectVoltage", lowVoltReconnect},
+		{"underVoltWarningReconnectVoltage", underVoltRecover},
+		{"underVoltWarningVoltage", underVoltWarning},
+		{"lowVoltDisconnectVoltage", lowVoltDisconnect},
+		{"dischargingLimitVoltage", dischargingLimit},
+	}
+
+	// Convert all voltage values to uint16 (multiply by 100 for device
+	// format), rejecting anything that would overflow the register
+	values := make([]uint16, len(merged))
+	for i, m := range merged {
+		if err := validateVoltageBounds(m.name, m.volts); err != nil {
+			return err
+		}
+		values[i] = uint16(m.volts * voltageDivisor)
 	}
 
 	// Build byte array for all 12 registers (24 bytes)
@@ -481,17 +518,33 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			return
 		}
 
-		userDefined := false
-		if config.BatteryType != "" {
-			batteryType := batteryTypeToInt(config.BatteryType)
-			if err := sc.writeSingle(c, regBatteryType, batteryType, "battery type"); err != nil {
+		// Validate before any write so an invalid request changes nothing
+		var requestedType uint16
+		typeRequested := config.BatteryType != ""
+		if typeRequested {
+			requestedType, err = parseBatteryType(config.BatteryType)
+			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			// Invalidate cache when battery type is changed
-			sc.invalidateCache()
+		}
+		if config.EqualizationCycle > maxEqualizationCycleDays {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("equalizationCycle (%d) out of range [0, %d] days", config.EqualizationCycle, maxEqualizationCycleDays)})
+			return
+		}
+		if config.EqualizationDuration > maxChargingDurationMinutes {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("equalizationDuration (%d) out of range [0, %d] minutes", config.EqualizationDuration, maxChargingDurationMinutes)})
+			return
+		}
+		if config.BoostDuration > maxChargingDurationMinutes {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("boostDuration (%d) out of range [0, %d] minutes", config.BoostDuration, maxChargingDurationMinutes)})
+			return
+		}
 
-			userDefined = batteryType == batteryTypeUserDefined
+		// Determine the effective battery type without writing anything yet
+		userDefined := false
+		if typeRequested {
+			userDefined = requestedType == batteryTypeUserDefined
 		} else {
 			data, err := sc.modbusClient.ReadHoldingRegisters(c.Request.Context(), regBatteryType, 1)
 			if err != nil {
@@ -502,6 +555,8 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			userDefined = binary.BigEndian.Uint16(data[0:2]) == batteryTypeUserDefined
 		}
 
+		var proposedConfig ControllerConfig
+		voltageParamsPresent := false
 		if userDefined {
 			// Get current configuration for validation
 			currentConfig, err := sc.getCachedConfig(c.Request.Context())
@@ -512,7 +567,7 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			}
 
 			// Create a copy of the current config to apply proposed changes
-			proposedConfig := *currentConfig
+			proposedConfig = *currentConfig
 
 			// Apply requested changes to proposed config for validation
 			if config.ChargingLimitVoltage > 0 {
@@ -543,12 +598,24 @@ func (sc *Configurer) ConfigPatch() gin.HandlerFunc {
 			}
 
 			// Check if any voltage parameters are present
-			voltageParamsPresent := config.ChargingLimitVoltage > 0 ||
+			voltageParamsPresent = config.ChargingLimitVoltage > 0 ||
 				config.EqualizationVoltage > 0 ||
 				config.BoostVoltage > 0 ||
 				config.FloatVoltage > 0 ||
 				config.BoostReconnectChargingVoltage > 0
+		}
 
+		// All validation passed: perform the writes
+		if typeRequested {
+			if err := sc.writeSingle(c, regBatteryType, requestedType, "battery type"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			// Invalidate cache when battery type is changed
+			sc.invalidateCache()
+		}
+
+		if userDefined {
 			// If voltage parameters are present, write the entire block
 			if voltageParamsPresent {
 				if err := sc.writeVoltageParametersBlock(c, &proposedConfig); err != nil {
@@ -622,45 +689,77 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 			return
 		}
 
+		// Parse and validate every provided field before writing anything,
+		// so a malformed or out-of-range request performs no writes
+		var batteryType *uint16
+		if raw, ok := rawData["batteryType"]; ok {
+			var typeName string
+			if err := json.Unmarshal(raw, &typeName); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid batteryType: %v", err)})
+				return
+			}
+			typeValue, err := parseBatteryType(typeName)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			batteryType = &typeValue
+		}
+
+		var batteryCapacity *uint16
+		if raw, ok := rawData["batteryCapacity"]; ok {
+			var capacity uint16
+			if err := json.Unmarshal(raw, &capacity); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid batteryCapacity: %v", err)})
+				return
+			}
+			if capacity < minBatteryCapacityAh || capacity > maxBatteryCapacityAh {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("batteryCapacity (%d) out of range [%d, %d] Ah", capacity, minBatteryCapacityAh, maxBatteryCapacityAh)})
+				return
+			}
+			batteryCapacity = &capacity
+		}
+
+		var tempCompCoefficient *uint16
+		if raw, ok := rawData["tempCompCoefficient"]; ok {
+			var coefficient float32
+			if err := json.Unmarshal(raw, &coefficient); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid tempCompCoefficient: %v", err)})
+				return
+			}
+			if coefficient < minTempCompCoefficient || coefficient > maxTempCompCoefficient {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("tempCompCoefficient (%.2f) out of range [%.1f, %.1f]", coefficient, float64(minTempCompCoefficient), float64(maxTempCompCoefficient))})
+				return
+			}
+			registerValue := uint16(coefficient * voltageDivisor)
+			tempCompCoefficient = &registerValue
+		}
+
 		// Track if any writes succeeded
 		writeSucceeded := false
 
-		// Check and write battery type if present
-		if batteryTypeRaw, ok := rawData["batteryType"]; ok {
-			var batteryType string
-			if err := json.Unmarshal(batteryTypeRaw, &batteryType); err == nil {
-				batteryTypeInt := batteryTypeToInt(batteryType)
-				if err := sc.writeSingle(c, regBatteryType, batteryTypeInt, "battery type"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if batteryType != nil {
+			if err := sc.writeSingle(c, regBatteryType, *batteryType, "battery type"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		// Check and write battery capacity if present
-		if batteryCapacityRaw, ok := rawData["batteryCapacity"]; ok {
-			var batteryCapacity uint16
-			if err := json.Unmarshal(batteryCapacityRaw, &batteryCapacity); err == nil {
-				if err := sc.writeSingle(c, regBatteryCapacity, batteryCapacity, "battery capacity"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if batteryCapacity != nil {
+			if err := sc.writeSingle(c, regBatteryCapacity, *batteryCapacity, "battery capacity"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		// Check and write temperature compensation coefficient if present
-		if tempCompCoefficientRaw, ok := rawData["tempCompCoefficient"]; ok {
-			var tempCompCoefficient float32
-			if err := json.Unmarshal(tempCompCoefficientRaw, &tempCompCoefficient); err == nil {
-				tempCompCoefficientInt := uint16(tempCompCoefficient * voltageDivisor)
-				if err := sc.writeSingle(c, regTempCompCoefficient, tempCompCoefficientInt, "temperature compensation coefficient"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if tempCompCoefficient != nil {
+			if err := sc.writeSingle(c, regTempCompCoefficient, *tempCompCoefficient, "temperature compensation coefficient"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
 		// Invalidate cache after successful write
@@ -686,9 +785,34 @@ func (sc *Configurer) BatteryProfilePatch() gin.HandlerFunc {
 	}
 }
 
-// validateVoltageParameters validates voltage relationships according to modbus register documentation
-// Returns an error if any of the 4 voltage relationship rules are violated
+// validateVoltageParameters validates voltage magnitudes and relationships
+// according to modbus register documentation. Returns an error if any value
+// falls outside the absolute bounds or violates a voltage relationship rule.
 func validateVoltageParameters(config *ControllerConfig) error {
+	// Absolute bounds: every writable voltage register must be in range
+	voltages := []struct {
+		name  string
+		volts float32
+	}{
+		{"overVoltDisconnectVoltage", config.OverVoltDisconnectVoltage},
+		{"chargingLimitVoltage", config.ChargingLimitVoltage},
+		{"overVoltReconnectVoltage", config.OverVoltReconnectVoltage},
+		{"equalizationVoltage", config.EqualizationVoltage},
+		{"boostVoltage", config.BoostVoltage},
+		{"floatVoltage", config.FloatVoltage},
+		{"boostReconnectChargingVoltage", config.BoostReconnectChargingVoltage},
+		{"lowVoltReconnectVoltage", config.LowVoltReconnectVoltage},
+		{"underVoltWarningReconnectVoltage", config.UnderVoltReconnectVoltage},
+		{"underVoltWarningVoltage", config.UnderVoltWarningVoltage},
+		{"lowVoltDisconnectVoltage", config.LowVoltDisconnectVoltage},
+		{"dischargingLimitVoltage", config.DischargingLimitVoltage},
+	}
+	for _, v := range voltages {
+		if err := validateVoltageBounds(v.name, v.volts); err != nil {
+			return err
+		}
+	}
+
 	// Rule 1: Charging voltage chain
 	// Over voltage disconnect > Charge limit > Equalize charging > Boost charging > Float charging > Boost reconnect charging
 	if !(config.OverVoltDisconnectVoltage > config.ChargingLimitVoltage &&
@@ -798,39 +922,50 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		// Create a copy of the current config to apply proposed changes
 		proposedConfig := *currentConfig
 
-		// Apply requested changes to proposed config for validation
-		if val, ok := rawData["chargingLimitVoltage"]; ok {
-			var chargingLimitVoltage float32
-			if err := json.Unmarshal(val, &chargingLimitVoltage); err == nil {
-				proposedConfig.ChargingLimitVoltage = chargingLimitVoltage
+		// Apply requested changes to proposed config for validation,
+		// rejecting malformed fields instead of silently skipping them
+		voltageTargets := map[string]*float32{
+			"chargingLimitVoltage":          &proposedConfig.ChargingLimitVoltage,
+			"equalizationVoltage":           &proposedConfig.EqualizationVoltage,
+			"boostVoltage":                  &proposedConfig.BoostVoltage,
+			"floatVoltage":                  &proposedConfig.FloatVoltage,
+			"boostReconnectChargingVoltage": &proposedConfig.BoostReconnectChargingVoltage,
+		}
+		for field, target := range voltageTargets {
+			if val, ok := rawData[field]; ok {
+				var voltage float32
+				if err := json.Unmarshal(val, &voltage); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid %s: %v", field, err)})
+					return
+				}
+				*target = voltage
 			}
 		}
 
-		if val, ok := rawData["equalizationVoltage"]; ok {
-			var equalizationVoltage float32
-			if err := json.Unmarshal(val, &equalizationVoltage); err == nil {
-				proposedConfig.EqualizationVoltage = equalizationVoltage
-			}
+		// Parse and bound-check the non-voltage fields before any write
+		var equalizationCycle, equalizationDuration, boostDuration *uint16
+		durationTargets := []struct {
+			field  string
+			target **uint16
+			max    uint16
+			unit   string
+		}{
+			{"equalizationCycle", &equalizationCycle, maxEqualizationCycleDays, "days"},
+			{"equalizationDuration", &equalizationDuration, maxChargingDurationMinutes, "minutes"},
+			{"boostDuration", &boostDuration, maxChargingDurationMinutes, "minutes"},
 		}
-
-		if val, ok := rawData["boostVoltage"]; ok {
-			var boostVoltage float32
-			if err := json.Unmarshal(val, &boostVoltage); err == nil {
-				proposedConfig.BoostVoltage = boostVoltage
-			}
-		}
-
-		if val, ok := rawData["floatVoltage"]; ok {
-			var floatVoltage float32
-			if err := json.Unmarshal(val, &floatVoltage); err == nil {
-				proposedConfig.FloatVoltage = floatVoltage
-			}
-		}
-
-		if val, ok := rawData["boostReconnectChargingVoltage"]; ok {
-			var boostReconnectChargingVoltage float32
-			if err := json.Unmarshal(val, &boostReconnectChargingVoltage); err == nil {
-				proposedConfig.BoostReconnectChargingVoltage = boostReconnectChargingVoltage
+		for _, d := range durationTargets {
+			if val, ok := rawData[d.field]; ok {
+				var value uint16
+				if err := json.Unmarshal(val, &value); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid %s: %v", d.field, err)})
+					return
+				}
+				if value > d.max {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("%s (%d) out of range [0, %d] %s", d.field, value, d.max, d.unit)})
+					return
+				}
+				*d.target = &value
 			}
 		}
 
@@ -865,37 +1000,28 @@ func (sc *Configurer) ChargingParametersPatch() gin.HandlerFunc {
 		}
 
 		// Write non-voltage parameters individually
-		if val, ok := rawData["equalizationCycle"]; ok {
-			var equalizationCycle uint16
-			if err := json.Unmarshal(val, &equalizationCycle); err == nil {
-				if err := sc.writeSingle(c, regEqualizationChargingCycle, equalizationCycle, "equalization cycle"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if equalizationCycle != nil {
+			if err := sc.writeSingle(c, regEqualizationChargingCycle, *equalizationCycle, "equalization cycle"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		if val, ok := rawData["equalizationDuration"]; ok {
-			var equalizationDuration uint16
-			if err := json.Unmarshal(val, &equalizationDuration); err == nil {
-				if err := sc.writeSingle(c, regEqualizationChargingTime, equalizationDuration, "equalization duration"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if equalizationDuration != nil {
+			if err := sc.writeSingle(c, regEqualizationChargingTime, *equalizationDuration, "equalization duration"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
-		if val, ok := rawData["boostDuration"]; ok {
-			var boostDuration uint16
-			if err := json.Unmarshal(val, &boostDuration); err == nil {
-				if err := sc.writeSingle(c, regBoostChargingTime, boostDuration, "boost duration"); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				writeSucceeded = true
+		if boostDuration != nil {
+			if err := sc.writeSingle(c, regBoostChargingTime, *boostDuration, "boost duration"); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			writeSucceeded = true
 		}
 
 		// Invalidate cache after successful write
@@ -971,6 +1097,12 @@ func (sc *Configurer) TimePatch() gin.HandlerFunc {
 		if err := bindJSONBounded(c, &timeConfig); err != nil {
 			log.Warn("Time patch bad json request", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// The RTC stores the year as a single byte offset from 2000
+		if year := timeConfig.Time.Year(); year < minRTCYear || year > maxRTCYear {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("time year (%d) out of range [%d, %d]", year, minRTCYear, maxRTCYear)})
 			return
 		}
 
