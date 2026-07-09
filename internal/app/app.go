@@ -1,7 +1,10 @@
 package app
 
 import (
+	"crypto/subtle"
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -45,6 +48,12 @@ func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublish
 		log.Warnf("failed to set trusted proxies: %v", err)
 	}
 
+	if cfg.SolarController.Auth.Token != "" {
+		app.router.Use(authMiddleware(cfg.SolarController.Auth.Token))
+	} else {
+		log.Warn("no auth token configured; /api endpoints are unauthenticated")
+	}
+
 	// Build controllers
 	if err := app.buildControllers(); err != nil {
 		return nil, fmt.Errorf("failed to build controllers: %w", err)
@@ -54,6 +63,24 @@ func NewApplication(cfg *config.Config, mqttPublisher controllers.MessagePublish
 	app.setupRoutes()
 
 	return app, nil
+}
+
+// authMiddleware requires a bearer token on all /api routes. The SPA and
+// static assets remain public so the frontend can load and prompt for a token.
+func authMiddleware(token string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+			c.Next()
+			return
+		}
+		expected := "Bearer " + token
+		provided := c.GetHeader("Authorization")
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		c.Next()
+	}
 }
 
 // buildControllers initializes all solar equipment controllers based on configuration.
@@ -107,8 +134,9 @@ func (a *Application) setupRoutes() {
 
 // Run starts the HTTP server and blocks until it exits.
 func (a *Application) Run() error {
-	log.Infof("starting server on port %v", a.config.SolarController.HTTPPort)
-	return a.router.Run(fmt.Sprintf(":%v", a.config.SolarController.HTTPPort))
+	addr := fmt.Sprintf("%s:%v", a.config.SolarController.BindAddress, a.config.SolarController.HTTPPort)
+	log.Infof("starting server on %s", addr)
+	return a.router.Run(addr)
 }
 
 // Close performs cleanup of all application resources.

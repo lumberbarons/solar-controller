@@ -516,6 +516,42 @@ solarController:
 			},
 		},
 		{
+			name: "BindAddress defaults to loopback when not specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.BindAddress != "127.0.0.1" {
+					t.Errorf("BindAddress = %s, want 127.0.0.1 (default)", c.SolarController.BindAddress)
+				}
+			},
+		},
+		{
+			name: "BindAddress and auth token are parsed when specified",
+			yaml: `
+solarController:
+  httpPort: 8080
+  bindAddress: 0.0.0.0
+  auth:
+    token: secret
+  epever:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.BindAddress != "0.0.0.0" {
+					t.Errorf("BindAddress = %s, want 0.0.0.0", c.SolarController.BindAddress)
+				}
+				if c.SolarController.Auth.Token != "secret" {
+					t.Errorf("Auth.Token = %s, want secret", c.SolarController.Auth.Token)
+				}
+			},
+		},
+		{
 			name: "SNS TopicPrefix defaults to solar when not specified",
 			yaml: `
 solarController:

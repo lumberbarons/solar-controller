@@ -181,6 +181,99 @@ func TestApplication_SPAFallback(t *testing.T) {
 	}
 }
 
+func TestApplication_AuthMiddleware(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Auth:     config.AuthConfiguration{Token: "secret-token"},
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	app, err := NewApplication(cfg, controllertesting.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		authHeader string
+		wantCode   int
+	}{
+		{
+			name:     "api request without token is rejected",
+			method:   "GET",
+			path:     "/api/info",
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "api request with wrong token is rejected",
+			method:     "GET",
+			path:       "/api/info",
+			authHeader: "Bearer wrong-token",
+			wantCode:   http.StatusUnauthorized,
+		},
+		{
+			name:     "api write request without token is rejected",
+			method:   "PATCH",
+			path:     "/api/epever/battery-profile",
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:       "api request with valid token is allowed",
+			method:     "GET",
+			path:       "/api/info",
+			authHeader: "Bearer secret-token",
+			wantCode:   http.StatusOK,
+		},
+		{
+			name:     "spa route stays public",
+			method:   "GET",
+			path:     "/",
+			wantCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(tt.method, tt.path, nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			app.Router().ServeHTTP(w, req)
+			assert.Equal(t, tt.wantCode, w.Code)
+		})
+	}
+}
+
+func TestApplication_NoAuthTokenLeavesAPIOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Epever: epever.Configuration{
+				Enabled: false,
+			},
+		},
+	}
+
+	app, err := NewApplication(cfg, controllertesting.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/info", nil)
+	app.Router().ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestApplication_ControllerRegistration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

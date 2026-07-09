@@ -18,6 +18,8 @@ type Config struct {
 
 type SolarControllerConfiguration struct {
 	HTTPPort    int                       `yaml:"httpPort"`
+	BindAddress string                    `yaml:"bindAddress"`
+	Auth        AuthConfiguration         `yaml:"auth"`
 	Debug       bool                      `yaml:"debug"`
 	DeviceID    string                    `yaml:"deviceId"`
 	Mqtt        mqtt.Configuration        `yaml:"mqtt"`
@@ -26,6 +28,12 @@ type SolarControllerConfiguration struct {
 	File        file.Configuration        `yaml:"file"`
 	RemoteWrite remotewrite.Configuration `yaml:"remoteWrite"`
 	Epever      epever.Configuration      `yaml:"epever"`
+}
+
+// AuthConfiguration holds API authentication settings. When Token is set,
+// requests to /api routes must carry it as a bearer token.
+type AuthConfiguration struct {
+	Token string `yaml:"token"`
 }
 
 // Load parses and validates configuration from YAML bytes.
@@ -51,6 +59,11 @@ func Load(data []byte) (Config, error) {
 
 // applyDefaults sets default values for optional configuration fields
 func (c *Config) applyDefaults() {
+	// Bind to loopback unless the operator explicitly exposes the server
+	if c.SolarController.BindAddress == "" {
+		c.SolarController.BindAddress = "127.0.0.1"
+	}
+
 	// Set default device ID if not provided
 	if c.SolarController.DeviceID == "" {
 		c.SolarController.DeviceID = "controller-1"

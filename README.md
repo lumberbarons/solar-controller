@@ -174,6 +174,9 @@ Create a YAML configuration file with the following structure:
 ```yaml
 solarController:
   httpPort: 8080
+  bindAddress: 127.0.0.1  # Address the HTTP server listens on (default: "127.0.0.1"; set to 0.0.0.0 to expose on all interfaces)
+  auth:
+    token: change-me    # Optional: when set, /api routes require "Authorization: Bearer <token>"
   debug: false          # Enable debug logging (can also use -debug flag)
   deviceId: controller-123      # Unique identifier for this device (default: "controller-1")
 
@@ -226,6 +229,10 @@ solarController:
 ```
 
 ### Configuration Details
+
+**HTTP Server:**
+- `bindAddress` defaults to `127.0.0.1`, so the API and web UI are only reachable from the device itself. To reach them over the network, front the service with a reverse proxy/VPN, or set `bindAddress: 0.0.0.0` deliberately.
+- When `auth.token` is set, every `/api` request must send `Authorization: Bearer <token>`; requests without it get `401`. The SPA static assets stay public.
 
 **Hardware Controllers:**
 - Each controller (e.g., epever) has an `enabled` boolean field
