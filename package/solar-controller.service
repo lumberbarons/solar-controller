@@ -1,14 +1,27 @@
 [Unit]
 Description=solar-controller
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+User=solar-controller
+Group=solar-controller
+SupplementaryGroups=dialout
 Restart=always
 RestartSec=5s
 ExecStart=/usr/bin/solar-controller --config /etc/solar-controller/config.yaml
 StandardOutput=append:/var/log/solar-controller.log
 StandardError=append:/var/log/solar-controller.log
 SyslogIdentifier=solar-controller
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target
