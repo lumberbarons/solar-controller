@@ -69,6 +69,24 @@ filenames in inline code.
 - [ ] Verifiable completion criterion, as a checklist
 ```
 
+### Creating and editing issues in one command
+
+`gh` reads bodies from stdin via `--body-file -`, so never write a body to a temp file first — create or edit an issue with its full markdown body in a single command:
+
+```bash
+gh issue create --title "Title here" --label P2,task --body-file - <<'EOF'
+### Goal
+
+What and why.
+
+### Done when
+
+- [ ] Criterion
+EOF
+```
+
+The same pattern works for `gh issue edit <n> --body-file -` and `gh pr create --body-file -`.
+
 ### Workflow
 
 1. Find work: `gh issue list --state open`, pick the highest-priority issue with no open blockers
