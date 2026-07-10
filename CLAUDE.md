@@ -33,6 +33,24 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `nfpm.yaml` | Package metadata (deb, rpm) | Changing package version, dependencies, or scripts |
 | `go.mod` | Go module and dependency versions | Adding or updating dependencies |
 
+## Issue Tracking
+
+This project uses **GitHub issues** for all task tracking, via the `gh` CLI. Do not create markdown TODO lists or other tracking systems.
+
+### Conventions
+
+- **Priority labels** (every issue gets one): `P0` critical (security, data loss, broken builds), `P1` high, `P2` medium (default), `P3` low, `P4` backlog
+- **Type labels**: `bug` (something broken), `enhancement` (new functionality), `task` (tests, docs, refactoring, chores)
+- **Dependencies**: an issue that cannot start until other work lands says so in the first line of its body: `Blocked by #123`. Before picking up an issue, check its body for blockers and skip it if any referenced issue is still open.
+- **Discovered work**: when filing follow-up work found while implementing an issue, reference the source in the body: `Discovered while working on #123`.
+
+### Workflow
+
+1. Find work: `gh issue list --state open`, pick the highest-priority issue with no open blockers
+2. Work on a branch (`feat/`, `fix/`, or `chore/` prefix)
+3. File new issues for anything discovered along the way
+4. Open a PR with `Fixes #<number>` in the body so the issue closes automatically on merge — never push directly to main
+
 ## Development Commands
 
 ### Using Make (Recommended)
