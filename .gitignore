@@ -18,7 +18,8 @@ node_modules
 # Temporary files
 tmp/
 
-# Dolt database files (added by bd init)
+# Beads issue tracker (migrated to GitHub issues)
+.beads/
 .dolt/
 *.db
 .beads-credential-key
