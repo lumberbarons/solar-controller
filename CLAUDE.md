@@ -44,6 +44,31 @@ This project uses **GitHub issues** for all task tracking, via the `gh` CLI. Do 
 - **Dependencies**: an issue that cannot start until other work lands says so in the first line of its body: `Blocked by #123`. Before picking up an issue, check its body for blockers and skip it if any referenced issue is still open.
 - **Discovered work**: when filing follow-up work found while implementing an issue, reference the source in the body: `Discovered while working on #123`.
 
+### Issue body format
+
+Issue bodies follow this structure — omit sections that don't apply:
+
+```markdown
+Blocked by #123                  <- first line, only when blocked
+
+### Where
+
+- `path/to/file.go:123`          <- affected files, when known
+
+### Problem                      <- or "### Goal" for features/tasks
+
+What is wrong or missing, and why it matters.
+
+### Fix                          <- or "### Approach" for features/tasks
+
+The proposed change. Per-file work items go in a bullet list with
+filenames in inline code.
+
+### Done when
+
+- [ ] Verifiable completion criterion, as a checklist
+```
+
 ### Workflow
 
 1. Find work: `gh issue list --state open`, pick the highest-priority issue with no open blockers
