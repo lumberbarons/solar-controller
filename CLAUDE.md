@@ -41,7 +41,10 @@ This project uses **GitHub issues** for all task tracking, via the `gh` CLI. Do 
 
 - **Priority labels** (every issue gets one): `P0` critical (security, data loss, broken builds), `P1` high, `P2` medium (default), `P3` low, `P4` backlog
 - **Type labels**: `bug` (something broken), `enhancement` (new functionality), `task` (tests, docs, refactoring, chores)
-- **Dependencies**: an issue that cannot start until other work lands says so in the first line of its body: `Blocked by #123`. Before picking up an issue, check its body for blockers and skip it if any referenced issue is still open.
+- **Area labels** (when the work is scoped to one area): `tests`, `web-ui`. Create new area labels sparingly, only when a third or fourth issue would share one.
+- **No title prefixes**: titles carry no category prefixes like `Test:` or `Frontend:` — type, priority, and area all live in labels. The one exception is `Epic:` on parent issues, kept as a human-readable signal in contexts where labels don't render.
+- **Dependencies**: use native issue dependencies, not body text: `gh issue edit <n> --add-blocked-by <m>`. Before picking up an issue, check `gh issue view <n> --json blockedBy` and skip it if any blocker is still open (the JSON shape is `.blockedBy.nodes[]`).
+- **Epics**: larger efforts get a parent issue titled `Epic: ...` with the work attached as sub-issues (`gh issue edit <child> --parent <epic>`). Never pick up an epic directly — work its unblocked children. GitHub rolls up progress on the parent automatically.
 - **Discovered work**: when filing follow-up work found while implementing an issue, reference the source in the body: `Discovered while working on #123`.
 
 ### Issue body format
@@ -49,8 +52,6 @@ This project uses **GitHub issues** for all task tracking, via the `gh` CLI. Do 
 Issue bodies follow this structure — omit sections that don't apply:
 
 ```markdown
-Blocked by #123                  <- first line, only when blocked
-
 ### Where
 
 - `path/to/file.go:123`          <- affected files, when known
@@ -71,7 +72,7 @@ filenames in inline code.
 
 ### Workflow
 
-1. Find work: `gh issue list --state open`, pick the highest-priority issue with no open blockers
+1. Find work: `gh issue list --state open`, pick the highest-priority issue whose `blockedBy` has no open entries (and that is not an epic)
 2. Work on a branch (`feat/`, `fix/`, or `chore/` prefix)
 3. File new issues for anything discovered along the way
 4. Open a PR with `Fixes #<number>` in the body so the issue closes automatically on merge — never push directly to main
