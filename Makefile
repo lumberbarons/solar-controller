@@ -1,4 +1,4 @@
-.PHONY: help build test test-unit test-int test-all lint clean build-frontend build-backend build-linux-arm64-docker docker deploy
+.PHONY: help build test test-unit test-coverage test-int test-all lint clean build-frontend build-backend build-linux-arm64-docker docker deploy
 
 .DEFAULT_GOAL := help
 
@@ -9,6 +9,9 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
 # Build flags
 LDFLAGS := -X 'main.Version=$(VERSION)' -X 'main.BuildTime=$(BUILD_TIME)' -X 'main.GitCommit=$(GIT_COMMIT)'
+
+# Minimum total statement coverage (%) enforced by test-coverage
+COVERAGE_THRESHOLD ?= 65
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -44,6 +47,12 @@ test: test-unit ## Run unit tests (default)
 
 test-unit: ## Run unit tests only
 	go test -v -race ./...
+
+test-coverage: ## Run unit tests and fail if coverage is below COVERAGE_THRESHOLD
+	go test -v -race -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -1 | awk -v threshold=$(COVERAGE_THRESHOLD) \
+		'{ gsub(/%/, "", $$3); printf "total statement coverage: %s%% (threshold: %s%%)\n", $$3, threshold; \
+		if ($$3 + 0 < threshold) { print "FAIL: coverage below threshold"; exit 1 } }'
 
 test-int: ## Run integration tests (requires Docker)
 	go test -v -race -tags=integration ./...
