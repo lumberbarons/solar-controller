@@ -28,4 +28,4 @@ tmp/
 .claude/worktrees/
 
 # Test coverage profile
-coverage.out
+coverage*.out
