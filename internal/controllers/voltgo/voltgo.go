@@ -4,7 +4,11 @@ import (
 	"time"
 )
 
-const defaultConnectTimeout = 30 * time.Second
+const (
+	namespace = "voltgo"
+
+	defaultConnectTimeout = 30 * time.Second
+)
 
 type Configuration struct {
 	Enabled       bool   `yaml:"enabled"`
