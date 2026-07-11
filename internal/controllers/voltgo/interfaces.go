@@ -24,6 +24,16 @@ type BatteryClient interface {
 	Disconnect() error
 }
 
+// MetricsCollector defines the interface for collecting and exposing metrics.
+// This abstraction allows for testing without the Prometheus global registry.
+type MetricsCollector interface {
+	// IncrementFailures increments the collection failure counter.
+	IncrementFailures()
+
+	// SetMetrics updates all metrics based on the provided status.
+	SetMetrics(status *BatteryStatus)
+}
+
 // BatteryConnector defines the interface for establishing BLE connections
 // to voltgo batteries.
 type BatteryConnector interface {
