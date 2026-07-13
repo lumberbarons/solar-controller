@@ -208,8 +208,8 @@ github.com/prometheus/common v0.69.0 h1:OA85nJQS/T/MaYh/Q2CcgDKSGWqNIgrBDvDH85Cu
 github.com/prometheus/common v0.69.0/go.mod h1:ZzL3f6u94qUxh9p+tJTrF+FvBS1XXbbRAZCQkytAL0Y=
 github.com/prometheus/procfs v0.19.1 h1:QVtROpTkphuXuNlnCv3m1ut3JytkXHtQ3xvck/YmzMM=
 github.com/prometheus/procfs v0.19.1/go.mod h1:M0aotyiemPhBCM0z5w87kL22CxfcH05ZpYlu+b4J7mw=
-github.com/prometheus/prometheus v0.313.0 h1:DH5Rcybaem9nuKaFYtY+Kmogmp/NiNPpS9WBIRlSy6E=
-github.com/prometheus/prometheus v0.313.0/go.mod h1:Kq9A+EPun2WyVusbQxO7Tx1RxKqLKFclfiBGJA1mFkk=
+github.com/prometheus/prometheus v0.313.1 h1:BOyoPuxCL+58NpuZ0ovKuKo8ALmVLTCTIM7r8znt6z8=
+github.com/prometheus/prometheus v0.313.1/go.mod h1:Kq9A+EPun2WyVusbQxO7Tx1RxKqLKFclfiBGJA1mFkk=
 github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
 github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
 github.com/quic-go/quic-go v0.59.0 h1:OLJkp1Mlm/aS7dpKgTc6cnpynnD2Xg7C1pwL6vy/SAw=

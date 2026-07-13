@@ -17,7 +17,7 @@ require (
 	github.com/lumberbarons/modbus v0.5.0
 	github.com/lumberbarons/voltgo v0.2.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/prometheus/prometheus v0.313.0
+	github.com/prometheus/prometheus v0.313.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0
