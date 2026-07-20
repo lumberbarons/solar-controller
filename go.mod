@@ -13,7 +13,7 @@ require (
 	github.com/gin-contrib/static v1.1.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-co-op/gocron v1.37.0
-	github.com/klauspost/compress v1.19.0
+	github.com/klauspost/compress v1.19.1
 	github.com/lumberbarons/modbus v0.5.0
 	github.com/lumberbarons/voltgo v0.2.0
 	github.com/prometheus/client_golang v1.23.2
