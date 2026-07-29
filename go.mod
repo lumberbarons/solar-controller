@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.31
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.32
 	github.com/aws/aws-sdk-go-v2/service/sns v1.42.2
-	github.com/aws/aws-sdk-go-v2/service/sqs v1.45.0
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.46.2
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gin-contrib/static v1.1.6
 	github.com/gin-gonic/gin v1.12.0
