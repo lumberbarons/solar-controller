@@ -72,6 +72,42 @@ func (m *MockBatteryClient) Disconnect() error {
 	return nil
 }
 
+// MockMetricsCollector is a mock implementation of the MetricsCollector interface for testing.
+type MockMetricsCollector struct {
+	mu sync.RWMutex
+
+	// Function fields that can be set to customize behavior in tests
+	IncrementFailuresFunc func()
+	SetMetricsFunc        func(status *BatteryStatus)
+
+	// Call tracking
+	FailuresCount   int
+	SetMetricsCalls []*BatteryStatus
+}
+
+// Verify MockMetricsCollector implements MetricsCollector
+var _ MetricsCollector = (*MockMetricsCollector)(nil)
+
+func (m *MockMetricsCollector) IncrementFailures() {
+	m.mu.Lock()
+	m.FailuresCount++
+	m.mu.Unlock()
+
+	if m.IncrementFailuresFunc != nil {
+		m.IncrementFailuresFunc()
+	}
+}
+
+func (m *MockMetricsCollector) SetMetrics(status *BatteryStatus) {
+	m.mu.Lock()
+	m.SetMetricsCalls = append(m.SetMetricsCalls, status)
+	m.mu.Unlock()
+
+	if m.SetMetricsFunc != nil {
+		m.SetMetricsFunc(status)
+	}
+}
+
 // MockBatteryConnector is a mock implementation of the BatteryConnector interface for testing.
 type MockBatteryConnector struct {
 	mu sync.RWMutex
