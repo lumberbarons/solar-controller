@@ -96,6 +96,29 @@ The same pattern works for `gh issue edit <n> --body-file -` and `gh pr create -
 
 ## Development Commands
 
+### CI Quality Gates
+
+`.github/workflows/ci.yaml` runs on every pull request and push to `main`, and
+is also invoked by `release.yaml` via `workflow_call` so a tag push cannot
+publish artifacts that have not passed these gates:
+
+| Job | Enforces |
+|-----|----------|
+| `build-frontend` | `vite build` succeeds; publishes the `site-build` artifact the other jobs embed |
+| `test` | `go.mod`/`go.sum` are tidy, `go mod verify` passes, and `make test-coverage` clears the coverage gate |
+| `lint` | ESLint over `site/src`, and `golangci-lint` (including `gosec`) over the Go tree |
+| `vulncheck` | `govulncheck` finds no reachable vulnerability, including in the standard library |
+| `integration` | `make test-int` passes against real services in testcontainers |
+
+Every `uses:` in both workflows is pinned to a full commit SHA with the version
+in a trailing comment, because a tag is mutable and can change what executes in
+CI without any commit to this repo. Dependabot's `github-actions` ecosystem
+bumps these pins and keeps the comment current, so do not replace a SHA with a
+tag for readability.
+
+Release images are scanned with Trivy before the multi-arch manifest is pushed,
+and are published with an SBOM and build provenance attestation.
+
 ### Using Make (Recommended)
 
 ```bash
@@ -591,17 +614,11 @@ go test -v -tags=integration ./internal/publishers/sns -run TestSNSPublisherInte
 
 #### CI/CD Integration
 
-Integration tests can run in GitHub Actions or other CI systems with Docker support:
-
-```yaml
-integration-tests:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-go@v5
-    - name: Run integration tests
-      run: make test-int
-```
+The `integration` job in `.github/workflows/ci.yaml` runs `make test-int` on every
+pull request and push to `main`. GitHub-hosted runners provide a working Docker
+daemon, so testcontainers needs no extra setup. The job downloads the
+`site-build` artifact first, because the `//go:embed` in `internal/static`
+requires the frontend build to be present before any Go package compiles.
 
 #### Future Integration Tests
 

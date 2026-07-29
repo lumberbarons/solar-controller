@@ -14,30 +14,19 @@ env:
   NODE_VERSION: '22'
 
 jobs:
-  build-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Build frontend
-        run: make build-frontend
-
-      - name: Upload site build artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: site-build
-          path: internal/static/build
-          retention-days: 1
+  # Runs the full CI suite (tests, coverage gate, golangci-lint, ESLint,
+  # govulncheck, integration tests) before anything is built or published, so a
+  # tag created from an unverified ref cannot ship. This also builds the
+  # frontend and uploads the site-build artifact the jobs below consume, which
+  # is why release.yaml no longer has its own build-frontend job: two jobs in
+  # one run cannot upload the same artifact name.
+  verify:
+    name: Verify
+    uses: ./.github/workflows/ci.yaml
 
   build-binaries:
     runs-on: ${{ matrix.runner }}
-    needs: build-frontend
+    needs: verify
     strategy:
       matrix:
         include:
@@ -49,7 +38,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -57,13 +46,13 @@ jobs:
         run: git fetch --force --tags
 
       - name: Download site build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: site-build
           path: internal/static/build
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -93,7 +82,7 @@ jobs:
           cd ..
 
       - name: Upload binary artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: |
@@ -129,12 +118,12 @@ jobs:
             format: rpm
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: bin
@@ -161,7 +150,7 @@ jobs:
           nfpm package --packager ${{ matrix.format }} --target dist/
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-${{ matrix.arch }}-${{ matrix.format }}
           path: dist/*.${{ matrix.format }}
@@ -169,7 +158,7 @@ jobs:
 
   build-docker:
     runs-on: ${{ matrix.runner }}
-    needs: [build-frontend, build-binaries]
+    needs: [verify, build-binaries]
     strategy:
       matrix:
         include:
@@ -181,16 +170,16 @@ jobs:
             arch: arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download site build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: site-build
           path: internal/static/build
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: binary-linux-${{ matrix.arch }}
           path: bin
@@ -199,10 +188,10 @@ jobs:
         run: chmod +x bin/solar-controller
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -210,21 +199,39 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
 
+      # provenance and sbom attach SLSA build provenance and an SPDX SBOM to
+      # the pushed image, so a consumer can see how it was built and what it
+      # contains. GHCR stores both alongside the image.
       - name: Build and push ${{ matrix.arch }} image
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
+          provenance: true
+          sbom: true
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+
+      # Scanning here, rather than after docker-manifest, means a vulnerable
+      # image is caught before the multi-arch tag that consumers pull exists.
+      # The image is pushed by digest and still untagged at this point, so a
+      # failure leaves nothing pullable and the cleanup step below removes it.
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
 
       - name: Export digest
         run: |
@@ -233,7 +240,7 @@ jobs:
           touch /tmp/digests/${digest#sha256:}
 
       - name: Upload digest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digests-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -242,7 +249,7 @@ jobs:
 
       - name: Cleanup orphaned images on failure
         if: failure()
-        uses: dataaxiom/ghcr-cleanup-action@v1
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           delete-untagged: true
@@ -253,17 +260,17 @@ jobs:
     needs: [build-docker, build-packages]
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -271,7 +278,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -295,18 +302,18 @@ jobs:
     needs: docker-manifest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download binary artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: binary-*
           path: artifacts
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: package-*
           path: artifacts
@@ -410,7 +417,7 @@ jobs:
           git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" | grep -v '^docs:' | grep -v '^test:' >> release-notes.md || echo "- Initial release" >> release-notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: release-assets/*
           body_path: release-notes.md
