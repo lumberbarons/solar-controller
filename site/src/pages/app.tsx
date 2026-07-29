@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import axios from "axios";
 
 import Header from "../components/header";
 import Main from "./main";
 import Config from "./config";
+import type { VersionInfo } from "../api/types";
 
 function App() {
-  const [version, setVersion] = useState(null);
+  const [version, setVersion] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
     // Fetch version info from the backend
-    axios.get('/api/info')
+    axios.get<VersionInfo>('/api/info')
       .then(response => {
         setVersion(response.data);
       })

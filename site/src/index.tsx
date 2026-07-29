@@ -1,4 +1,3 @@
-import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from "react-router-dom";
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -18,6 +17,9 @@ const theme = createTheme({
 });
 
 const container = document.getElementById('root');
+if (!container) {
+  throw new Error('missing #root element');
+}
 const root = createRoot(container);
 root.render(
   <ThemeProvider theme={theme}>

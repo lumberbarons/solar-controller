@@ -22,10 +22,11 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `internal/app/` | Application bootstrap and HTTP server | Changing server setup or middleware |
 | `internal/static/` | Embedded React frontend (`//go:embed`) | Changing how the frontend is served |
 | `internal/testutil/` | Shared test helpers and integration test containers | Adding integration tests |
-| `site/` | React frontend source | Modifying the web UI |
+| `site/` | React + TypeScript frontend source | Modifying the web UI |
+| `site/src/api/` | Types for every `/api` payload, and the contract test | Changing anything crossing the HTTP boundary |
 | `examples/` | Remote write test setup (VictoriaMetrics) | Testing remote write locally |
 | `testdata/` | Modbus simulator configuration | Testing with simulated hardware |
-| `docs/` | Modbus register documentation | Understanding Epever register mappings |
+| `docs/` | Modbus register documentation, and `api-contract.json` | Understanding Epever register mappings, or changing an API field name |
 | `package/` | System packaging (deb, rpm) via nfpm | Changing release packaging |
 | `Makefile` | Build, test, deploy orchestration | Modifying build targets or CI commands |
 | `Dockerfile` | Production container image | Changing container build or runtime |
@@ -106,7 +107,8 @@ publish artifacts that have not passed these gates:
 |-----|----------|
 | `build-frontend` | `vite build` succeeds; publishes the `site-build` artifact the other jobs embed |
 | `test` | `go.mod`/`go.sum` are tidy, `go mod verify` passes, and `make test-coverage` clears the coverage gate |
-| `lint` | ESLint over `site/src`, and `golangci-lint` (including `gosec`) over the Go tree |
+| `lint` | `golangci-lint` (including `gosec`) over the Go tree |
+| `frontend` | ESLint, `tsc --noEmit`, and the vitest suite over `site/` |
 | `vulncheck` | `govulncheck` finds no reachable vulnerability, including in the standard library |
 | `integration` | `make test-int` passes against real services in testcontainers |
 
@@ -145,6 +147,9 @@ make deploy REMOTE_HOST=user@host
 
 # Run tests
 make test
+
+# Run frontend type check and tests
+make test-frontend
 
 # Clean build artifacts
 make clean
@@ -188,7 +193,7 @@ go mod tidy
 - **Integration tests**: Require Docker, use `//go:build integration` tag, test with real services via testcontainers
 - Integration tests are automatically skipped when running `make test` or `go test ./...`
 
-### Frontend (React)
+### Frontend (React + TypeScript)
 
 ```bash
 cd site
@@ -204,7 +209,39 @@ npm run build
 
 # Run linter
 npm run lint
+
+# Type check without emitting
+npm run typecheck
+
+# Run the vitest suite once, or in watch mode
+npm test
+npm run test:watch
 ```
+
+The frontend is TypeScript (`.ts`/`.tsx`). Every payload crossing the `/api`
+boundary is typed in `site/src/api/types.ts` — declare new request and response
+shapes there rather than inline, so there is a single place to update when a Go
+handler changes.
+
+Tests use vitest with `@testing-library/react` and a jsdom environment. Component
+tests mock `axios` so they can assert the exact PATCH body a config panel sends;
+that matters because those bodies are written straight to Modbus registers on
+real hardware. Note that `src/setupTests.ts` wires up Testing Library's
+`cleanup` explicitly, because tests import from `vitest` rather than relying on
+globals, and auto-cleanup only happens when a global `afterEach` exists.
+
+#### The API contract
+
+`docs/api-contract.json` records the JSON field names each endpoint emits, and is
+checked from both sides: the Go handler tests
+(`internal/app/api_contract_test.go`, `internal/controllers/epever/api_contract_test.go`)
+assert the handlers return exactly those keys, and `site/src/api/types.test.ts`
+asserts the field arrays in `types.ts` match them.
+
+This exists because the GET handlers build their responses from `gin.H` literals,
+so a renamed key compiles, passes the Go tests, and only surfaces as `undefined`
+in the browser. Renaming a field now means updating the handler, the contract
+file, and `types.ts` together — CI fails until all three agree.
 
 ### Docker
 

@@ -1,4 +1,4 @@
-.PHONY: help build test test-unit test-coverage test-int test-all lint clean build-frontend build-backend build-linux-arm64-docker docker deploy
+.PHONY: help build test test-unit test-coverage test-int test-frontend test-all lint clean build-frontend build-backend build-linux-arm64-docker docker deploy
 
 .DEFAULT_GOAL := help
 
@@ -57,6 +57,9 @@ test-coverage: ## Run unit tests and fail if coverage is below COVERAGE_THRESHOL
 
 test-int: ## Run integration tests (requires Docker)
 	go test -v -race -tags=integration ./...
+
+test-frontend: ## Run frontend type check and vitest suite
+	cd site && npm install && npm run typecheck && npm test
 
 lint: ## Run golangci-lint
 	golangci-lint run ./...
