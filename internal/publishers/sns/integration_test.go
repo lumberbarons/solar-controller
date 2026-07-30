@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,6 +20,43 @@ import (
 
 	"github.com/lumberbarons/solar-controller/internal/testutil/containers"
 )
+
+// receiveMessages polls the fixture's queue until it has collected want
+// messages or the deadline passes, then returns everything it collected.
+//
+// A single ReceiveMessage call is not enough: MaxNumberOfMessages is an upper
+// bound, and SQS is free to return fewer messages than are available on any
+// given call. Asserting on one call's result makes the test fail intermittently
+// whenever a publish lands between polls.
+func receiveMessages(t *testing.T, f *snsTestFixture, want int) []sqstypes.Message {
+	t.Helper()
+
+	ctx := context.Background()
+	deadline := time.Now().Add(30 * time.Second)
+
+	var collected []sqstypes.Message
+	for len(collected) < want && time.Now().Before(deadline) {
+		resp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(f.queueURL),
+			MaxNumberOfMessages: 10,
+			WaitTimeSeconds:     2,
+		})
+		require.NoError(t, err)
+		collected = append(collected, resp.Messages...)
+
+		// Stop redelivering what we already hold, so a message counted here is
+		// not returned again by the next poll.
+		for _, msg := range resp.Messages {
+			_, err := f.sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+				QueueUrl:      aws.String(f.queueURL),
+				ReceiptHandle: msg.ReceiptHandle,
+			})
+			require.NoError(t, err)
+		}
+	}
+
+	return collected
+}
 
 // snsTestFixture holds per-subtest SNS/SQS resources
 type snsTestFixture struct {
@@ -97,8 +135,6 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 	t.Run("PublishSingleMessage", func(t *testing.T) {
 		f := setupSNSFixture(t, localStack, "single-message")
-		ctx := context.Background()
-
 		cfg := &Configuration{
 			Enabled:     true,
 			Region:      f.awsCfg.Region,
@@ -115,13 +151,8 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 		publisher.Publish(topicSuffix, payload)
 
-		msgResp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(f.queueURL),
-			MaxNumberOfMessages: 1,
-			WaitTimeSeconds:     5,
-		})
-		require.NoError(t, err)
-		require.Len(t, msgResp.Messages, 1)
+		messages := receiveMessages(t, f, 1)
+		require.Len(t, messages, 1)
 
 		var snsNotification struct {
 			Type      string `json:"Type"`
@@ -131,7 +162,7 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			Message   string `json:"Message"`
 			Timestamp string `json:"Timestamp"`
 		}
-		err = json.Unmarshal([]byte(*msgResp.Messages[0].Body), &snsNotification)
+		err = json.Unmarshal([]byte(*messages[0].Body), &snsNotification)
 		require.NoError(t, err)
 
 		assert.Equal(t, "Notification", snsNotification.Type)
@@ -148,8 +179,6 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 	t.Run("PublishMultipleMessages", func(t *testing.T) {
 		f := setupSNSFixture(t, localStack, "multiple-messages")
-		ctx := context.Background()
-
 		cfg := &Configuration{
 			Enabled:     true,
 			Region:      f.awsCfg.Region,
@@ -174,16 +203,11 @@ func TestSNSPublisherIntegration(t *testing.T) {
 			publisher.Publish(m.topicSuffix, m.payload)
 		}
 
-		msgResp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(f.queueURL),
-			MaxNumberOfMessages: 10,
-			WaitTimeSeconds:     5,
-		})
-		require.NoError(t, err)
-		assert.Len(t, msgResp.Messages, 3, "should receive all 3 messages")
+		messages := receiveMessages(t, f, len(metrics))
+		require.Len(t, messages, len(metrics), "should receive every published message")
 
 		subjects := make(map[string]string)
-		for _, msg := range msgResp.Messages {
+		for _, msg := range messages {
 			var snsNotification struct {
 				Subject string `json:"Subject"`
 				Message string `json:"Message"`
@@ -200,8 +224,6 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 	t.Run("CustomTopicPrefix", func(t *testing.T) {
 		f := setupSNSFixture(t, localStack, "custom-prefix")
-		ctx := context.Background()
-
 		customCfg := &Configuration{
 			Enabled:     true,
 			Region:      f.awsCfg.Region,
@@ -218,18 +240,13 @@ func TestSNSPublisherIntegration(t *testing.T) {
 
 		customPublisher.Publish(topicSuffix, payload)
 
-		msgResp, err := f.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(f.queueURL),
-			MaxNumberOfMessages: 1,
-			WaitTimeSeconds:     5,
-		})
-		require.NoError(t, err)
-		require.Len(t, msgResp.Messages, 1)
+		messages := receiveMessages(t, f, 1)
+		require.Len(t, messages, 1)
 
 		var snsNotification struct {
 			Subject string `json:"Subject"`
 		}
-		err = json.Unmarshal([]byte(*msgResp.Messages[0].Body), &snsNotification)
+		err = json.Unmarshal([]byte(*messages[0].Body), &snsNotification)
 		require.NoError(t, err)
 
 		assert.Equal(t, "custom-prefix/controller-1/epever/device-temp", snsNotification.Subject)
