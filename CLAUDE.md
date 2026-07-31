@@ -28,6 +28,7 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `testdata/` | Modbus simulator configuration | Testing with simulated hardware |
 | `docs/` | Modbus register documentation, and `api-contract.json` | Understanding Epever register mappings, or changing an API field name |
 | `package/` | System packaging (deb, rpm) via nfpm | Changing release packaging |
+| `scripts/` | Coverage gate script and its per-package floors | Changing the coverage gate, or ratcheting a floor |
 | `Makefile` | Build, test, deploy orchestration | Modifying build targets or CI commands |
 | `Dockerfile` | Production container image | Changing container build or runtime |
 | `Dockerfile.build` | Cross-compilation build container | Changing ARM64 cross-build process |
@@ -106,7 +107,7 @@ publish artifacts that have not passed these gates:
 | Job | Enforces |
 |-----|----------|
 | `build-frontend` | `vite build` succeeds; publishes the `site-build` artifact the other jobs embed |
-| `test` | `go.mod`/`go.sum` are tidy, `go mod verify` passes, and `make test-coverage` clears the coverage gate |
+| `test` | `go.mod`/`go.sum` are tidy, `go mod verify` passes, and `make test-coverage` clears the coverage gate (see below) |
 | `lint` | `golangci-lint` (including `gosec`) over the Go tree |
 | `frontend` | ESLint, `tsc --noEmit`, and the vitest suite over `site/` |
 | `vulncheck` | `govulncheck` finds no reachable vulnerability, including in the standard library |
@@ -120,6 +121,23 @@ tag for readability.
 
 Release images are scanned with Trivy before the multi-arch manifest is pushed,
 and are published with an SBOM and build provenance attestation.
+
+#### The coverage gate
+
+`make test-coverage` enforces a per-package floor as well as the overall total,
+via `scripts/check-coverage.sh` reading `scripts/coverage-floors.txt`. A
+total-only gate hides weak packages behind well-tested ones —
+`internal/controllers/epever` holds most of the statements in the module, so a
+change that guts its coverage can still raise the total by adding a small,
+heavily tested package.
+
+The floors are a ratchet: each one is the coverage measured when it was
+recorded, rounded down. Raise a floor when you raise its coverage; never lower
+one to make a build pass. Every package in the coverage profile must appear in
+the file — an unlisted package fails the check, so adding a package forces a
+deliberate decision about its floor. Packages with no test files are listed with
+a floor of `0` so they stay visible as gaps rather than vanishing from the
+report. `COVERAGE_THRESHOLD` still sets the total.
 
 ### Using Make (Recommended)
 

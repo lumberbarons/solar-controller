@@ -10,8 +10,10 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 # Build flags
 LDFLAGS := -X 'main.Version=$(VERSION)' -X 'main.BuildTime=$(BUILD_TIME)' -X 'main.GitCommit=$(GIT_COMMIT)'
 
-# Minimum total statement coverage (%) enforced by test-coverage
+# Minimum total statement coverage (%) enforced by test-coverage. Per-package
+# floors live in scripts/coverage-floors.txt; both are checked.
 COVERAGE_THRESHOLD ?= 62
+COVERAGE_FLOORS ?= scripts/coverage-floors.txt
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -48,12 +50,9 @@ test: test-unit ## Run unit tests (default)
 test-unit: ## Run unit tests only
 	go test -v -race ./...
 
-test-coverage: ## Run unit tests and fail if coverage is below COVERAGE_THRESHOLD
+test-coverage: ## Run unit tests and fail if total or any package is below its floor
 	go test -v -race -coverprofile=coverage.out ./...
-	@grep -v '/internal/testutil/' coverage.out > coverage-filtered.out
-	@go tool cover -func=coverage-filtered.out | tail -1 | awk -v threshold=$(COVERAGE_THRESHOLD) \
-		'{ gsub(/%/, "", $$3); printf "total statement coverage (excluding testutil): %s%% (threshold: %s%%)\n", $$3, threshold; \
-		if ($$3 + 0 < threshold) { print "FAIL: coverage below threshold"; exit 1 } }'
+	@./scripts/check-coverage.sh coverage.out $(COVERAGE_FLOORS) $(COVERAGE_THRESHOLD)
 
 test-int: ## Run integration tests (requires Docker)
 	go test -v -race -tags=integration ./...
