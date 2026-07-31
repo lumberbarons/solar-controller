@@ -3,8 +3,10 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/controllers/voltgo"
 	"github.com/lumberbarons/solar-controller/internal/publishers/file"
 	"github.com/lumberbarons/solar-controller/internal/publishers/mqtt"
 	"github.com/lumberbarons/solar-controller/internal/publishers/sns"
@@ -255,6 +257,105 @@ solarController:
 `,
 			wantErr: true,
 			errMsg:  "epever publish period must be positive",
+		},
+		{
+			name: "voltgo configuration valid with all fields",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+  voltgo:
+    enabled: true
+    address: AA:BB:CC:DD:EE:FF
+    publishPeriod: 120
+    connectTimeout: 45s
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if !c.SolarController.Voltgo.Enabled {
+					t.Error("Voltgo should be enabled")
+				}
+				if c.SolarController.Voltgo.Address != "AA:BB:CC:DD:EE:FF" {
+					t.Errorf("Voltgo Address = %s, want AA:BB:CC:DD:EE:FF", c.SolarController.Voltgo.Address)
+				}
+				if c.SolarController.Voltgo.PublishPeriod != 120 {
+					t.Errorf("Voltgo PublishPeriod = %d, want 120", c.SolarController.Voltgo.PublishPeriod)
+				}
+				if got := c.SolarController.Voltgo.GetConnectTimeout(); got != 45*time.Second {
+					t.Errorf("Voltgo ConnectTimeout = %s, want 45s", got)
+				}
+			},
+		},
+		{
+			name: "voltgo disabled needs no other fields",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+  voltgo:
+    enabled: false
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				if c.SolarController.Voltgo.Enabled {
+					t.Error("Voltgo should be disabled")
+				}
+			},
+		},
+		{
+			name: "voltgo enabled but no address",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    address: ""
+    publishPeriod: 60
+`,
+			wantErr: true,
+			errMsg:  "voltgo address is required",
+		},
+		{
+			name: "voltgo enabled but zero publish period",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    address: AA:BB:CC:DD:EE:FF
+    publishPeriod: 0
+`,
+			wantErr: true,
+			errMsg:  "voltgo publish period must be positive",
+		},
+		{
+			name: "voltgo enabled but negative publish period",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    address: AA:BB:CC:DD:EE:FF
+    publishPeriod: -10
+`,
+			wantErr: true,
+			errMsg:  "voltgo publish period must be positive",
+		},
+		{
+			name: "voltgo enabled but unparseable connect timeout",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    address: AA:BB:CC:DD:EE:FF
+    publishPeriod: 60
+    connectTimeout: not-a-duration
+`,
+			wantErr: true,
+			errMsg:  "invalid voltgo configuration",
 		},
 		{
 			name: "MQTT configuration valid with all fields",
@@ -786,6 +887,59 @@ func TestConfig_Validate(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "epever publish period must be positive",
+		},
+		{
+			name: "Voltgo enabled but no address",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Voltgo:   voltgo.Configuration{Enabled: true, Address: "", PublishPeriod: 60},
+				},
+			},
+			wantErr: true,
+			errMsg:  "voltgo address is required",
+		},
+		{
+			name: "Voltgo enabled but zero publish period",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Voltgo:   voltgo.Configuration{Enabled: true, Address: "AA:BB:CC:DD:EE:FF", PublishPeriod: 0},
+				},
+			},
+			wantErr: true,
+			errMsg:  "voltgo publish period must be positive",
+		},
+		{
+			name: "Voltgo enabled but unparseable connect timeout",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Voltgo: voltgo.Configuration{
+						Enabled:        true,
+						Address:        "AA:BB:CC:DD:EE:FF",
+						PublishPeriod:  60,
+						ConnectTimeout: "not-a-duration",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "invalid voltgo configuration",
+		},
+		{
+			name: "Voltgo enabled and fully configured",
+			config: Config{
+				SolarController: SolarControllerConfiguration{
+					HTTPPort: 8080,
+					Voltgo: voltgo.Configuration{
+						Enabled:        true,
+						Address:        "AA:BB:CC:DD:EE:FF",
+						PublishPeriod:  60,
+						ConnectTimeout: "45s",
+					},
+				},
+			},
+			wantErr: false,
 		},
 	}
 

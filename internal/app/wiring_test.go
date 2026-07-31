@@ -213,7 +213,7 @@ func TestDefaultControllerFactories(t *testing.T) {
 		names = append(names, factory.name)
 	}
 
-	assert.Equal(t, []string{"epever"}, names)
+	assert.Equal(t, []string{"epever", "voltgo"}, names)
 }
 
 // The real epever constructor is exercised here rather than through a fake, so
@@ -246,6 +246,39 @@ func TestDefaultFactories_EpeverNotStartedWithoutSerialPort(t *testing.T) {
 			// unmatched path, so a status code cannot show a route is absent.
 			assert.NotContains(t, registeredPaths(app), "/api/epever/metrics",
 				"epever endpoints were registered for a controller that never started")
+		})
+	}
+}
+
+// As for epever above, the real voltgo constructor is used. The enabled-with-an-
+// address case is absent because that path opens a BLE adapter, which no CI
+// machine has.
+func TestDefaultFactories_VoltgoNotStartedWithoutAddress(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name    string
+		enabled bool
+	}{
+		{name: "disabled", enabled: false},
+		{name: "enabled but no address", enabled: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := minimalConfig()
+			cfg.SolarController.Voltgo.Enabled = tt.enabled
+
+			app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
+			require.NoError(t, err)
+			defer app.Close()
+
+			assert.Empty(t, app.controllers)
+
+			assert.NotContains(t, registeredPaths(app), "/api/voltgo/metrics",
+				"voltgo endpoints were registered for a controller that never started")
+			assert.NotContains(t, registeredPaths(app), "/api/voltgo/info",
+				"voltgo endpoints were registered for a controller that never started")
 		})
 	}
 }

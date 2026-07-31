@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/controllers/voltgo"
 	"github.com/lumberbarons/solar-controller/internal/publishers/file"
 	"github.com/lumberbarons/solar-controller/internal/publishers/mqtt"
 	"github.com/lumberbarons/solar-controller/internal/publishers/remotewrite"
@@ -29,6 +30,7 @@ type SolarControllerConfiguration struct {
 	File        file.Configuration        `yaml:"file"`
 	RemoteWrite remotewrite.Configuration `yaml:"remoteWrite"`
 	Epever      epever.Configuration      `yaml:"epever"`
+	Voltgo      voltgo.Configuration      `yaml:"voltgo"`
 }
 
 // AuthConfiguration holds API authentication settings. When Token is set,
@@ -161,6 +163,19 @@ func (c *Config) Validate() error {
 		}
 		if c.SolarController.Epever.PublishPeriod <= 0 {
 			return fmt.Errorf("epever publish period must be positive")
+		}
+	}
+
+	// Validate Voltgo configuration if enabled
+	if c.SolarController.Voltgo.Enabled {
+		if c.SolarController.Voltgo.Address == "" {
+			return fmt.Errorf("voltgo address is required when voltgo is enabled")
+		}
+		if c.SolarController.Voltgo.PublishPeriod <= 0 {
+			return fmt.Errorf("voltgo publish period must be positive")
+		}
+		if err := c.SolarController.Voltgo.Validate(); err != nil {
+			return fmt.Errorf("invalid voltgo configuration: %w", err)
 		}
 	}
 
