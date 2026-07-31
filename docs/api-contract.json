@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "The JSON field names each HTTP endpoint emits, as a sorted list per endpoint.",
+    "This file is the contract between the Go handlers and the React frontend, and",
+    "it is verified from both sides so a rename cannot slip through to runtime:",
+    "",
+    "  - internal/app/api_contract_test.go and",
+    "    internal/controllers/epever/api_contract_test.go drive the real handlers",
+    "    and assert the keys they actually return match the lists below.",
+    "  - site/src/api/types.test.ts asserts the field arrays in site/src/api/types.ts",
+    "    match the lists below.",
+    "",
+    "Renaming a field on either side therefore fails CI until this file and the",
+    "other side are updated to agree. Keep each list sorted."
+  ],
+  "endpoints": {
+    "GET /api/info": [
+      "buildTime",
+      "gitCommit",
+      "version"
+    ],
+    "GET /api/epever/metrics": [
+      "arrayCurrent",
+      "arrayPower",
+      "arrayVoltage",
+      "batterySoc",
+      "batteryTemp",
+      "batteryVoltage",
+      "chargingCurrent",
+      "chargingPower",
+      "chargingStatus",
+      "collectionTime",
+      "deviceTemp",
+      "energyGeneratedDaily",
+      "timestamp"
+    ],
+    "GET /api/epever/battery-profile": [
+      "batteryCapacity",
+      "batteryType",
+      "tempCompCoefficient"
+    ],
+    "GET /api/epever/charging-parameters": [
+      "batteryTempLowerLimit",
+      "batteryTempUpperLimit",
+      "boostDuration",
+      "boostReconnectChargingVoltage",
+      "boostVoltage",
+      "chargingLimitVoltage",
+      "controllerTempLowerLimit",
+      "controllerTempUpperLimit",
+      "dischargingLimitVoltage",
+      "equalizationCycle",
+      "equalizationDuration",
+      "equalizationVoltage",
+      "floatVoltage",
+      "lowVoltDisconnectVoltage",
+      "lowVoltReconnectVoltage",
+      "overVoltDisconnectVoltage",
+      "overVoltReconnectVoltage",
+      "underVoltWarningReconnectVoltage",
+      "underVoltWarningVoltage"
+    ],
+    "GET /api/epever/time": [
+      "time"
+    ]
+  }
+}

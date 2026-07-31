@@ -5,11 +5,24 @@ run:
 linters:
   enable:
     - gocritic
+    - gosec
     - misspell
     - revive
   settings:
     errcheck:
       check-blank: true
+    gosec:
+      excludes:
+        # G115 (integer overflow on conversion) fires on every Modbus register
+        # decode. Reading a signed register is a same-width two's-complement
+        # reinterpretation (uint16 -> int16), which cannot overflow, and the
+        # RTC writes convert time fields whose ranges time.Time guarantees fit
+        # in a byte. Every occurrence in this codebase is a false positive, and
+        # each new register decode would add another, so the rule is excluded
+        # rather than annotated at ~10 call sites. All other gosec rules —
+        # notably hardcoded credentials, file permissions, and TLS config —
+        # remain blocking.
+        - G115
     gocritic:
       enabled-tags:
         - diagnostic

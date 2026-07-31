@@ -1,0 +1,36 @@
+# Minimum statement coverage per package, enforced by scripts/check-coverage.sh
+# on every `make test-coverage` run.
+#
+# These are a ratchet, not a target: each floor is the coverage measured when it
+# was recorded, rounded down. That means the gate cannot regress a package, and
+# it does not fail the build today. Raise a floor when you raise its coverage —
+# never lower one to make a build pass.
+#
+# Every package in the coverage profile must be listed here. An unlisted package
+# fails the check, so adding a package forces a deliberate decision about its
+# floor rather than letting it slip in invisibly.
+#
+# A package with no test files produces no entries in the coverage profile and is
+# therefore measured as 0%. Those are listed explicitly with a floor of 0 so they
+# are visible as gaps rather than silently absent.
+#
+# Format: <package path relative to the module root> <floor percentage>
+
+cmd/controller                       46
+internal/app                         92
+internal/config                      100
+internal/controllers/epever          56
+internal/controllers/epever/parser   97
+internal/controllers/voltgo          81
+internal/publishers                  90
+internal/publishers/file             92
+internal/publishers/mqtt             73
+internal/publishers/remotewrite      84
+internal/publishers/sns              40
+internal/publishers/solace           34
+
+# No tests yet. Both are real gaps, not exemptions:
+#   internal/publish  - MessagePublisher interface and NoOpPublisher
+#   internal/static   - embedded SPA filesystem and fallback routing
+internal/publish                     0
+internal/static                      0

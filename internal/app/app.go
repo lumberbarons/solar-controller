@@ -27,8 +27,31 @@ type Application struct {
 	router      *gin.Engine
 	server      *http.Server
 	publisher   publish.MessagePublisher
+	factories   []controllerFactory
 	controllers []controllers.SolarController
 	version     VersionInfo
+}
+
+// controllerFactory builds one hardware controller from configuration. Wiring
+// goes through this indirection so tests can assert which controllers get built
+// for a given config, and that each one receives the publisher, without needing
+// the real hardware: the production constructors open a serial port eagerly.
+type controllerFactory struct {
+	name  string
+	build func(cfg *config.SolarControllerConfiguration, publisher publish.MessagePublisher) (controllers.SolarController, error)
+}
+
+// defaultControllerFactories lists every controller the application can start.
+// Adding a controller means adding an entry here.
+func defaultControllerFactories() []controllerFactory {
+	return []controllerFactory{
+		{
+			name: "epever",
+			build: func(cfg *config.SolarControllerConfiguration, publisher publish.MessagePublisher) (controllers.SolarController, error) {
+				return epever.NewControllerFromConfig(cfg.Epever, publisher, cfg.DeviceID)
+			},
+		},
+	}
 }
 
 // VersionInfo holds version metadata about the application.
@@ -41,10 +64,15 @@ type VersionInfo struct {
 // NewApplication creates and initializes a new Application instance.
 // It sets up the HTTP router, initializes controllers, and registers endpoints.
 func NewApplication(cfg *config.Config, publisher publish.MessagePublisher, version VersionInfo) (*Application, error) {
+	return newApplication(cfg, publisher, version, defaultControllerFactories())
+}
+
+func newApplication(cfg *config.Config, publisher publish.MessagePublisher, version VersionInfo, factories []controllerFactory) (*Application, error) {
 	app := &Application{
 		config:    cfg,
 		publisher: publisher,
 		version:   version,
+		factories: factories,
 	}
 
 	// Initialize router
@@ -95,18 +123,22 @@ func authMiddleware(token string) gin.HandlerFunc {
 	}
 }
 
-// buildControllers initializes all solar equipment controllers based on configuration.
+// buildControllers initializes all solar equipment controllers based on
+// configuration. A controller that reports itself disabled — because config
+// turned it off, or because it is enabled but missing a required field — is
+// dropped rather than started.
 func (a *Application) buildControllers() error {
 	var ctrlList []controllers.SolarController
 
-	// Initialize Epever controller
-	epeverController, err := epever.NewControllerFromConfig(a.config.SolarController.Epever, a.publisher, a.config.SolarController.DeviceID)
-	if err != nil {
-		return fmt.Errorf("failed to create epever controller: %w", err)
-	}
+	for _, factory := range a.factories {
+		controller, err := factory.build(&a.config.SolarController, a.publisher)
+		if err != nil {
+			return fmt.Errorf("failed to create %s controller: %w", factory.name, err)
+		}
 
-	if epeverController.Enabled() {
-		ctrlList = append(ctrlList, epeverController)
+		if controller.Enabled() {
+			ctrlList = append(ctrlList, controller)
+		}
 	}
 
 	a.controllers = ctrlList

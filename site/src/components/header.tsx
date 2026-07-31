@@ -1,6 +1,3 @@
-import React from 'react';
-import PropTypes from 'prop-types';
-
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faSun } from '@fortawesome/free-solid-svg-icons'
 
@@ -13,6 +10,8 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
 
+import type { VersionInfo } from '../api/types';
+
 const Root = styled('div')({
   flexGrow: 1,
 });
@@ -22,12 +21,16 @@ const Title = styled(Typography)({
   alignItems: 'center',
 });
 
-function Header({ version }) {
+type HeaderProps = {
+  version: VersionInfo | null;
+};
+
+function Header({ version }: HeaderProps) {
   const location = useLocation();
 
   // Determine current tab based on path
   const getCurrentTab = () => {
-    switch(location.pathname) {
+    switch (location.pathname) {
       case '/':
         return 0;
       case '/config':
@@ -71,10 +74,15 @@ function Header({ version }) {
             <Tabs
               value={getCurrentTab()}
               textColor="inherit"
-              TabIndicatorProps={{
-                style: {
-                  backgroundColor: '#fff',
-                  height: 3
+              // MUI removed TabIndicatorProps in v7; the equivalent is the
+              // indicator slot. The old prop was silently ignored, so the
+              // indicator did not actually pick up these styles.
+              slotProps={{
+                indicator: {
+                  style: {
+                    backgroundColor: '#fff',
+                    height: 3
+                  }
                 }
               }}
               sx={{
@@ -103,11 +111,5 @@ function Header({ version }) {
     </Root>
   );
 }
-
-Header.propTypes = {
-  version: PropTypes.shape({
-    version: PropTypes.string
-  })
-};
 
 export default Header;

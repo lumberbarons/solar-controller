@@ -6,12 +6,19 @@ import { Grid, Box, Alert, IconButton, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 import Metric from "../components/metric"
+import { CHARGING_STATUS_LABELS, type EpeverMetrics } from '../api/types';
 
-class Main extends React.Component {
-  constructor(props) {
+type MainState = {
+  metrics: Partial<EpeverMetrics>;
+  error: string | undefined;
+  loading: boolean;
+};
+
+class Main extends React.Component<Record<string, never>, MainState> {
+  constructor(props: Record<string, never>) {
     super(props);
 
-    this.state = {metrics: {}, error: undefined, loading: false};
+    this.state = { metrics: {}, error: undefined, loading: false };
 
     this.fetchMetrics = this.fetchMetrics.bind(this);
   }
@@ -21,41 +28,26 @@ class Main extends React.Component {
   }
 
   fetchMetrics() {
-    this.setState({loading: true});
+    this.setState({ loading: true });
 
-    axios.get(`/api/epever/metrics`)
+    axios.get<EpeverMetrics>(`/api/epever/metrics`)
       .then(res => {
-        this.setState({metrics: res.data, error: undefined, loading: false});
+        this.setState({ metrics: res.data, error: undefined, loading: false });
       }).catch(error => {
-        console.error(JSON.stringify(error));
-        const errorMessage = error.response
+        console.error('Failed to load metrics:', error);
+        const errorMessage = axios.isAxiosError(error) && error.response
           ? `Failed to load metrics: ${error.response.status} ${error.response.statusText}`
-          : `Failed to load metrics: ${error.message}`;
-        this.setState({metrics: {}, error: errorMessage, loading: false});
+          : `Failed to load metrics: ${(error as Error).message}`;
+        this.setState({ metrics: {}, error: errorMessage, loading: false });
       });
   }
-  
+
   render() {
     const metrics = this.state.metrics || {};
 
-    let chargingStatus;
-    switch(metrics.chargingStatus) {
-      case 0:
-        chargingStatus = "Not charging";
-        break;
-      case 1:
-        chargingStatus = "Float";
-        break;
-      case 2:
-        chargingStatus = "Boost";
-        break;
-      case 3:
-        chargingStatus = "Equalization";
-        break;
-      default:
-        chargingStatus = "Unknown";
-        break;
-    }
+    const chargingStatus = metrics.chargingStatus === undefined
+      ? "Unknown"
+      : CHARGING_STATUS_LABELS[metrics.chargingStatus] ?? "Unknown";
 
     return (
       <>

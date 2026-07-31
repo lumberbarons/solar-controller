@@ -4,8 +4,67 @@ import axios from 'axios';
 import { Box, Grid, Alert, Typography, Paper } from '@mui/material';
 import { FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
 
-class Config extends React.Component {
-  constructor(props) {
+import {
+  EDITABLE_DURATION_FIELDS,
+  EDITABLE_VOLTAGE_FIELDS,
+  type ApiError,
+  type BatteryProfile,
+  type BatteryProfileForm,
+  type BatteryProfilePatch,
+  type BatteryType,
+  type ChargingParameters,
+  type ChargingParametersForm,
+  type ChargingParametersPatch,
+} from '../api/types';
+
+/**
+ * Accepts both a text input's ChangeEvent and MUI's SelectChangeEvent, which
+ * share the name/value shape this component reads but differ in type.
+ */
+type FieldChangeEvent = { target: { name: string; value: unknown } };
+
+type ConfigState = {
+  batteryProfile: BatteryProfileForm | undefined;
+  originalBatteryProfile: BatteryProfile | undefined;
+  chargingParameters: ChargingParametersForm | undefined;
+  originalChargingParameters: ChargingParameters | undefined;
+  loadError: string | undefined;
+  saveError: string | undefined;
+  successMessage: string | undefined;
+  loading: boolean;
+  batteryProfileSaved: boolean;
+};
+
+/** Reads `{"error": "..."}` out of a Gin error response, if present. */
+function backendErrorMessage(error: unknown): string | undefined {
+  if (axios.isAxiosError<ApiError>(error) && error.response) {
+    return error.response.data?.error;
+  }
+  return undefined;
+}
+
+/**
+ * Builds the "Failed to ...: reason" message for a request failure, preferring
+ * the backend's own error text, then the HTTP status, then the transport error.
+ * Every failure produces a message, so a rejected request can never leave the
+ * screen silently unchanged.
+ */
+function requestErrorMessage(prefix: string, error: unknown): string {
+  const backendError = backendErrorMessage(error);
+  if (backendError) {
+    return `${prefix}: ${backendError}`;
+  }
+  if (axios.isAxiosError(error) && error.response) {
+    return `${prefix}: ${error.response.status} ${error.response.statusText}`;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return `${prefix}: ${message}`;
+}
+
+class Config extends React.Component<Record<string, never>, ConfigState> {
+  private successTimer: ReturnType<typeof setTimeout> | null;
+
+  constructor(props: Record<string, never>) {
     super(props);
 
     this.state = {
@@ -40,7 +99,7 @@ class Config extends React.Component {
     }
   }
 
-  setSuccessMessage(message) {
+  setSuccessMessage(message: string) {
     // Clear any existing timer
     if (this.successTimer) {
       clearTimeout(this.successTimer);
@@ -56,21 +115,27 @@ class Config extends React.Component {
     }, 4000);
   }
 
+  /** Drops a pending auto-dismiss so an error is not cleared by an earlier success. */
+  clearSuccessTimer() {
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+      this.successTimer = null;
+    }
+  }
+
   fetchConfig() {
-    this.setState({loading: true});
+    this.setState({ loading: true });
 
     // Fetch both battery profile and charging parameters
     Promise.all([
-      axios.get(`/api/epever/battery-profile`),
-      axios.get(`/api/epever/charging-parameters`)
+      axios.get<BatteryProfile>(`/api/epever/battery-profile`),
+      axios.get<ChargingParameters>(`/api/epever/charging-parameters`)
     ])
       .then(([profileRes, paramsRes]) => {
-        let profileClone = JSON.parse(JSON.stringify(profileRes.data));
-        let paramsClone = JSON.parse(JSON.stringify(paramsRes.data));
         this.setState({
-          originalBatteryProfile: profileClone,
+          originalBatteryProfile: structuredClone(profileRes.data),
           batteryProfile: profileRes.data,
-          originalChargingParameters: paramsClone,
+          originalChargingParameters: structuredClone(paramsRes.data),
           chargingParameters: paramsRes.data,
           loadError: undefined,
           saveError: undefined,
@@ -79,213 +144,140 @@ class Config extends React.Component {
           batteryProfileSaved: profileRes.data.batteryType === 'userDefined'
         });
       }).catch(error => {
-        console.error(JSON.stringify(error));
-        const errorMessage = error.response
-          ? `Failed to load configuration: ${error.response.status} ${error.response.statusText}`
-          : `Failed to load configuration: ${error.message}`;
+        console.error('Failed to load configuration:', error);
         this.setState({
-          loadError: errorMessage,
+          loadError: requestErrorMessage('Failed to load configuration', error),
           loading: false
         });
       });
   }
 
-  handleBatteryProfileChange(event) {
-    const value = event.target.value;
-    const name = event.target.name;
+  handleBatteryProfileChange(event: FieldChangeEvent) {
+    const name = event.target.name as keyof BatteryProfileForm;
+    const value = event.target.value as BatteryProfileForm[typeof name];
 
-    let batteryProfile = this.state.batteryProfile;
-    batteryProfile[name] = value;
-
-    this.setState({
-      batteryProfile: batteryProfile
-    });
+    this.setState(prev => (
+      prev.batteryProfile
+        ? { batteryProfile: { ...prev.batteryProfile, [name]: value } }
+        : null
+    ));
   }
 
-  handleChargingParametersChange(event) {
-    const value = event.target.value;
-    const name = event.target.name;
+  handleChargingParametersChange(event: FieldChangeEvent) {
+    const name = event.target.name as keyof ChargingParametersForm;
+    const value = event.target.value as ChargingParametersForm[typeof name];
 
-    let chargingParameters = this.state.chargingParameters;
-    chargingParameters[name] = value;
-
-    this.setState({
-      chargingParameters: chargingParameters
-    });
+    this.setState(prev => (
+      prev.chargingParameters
+        ? { chargingParameters: { ...prev.chargingParameters, [name]: value } }
+        : null
+    ));
   }
 
-  handleBatteryProfileSubmit(event) {
-    const payload = {};
+  handleBatteryProfileSubmit(event: React.FormEvent) {
+    event.preventDefault();
 
     const original = this.state.originalBatteryProfile;
     const current = this.state.batteryProfile;
-
-    if(current.batteryType !== original.batteryType) {
-      payload.batteryType = current.batteryType;
+    if (!original || !current) {
+      return;
     }
 
-    if(current.batteryCapacity !== original.batteryCapacity) {
-      payload.batteryCapacity = parseInt(current.batteryCapacity);
+    // Send only what changed, so an untouched field is never rewritten to EEPROM
+    const payload: BatteryProfilePatch = {};
+
+    if (current.batteryType !== original.batteryType) {
+      payload.batteryType = current.batteryType as BatteryType;
     }
 
-    if(current.tempCompCoefficient !== original.tempCompCoefficient) {
-      payload.tempCompCoefficient = parseFloat(current.tempCompCoefficient);
+    if (current.batteryCapacity !== original.batteryCapacity) {
+      payload.batteryCapacity = parseInt(String(current.batteryCapacity));
     }
 
-    axios.patch(`/api/epever/battery-profile`, payload)
+    if (current.tempCompCoefficient !== original.tempCompCoefficient) {
+      payload.tempCompCoefficient = parseFloat(String(current.tempCompCoefficient));
+    }
+
+    axios.patch<BatteryProfile>(`/api/epever/battery-profile`, payload)
       .then(res => {
-        let profileClone = JSON.parse(JSON.stringify(res.data));
-        const isUserDefined = res.data.batteryType === 'userDefined';
         this.setState({
-          originalBatteryProfile: profileClone,
+          originalBatteryProfile: structuredClone(res.data),
           batteryProfile: res.data,
           saveError: undefined,
-          batteryProfileSaved: isUserDefined
+          batteryProfileSaved: res.data.batteryType === 'userDefined'
         });
         this.setSuccessMessage('Battery profile saved successfully!');
 
         // Auto-refresh charging parameters after battery profile save
-        return axios.get(`/api/epever/charging-parameters`);
+        return axios.get<ChargingParameters>(`/api/epever/charging-parameters`);
       })
       .then(paramsRes => {
-        let paramsClone = JSON.parse(JSON.stringify(paramsRes.data));
         this.setState({
-          originalChargingParameters: paramsClone,
+          originalChargingParameters: structuredClone(paramsRes.data),
           chargingParameters: paramsRes.data
         });
       })
       .catch(error => {
-        let errorMessage;
-        if (error.response) {
-          // Check if backend returned a detailed error message
-          const backendError = error.response.data?.error;
-          if (backendError) {
-            errorMessage = `Failed to save battery profile: ${backendError}`;
-          } else {
-            errorMessage = `Failed to save battery profile: ${error.response.status} ${error.response.statusText}`;
-          }
-        } else {
-          errorMessage = `Failed to save battery profile: ${error.message}`;
-        }
-        this.setState({saveError: errorMessage, successMessage: undefined});
-        // Clear success timer on error
-        if (this.successTimer) {
-          clearTimeout(this.successTimer);
-          this.successTimer = null;
-        }
+        this.setState({
+          saveError: requestErrorMessage('Failed to save battery profile', error),
+          successMessage: undefined
+        });
+        this.clearSuccessTimer();
       });
-
-    event.preventDefault();
   }
 
-  handleChargingParametersSubmit(event) {
-    const payload = {};
+  handleChargingParametersSubmit(event: React.FormEvent) {
+    event.preventDefault();
 
     const original = this.state.originalChargingParameters;
     const current = this.state.chargingParameters;
-
-    // Track changes for all charging parameter fields
-    if(current.equalizationCycle !== original.equalizationCycle) {
-      payload.equalizationCycle = parseInt(current.equalizationCycle);
+    if (!original || !current) {
+      return;
     }
 
-    if(current.equalizationVoltage !== original.equalizationVoltage) {
-      payload.equalizationVoltage = parseFloat(current.equalizationVoltage);
+    // Send only changed fields. Durations are whole minutes or days on the
+    // device, so they are parsed as integers; everything else is a voltage.
+    const payload: ChargingParametersPatch = {};
+
+    for (const field of EDITABLE_DURATION_FIELDS) {
+      if (current[field] !== original[field]) {
+        payload[field] = parseInt(String(current[field]));
+      }
     }
 
-    if(current.equalizationDuration !== original.equalizationDuration) {
-      payload.equalizationDuration = parseInt(current.equalizationDuration);
+    for (const field of EDITABLE_VOLTAGE_FIELDS) {
+      if (current[field] !== original[field]) {
+        payload[field] = parseFloat(String(current[field]));
+      }
     }
 
-    if(current.boostVoltage !== original.boostVoltage) {
-      payload.boostVoltage = parseFloat(current.boostVoltage);
-    }
-
-    if(current.boostDuration !== original.boostDuration) {
-      payload.boostDuration = parseInt(current.boostDuration);
-    }
-
-    if(current.floatVoltage !== original.floatVoltage) {
-      payload.floatVoltage = parseFloat(current.floatVoltage);
-    }
-
-    if(current.chargingLimitVoltage !== original.chargingLimitVoltage) {
-      payload.chargingLimitVoltage = parseFloat(current.chargingLimitVoltage);
-    }
-
-    if(current.boostReconnectChargingVoltage !== original.boostReconnectChargingVoltage) {
-      payload.boostReconnectChargingVoltage = parseFloat(current.boostReconnectChargingVoltage);
-    }
-
-    if(current.overVoltDisconnectVoltage !== original.overVoltDisconnectVoltage) {
-      payload.overVoltDisconnectVoltage = parseFloat(current.overVoltDisconnectVoltage);
-    }
-
-    if(current.overVoltReconnectVoltage !== original.overVoltReconnectVoltage) {
-      payload.overVoltReconnectVoltage = parseFloat(current.overVoltReconnectVoltage);
-    }
-
-    if(current.lowVoltDisconnectVoltage !== original.lowVoltDisconnectVoltage) {
-      payload.lowVoltDisconnectVoltage = parseFloat(current.lowVoltDisconnectVoltage);
-    }
-
-    if(current.lowVoltReconnectVoltage !== original.lowVoltReconnectVoltage) {
-      payload.lowVoltReconnectVoltage = parseFloat(current.lowVoltReconnectVoltage);
-    }
-
-    if(current.underVoltWarningVoltage !== original.underVoltWarningVoltage) {
-      payload.underVoltWarningVoltage = parseFloat(current.underVoltWarningVoltage);
-    }
-
-    if(current.underVoltWarningReconnectVoltage !== original.underVoltWarningReconnectVoltage) {
-      payload.underVoltWarningReconnectVoltage = parseFloat(current.underVoltWarningReconnectVoltage);
-    }
-
-    if(current.dischargingLimitVoltage !== original.dischargingLimitVoltage) {
-      payload.dischargingLimitVoltage = parseFloat(current.dischargingLimitVoltage);
-    }
-
-    axios.patch(`/api/epever/charging-parameters`, payload)
+    axios.patch<ChargingParameters>(`/api/epever/charging-parameters`, payload)
       .then(res => {
-        let paramsClone = JSON.parse(JSON.stringify(res.data));
         this.setState({
-          originalChargingParameters: paramsClone,
+          originalChargingParameters: structuredClone(res.data),
           chargingParameters: res.data,
           saveError: undefined
         });
         this.setSuccessMessage('Charging parameters saved successfully!');
       }).catch(error => {
-        let errorMessage;
-        if (error.response) {
-          // Check if backend returned a detailed error message
-          const backendError = error.response.data?.error;
-          if (backendError) {
-            errorMessage = `Failed to save charging parameters: ${backendError}`;
-          } else {
-            errorMessage = `Failed to save charging parameters: ${error.response.status} ${error.response.statusText}`;
-          }
-        } else {
-          errorMessage = `Failed to save charging parameters: ${error.message}`;
-        }
-        this.setState({saveError: errorMessage, successMessage: undefined});
-        // Clear success timer on error
-        if (this.successTimer) {
-          clearTimeout(this.successTimer);
-          this.successTimer = null;
-        }
+        this.setState({
+          saveError: requestErrorMessage('Failed to save charging parameters', error),
+          successMessage: undefined
+        });
+        this.clearSuccessTimer();
       });
-
-    event.preventDefault();
   }
 
   render() {
-    const batteryProfile = this.state.batteryProfile || { batteryType: '', batteryCapacity: '', tempCompCoefficient: '' };
-    const chargingParameters = this.state.chargingParameters || {
+    const batteryProfile: BatteryProfileForm = this.state.batteryProfile || { batteryType: '', batteryCapacity: '', tempCompCoefficient: '' };
+    const chargingParameters: ChargingParametersForm = this.state.chargingParameters || {
       boostDuration: '', equalizationCycle: '', equalizationDuration: '',
       boostVoltage: '', boostReconnectChargingVoltage: '', floatVoltage: '',
       equalizationVoltage: '', chargingLimitVoltage: '', overVoltDisconnectVoltage: '',
       overVoltReconnectVoltage: '', lowVoltDisconnectVoltage: '', lowVoltReconnectVoltage: '',
-      underVoltWarningVoltage: '', underVoltWarningReconnectVoltage: '', dischargingLimitVoltage: ''
+      underVoltWarningVoltage: '', underVoltWarningReconnectVoltage: '', dischargingLimitVoltage: '',
+      batteryTempUpperLimit: '', batteryTempLowerLimit: '',
+      controllerTempUpperLimit: '', controllerTempLowerLimit: ''
     };
     const isUserDefined = batteryProfile.batteryType === 'userDefined';
     const hasLoadError = !!this.state.loadError;
