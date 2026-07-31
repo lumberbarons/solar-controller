@@ -5,3 +5,13 @@ solarController:
     enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 30
+
+  # Voltgo battery over Bluetooth LE. Needs bluez running, the battery's BLE
+  # address, and permission for the solar-controller user to talk to org.bluez
+  # (see the Bluetooth LE section of the README). An enabled section without an
+  # address fails startup, so this stays commented out until it is filled in.
+  # voltgo:
+  #   enabled: true
+  #   address: AA:BB:CC:DD:EE:FF
+  #   publishPeriod: 60
+  #   connectTimeout: 30s

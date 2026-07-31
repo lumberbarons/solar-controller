@@ -1,10 +1,12 @@
 # solar-controller
 
-A Go-based service that collects metrics from solar power equipment (Epever) and publishes them via multiple backends (MQTT, Solace, File, or Prometheus Remote Write). Metrics are also exposed via Prometheus scraping endpoint. It includes a React-based web UI for monitoring.
+A Go-based service that collects metrics from solar power equipment — Epever charge controllers over Modbus and Voltgo batteries over Bluetooth LE — and publishes them via multiple backends (MQTT, Solace, File, or Prometheus Remote Write). Metrics are also exposed via Prometheus scraping endpoint. It includes a React-based web UI for monitoring.
 
 ## Features
 
 - Modular controller architecture supporting multiple hardware types
+  - **Epever** - charge controller metrics and configuration over Modbus RTU
+  - **Voltgo** - battery pack metrics (SOC, health, per-cell voltages) over Bluetooth LE
 - Multiple publishing options:
   - **MQTT** - Lightweight message broker for home automation systems
   - **Solace** - Enterprise-grade messaging with Solace PubSub+
@@ -145,6 +147,10 @@ docker build -t solar-controller .
 docker run solar-controller -config /etc/solar-controller/config.yaml
 ```
 
+The container has no Bluetooth adapter and no host D-Bus, so the voltgo
+controller does not work in this deployment — see
+[Bluetooth LE (Voltgo)](#bluetooth-le-voltgo).
+
 ### Release
 
 The project uses GitHub Actions for multi-platform releases with native builds:
@@ -166,6 +172,12 @@ Releases include:
 - Debian packages (.deb)
 - RPM packages (.rpm)
 - Multi-architecture Docker images
+
+CGO is enabled for the Solace messaging library, which is why builds run on
+native runners. Bluetooth adds nothing to that: `tinygo.org/x/bluetooth` drives
+BlueZ over D-Bus in pure Go, so the ARM64 build path is unchanged. BlueZ is a
+runtime dependency of the host, not of the build — the deb and rpm packages
+list `bluez` as a recommendation, since only voltgo needs it.
 
 ## Configuration
 
@@ -229,6 +241,12 @@ solarController:
     enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
+
+  voltgo:
+    enabled: false
+    address: AA:BB:CC:DD:EE:FF  # BLE address of the battery
+    publishPeriod: 60
+    connectTimeout: 30s         # Optional (default: 30s)
 ```
 
 ### Configuration Details
@@ -240,9 +258,10 @@ solarController:
 - When `tls.certFile` and `tls.keyFile` are both set, the server serves HTTPS; otherwise it serves plain HTTP. A TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front of the plain HTTP server is an equally good option.
 
 **Hardware Controllers:**
-- Each controller (e.g., epever) has an `enabled` boolean field
+- Each controller (epever, voltgo) has an `enabled` boolean field
 - Set `enabled: true` to activate the controller
-- If required fields are missing (serialPort for epever), a warning will be logged and the controller won't start
+- **epever** requires `serialPort` and `publishPeriod`. If `serialPort` is missing, a warning is logged and the controller won't start
+- **voltgo** requires `address` (the battery's BLE address) and a positive `publishPeriod`; `connectTimeout` is optional and defaults to `30s`. Unlike epever, an enabled voltgo section missing either required field fails startup with a configuration error rather than starting without the controller
 
 **Message Publishers:**
 - Multiple publishers can be enabled simultaneously — metrics are published to all enabled publishers (fan-out)
@@ -258,6 +277,67 @@ solarController:
 - **Remote Write**: Push to Prometheus-compatible endpoints with authentication and custom headers
 
 When a publisher is configured with credentials, use an encrypted transport scheme so they are protected in transit: `ssl://`, `tls://`, `mqtts://`, or `wss://` for MQTT, `tcps://` for Solace, and `https://` for Remote Write. Pairing credentials with a plaintext scheme (`mqtt://`, `tcp://`, `http://`) logs a startup warning.
+
+### Bluetooth LE (Voltgo)
+
+The voltgo controller talks to the battery over Bluetooth LE, which on Linux
+means talking to BlueZ over D-Bus. The host therefore needs:
+
+- **BlueZ installed and running** — `bluez` 5.48 or newer, with `bluetoothd`
+  active (`systemctl status bluetooth`). The deb and rpm packages recommend
+  `bluez`, so it is pulled in by default on Debian and Ubuntu; install it
+  explicitly if your package manager skips weak dependencies.
+- **A Bluetooth adapter** visible to BlueZ (`bluetoothctl list`).
+- **Permission to talk to `org.bluez`** for the user the service runs as (see
+  below).
+
+Find the battery's address with a scan:
+
+```bash
+bluetoothctl scan le      # note the address of the battery, e.g. AA:BB:CC:DD:EE:FF
+```
+
+Then set it as `voltgo.address`. Pairing is not required: the controller
+connects on its first collection, keeps the connection while it stays alive, and
+reconnects on the next cycle after a read error.
+
+#### Running as a service
+
+The packaged systemd unit runs as the unprivileged `solar-controller` user,
+which by default is not allowed to send D-Bus messages to `org.bluez`. Most
+distributions grant that to the `bluetooth` group, so add it with a drop-in:
+
+```bash
+sudo systemctl edit solar-controller
+```
+
+```ini
+[Service]
+SupplementaryGroups=bluetooth
+```
+
+This is not in the shipped unit because systemd refuses to start a service whose
+supplementary group does not exist, and `bluetooth` only exists once BlueZ is
+installed — an epever-only install would stop working.
+
+If the service still logs D-Bus permission errors, check that
+`/etc/dbus-1/system.d/bluetooth.conf` contains a policy for the group; some
+images ship without one:
+
+```xml
+<policy group="bluetooth">
+  <allow send_destination="org.bluez"/>
+</policy>
+```
+
+#### Docker
+
+BLE does not work in the standard Docker deployment: the container has neither
+the host's D-Bus system bus nor its Bluetooth adapter. Use the deb or rpm
+package with systemd on the host for voltgo, and keep Docker for epever-only or
+publisher-only deployments. Granting a container that access takes host D-Bus
+and privileged Bluetooth capabilities, which gives up much of the isolation the
+container was for.
 
 ### Debug Mode
 
@@ -339,6 +419,13 @@ Each controller follows the same structure:
 ### Communication Protocols
 
 - **Epever**: Modbus RTU over serial (via `lumberbarons/modbus`)
+- **Voltgo**: Bluetooth LE GATT (via `lumberbarons/voltgo`, which uses
+  `tinygo.org/x/bluetooth`). On Linux that is BlueZ driven over D-Bus, in pure
+  Go — no cgo and no extra toolchain, so the ARM64 cross-build is unaffected.
+  The connection is opened lazily on the first collection, reused across
+  cycles, and dropped on a read error so the next cycle reconnects. A full
+  cycle is bounded at 60 seconds, which covers the 30-second connect timeout
+  plus the status reads.
 
 #### Modbus Communication Reliability
 
@@ -363,6 +450,13 @@ These delays and timeouts ensure the Epever device has adequate time to process 
 #### Monitoring Endpoints
 - `GET /metrics` - Prometheus metrics export
 - `GET /api/epever/metrics` - JSON metrics for Epever controller (current status)
+- `GET /api/voltgo/metrics` - JSON metrics for the Voltgo battery, including per-cell voltages
+- `GET /api/voltgo/info` - Static battery information (chemistry, nominal voltage, capacity)
+
+A controller that is not running registers no endpoints, and unmatched `/api`
+routes return `404` with a JSON body. Both voltgo endpoints answer `204` until
+the first successful collection, which is what the web UI uses to tell "no
+battery configured" apart from "no reading yet".
 
 #### Configuration Endpoints
 - `GET /api/epever/battery-profile` - Get battery type and capacity
@@ -425,7 +519,38 @@ Example with `topicPrefix: "solar"` and `deviceId: "controller-123"`:
 solar/controller-123/epever/array-voltage
 solar/controller-123/epever/battery-soc
 solar/controller-123/epever/charging-power
+solar/controller-123/voltgo/battery-soh
+solar/controller-123/voltgo/cell-voltage-delta
 ```
+
+### Published Metrics
+
+Each controller publishes one message per metric per collection cycle:
+
+| Controller | Metric | Unit |
+|------------|--------|------|
+| epever | `array-voltage`, `battery-voltage` | volts |
+| epever | `array-current`, `charging-current` | amperes |
+| epever | `array-power`, `charging-power` | watts |
+| epever | `battery-soc` | percent |
+| epever | `battery-temp`, `device-temp` | celsius |
+| epever | `energy-generated-daily` | kilowatt-hours |
+| epever | `charging-status` | code |
+| epever | `collection-time` | seconds |
+| voltgo | `battery-voltage`, `cell-voltage-delta` | volts |
+| voltgo | `battery-current` (positive charging, negative discharging) | amperes |
+| voltgo | `battery-power` | watts |
+| voltgo | `battery-soc`, `battery-soh` | percent |
+| voltgo | `battery-temp` | celsius |
+| voltgo | `collection-time` | seconds |
+
+When a collection cycle fails, the controller publishes a single
+`collection-failure` metric (unit `count`, value `1`) instead.
+
+Per-cell voltages are deliberately not published: they would multiply the topic
+space by the cell count. They are available from `GET /api/voltgo/metrics`, from
+the web UI, and as the `voltgo_cell_voltage` Prometheus metric, labelled by
+cell.
 
 ### Message Payload
 
@@ -444,6 +569,7 @@ When using the RemoteWrite publisher, metrics are converted to Prometheus format
 - Metric names: `{controller}_{metric_name}` (snake_case)
 - Labels: `device_id`, `controller`, `unit`
 - Example: `epever_battery_voltage{device_id="controller-123",unit="volts"}`
+- Voltgo metrics follow the same rule: `voltgo_battery_soh{device_id="controller-123",unit="percent"}`
 
 All metrics from each collection cycle are batched into a single WriteRequest for efficiency.
 
@@ -466,7 +592,7 @@ See `examples/remotewrite/README.md` for details.
 ## Project Structure
 
 - `cmd/controller/` - Main application entry point
-- `internal/controllers/` - Hardware controller implementations (epever)
+- `internal/controllers/` - Hardware controller implementations (epever, voltgo)
 - `internal/publishers/mqtt/` - MQTT publishing functionality
 - `internal/publishers/solace/` - Solace publishing functionality
 - `internal/publishers/sns/` - AWS SNS publishing functionality

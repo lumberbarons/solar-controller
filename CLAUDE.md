@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Solar-controller is a Go-based service that collects metrics from solar power equipment (Epever) and publishes them via MQTT, Solace, AWS SNS, file logging, or Prometheus remote_write, with metrics also exposed via Prometheus scraping. It includes a React-based web UI for monitoring.
+Solar-controller is a Go-based service that collects metrics from solar power equipment — Epever charge controllers over Modbus RTU and Voltgo batteries over Bluetooth LE — and publishes them via MQTT, Solace, AWS SNS, file logging, or Prometheus remote_write, with metrics also exposed via Prometheus scraping. It includes a React-based web UI for monitoring.
 
 ## Project Navigation
 
 | Directory | What | When to read |
 |-----------|------|--------------|
 | `cmd/controller/` | Application entry point | Changing startup, flags, or controller wiring |
-| `internal/controllers/` | Hardware controller implementations (epever) | Adding controllers, modifying collection or publishing logic |
+| `internal/controllers/` | Hardware controller implementations | Adding controllers, modifying collection or publishing logic |
+| `internal/controllers/epever/` | Epever charge controller over Modbus RTU | Changing solar metric collection or device configuration |
+| `internal/controllers/voltgo/` | Voltgo battery over Bluetooth LE | Changing battery collection, cell metrics, or BLE connection handling |
 | `internal/publishers/` | Publisher factory, MultiPublisher, MessagePublisher interface | Adding a new publisher or changing fan-out behavior |
 | `internal/publishers/mqtt/` | MQTT publisher | Modifying MQTT publishing |
 | `internal/publishers/solace/` | Solace publisher | Modifying Solace publishing |
@@ -302,7 +304,7 @@ The release workflow:
 - RPM packages (.rpm) for RHEL/CentOS/Fedora systems
 - Multi-architecture Docker images pushed to registry
 
-**Note:** CGO is required for the Solace messaging library, so all builds must be done on native architecture runners or with appropriate cross-compilation toolchains.
+**Note:** CGO is required for the Solace messaging library, so all builds must be done on native architecture runners or with appropriate cross-compilation toolchains. The BLE stack does not add to that: `tinygo.org/x/bluetooth` talks to BlueZ over D-Bus in pure Go, so the ARM64 path is unchanged by voltgo. BLE is a runtime dependency on the target host, not a build-time one — the deb and rpm packages recommend `bluez` for it.
 
 ### Deployment
 
@@ -342,6 +344,10 @@ The Epever controller follows this structure:
 - **Collector**: Handles device communication and metric collection
 - **Configurer**: Manages device configuration
 - **PrometheusCollector**: Exposes metrics to Prometheus
+
+The Voltgo controller follows the same shape minus the Configurer - the battery
+is read-only over BLE - and adds a **BLEConnector**, which owns the connection
+so the Collector can be tested against a fake.
 
 Controllers are instantiated in `main.go:buildControllers()` and conditionally enabled based on configuration. Each controller has an `enabled` boolean field that must be set to `true` for the controller to start. If required config fields are missing (even when enabled is true), the controller returns an empty/disabled instance.
 
@@ -442,6 +448,22 @@ Epever controller publishes the following metrics (kebab-case naming):
 **Failure Metrics** (published when collection fails):
 - `collection-failure` (count) - Collection failure indicator (value is always 1, published when complete collection fails)
 
+Voltgo controller publishes the following metrics:
+
+- `battery-voltage` (volts) - Pack voltage
+- `battery-current` (amperes) - Pack current, positive charging, negative discharging
+- `battery-power` (watts) - Derived from voltage and current
+- `battery-soc` (percent) - State of charge
+- `battery-soh` (percent) - State of health
+- `battery-temp` (celsius) - Pack temperature
+- `cell-voltage-delta` (volts) - Spread between the highest and lowest cell
+- `collection-time` (seconds) - Time taken to collect metrics
+- `collection-failure` (count) - Published instead of the above when a cycle fails
+
+Per-cell voltages are deliberately not published - they would scale the topic
+space with the cell count. They are exposed on `/api/voltgo/metrics` and as the
+`voltgo_cell_voltage` Prometheus gauge, labelled by cell index.
+
 #### Wildcard Subscriptions
 
 MQTT/Solace subscribers can use wildcard patterns:
@@ -477,7 +499,7 @@ epever_battery_voltage{device_id="controller-123"}
 ```
 
 **Batching:**
-All 12 normal metrics from each successful collection cycle are batched into a single WriteRequest, reducing HTTP overhead and improving efficiency. When collection fails, a single `collection-failure` metric is published instead.
+Every metric from a successful collection cycle is batched into a single WriteRequest, reducing HTTP overhead and improving efficiency. When collection fails, a single `collection-failure` metric is published instead.
 
 ### Communication Protocols
 
@@ -486,6 +508,12 @@ All 12 normal metrics from each successful collection cycle are batched into a s
   - Retry attempts: 2 with 1-second delay between retries
   - Collection overlap prevention via mutex guard
   - 50ms delays between metric reads to prevent device lockups
+- **Voltgo**: Bluetooth LE GATT (via `lumberbarons/voltgo`, over `tinygo.org/x/bluetooth`)
+  - On Linux this is BlueZ driven over D-Bus, in pure Go - no cgo, so it adds nothing to the cross-build requirements
+  - The connection is opened lazily on the first collection, reused across cycles, and dropped on a read error so the next cycle reconnects
+  - Connect timeout 30s by default; a full cycle is bounded at 60 seconds to cover the connect plus the status reads
+  - Collection overlap prevention via mutex guard
+  - Static battery info is fetched once, on the first cycle that connects successfully
 
 ### Web Server
 
@@ -497,9 +525,13 @@ All 12 normal metrics from each successful collection cycle are batched into a s
   - `/api/epever/charging-parameters` - Charging parameters configuration (GET/PATCH)
   - `/api/epever/time` - Controller time (GET/PATCH)
   - `/api/epever/config` - Legacy configuration endpoint (GET/PATCH)
+  - `/api/voltgo/metrics` - JSON battery status including per-cell voltages
+  - `/api/voltgo/info` - Static battery info (chemistry, nominal voltage, capacity)
   - `/*` - Embedded React SPA (via `//go:embed site/build`)
-- **SPA Support**: NoRoute handler serves index.html for client-side routing (React Router)
+- **SPA Support**: NoRoute handler serves index.html for client-side routing (React Router), except under `/api`, where an unmatched route returns a JSON 404. A disabled controller registers no endpoints, so the frontend uses that 404 to hide its panel; answering with index.html would look like a successful response
 - **Namespace**: Each controller registers endpoints under `/api/{controllerName}` where the controller name matches the hardware type (e.g., "epever")
+
+Both voltgo endpoints return `204 No Content` until the first successful collection, so "enabled but nothing read yet" is distinguishable from "not configured".
 
 The React frontend is embedded into the binary at build time and served statically by Gin. The frontend build artifacts are copied from `site/build` to `internal/static/build` during the build process, where they're embedded using `//go:embed`.
 
@@ -551,9 +583,16 @@ solarController:
     enabled: true
     serialPort: /dev/ttyXRUSB0
     publishPeriod: 60
+  voltgo:
+    enabled: false
+    address: AA:BB:CC:DD:EE:FF  # BLE address of the battery
+    publishPeriod: 60
+    connectTimeout: 30s         # Optional (default: 30s)
 ```
 
-The controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration. If `enabled: true` but required fields are missing (serialPort for epever), a warning will be logged and the controller will not start.
+A controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration.
+
+The two controllers differ in how they treat a bad configuration. Epever warns and stays down when `serialPort` is missing; voltgo is validated in `config.Validate()`, so an enabled section without an `address`, or with a non-positive `publishPeriod` or an unparseable `connectTimeout`, fails startup outright. Keep that in mind when adding fields to either.
 
 **Global Configuration:**
 - `deviceId` (optional): Unique identifier for this device instance, used in publisher topics across all controllers. Defaults to `"controller-1"` if not specified.
@@ -563,6 +602,12 @@ The controller can be explicitly enabled or disabled via the `enabled` boolean f
 **Epever Controller Configuration:**
 - `serialPort` (required): Serial port path for Modbus RTU communication
 - `publishPeriod` (required): Collection interval in seconds
+
+**Voltgo Controller Configuration:**
+- `address` (required): BLE address of the battery, e.g. `AA:BB:CC:DD:EE:FF`
+- `publishPeriod` (required): Collection interval in seconds, must be positive
+- `connectTimeout` (optional): BLE connect timeout as a duration string (default: `30s`)
+- Requires BlueZ on the host; see the Bluetooth LE section of `README.md` for the D-Bus permissions the service needs and why Docker is not a suitable deployment for it
 
 **Message Publisher Configuration:**
 - Multiple publishers can be enabled simultaneously - metrics will be published to all enabled publishers
