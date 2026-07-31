@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
@@ -12,5 +12,11 @@ export default defineConfig({
       '/api': 'http://localhost:8080',
       '/metrics': 'http://localhost:8080',
     },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/setupTests.ts'],
+    // Components are asserted through the DOM they render, not their styles.
+    css: false,
   },
 })
