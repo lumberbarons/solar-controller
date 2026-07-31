@@ -14,6 +14,7 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/config"
 	"github.com/lumberbarons/solar-controller/internal/controllers"
 	"github.com/lumberbarons/solar-controller/internal/controllers/epever"
+	"github.com/lumberbarons/solar-controller/internal/controllers/voltgo"
 	"github.com/lumberbarons/solar-controller/internal/publish"
 	staticfs "github.com/lumberbarons/solar-controller/internal/static"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -49,6 +50,12 @@ func defaultControllerFactories() []controllerFactory {
 			name: "epever",
 			build: func(cfg *config.SolarControllerConfiguration, publisher publish.MessagePublisher) (controllers.SolarController, error) {
 				return epever.NewControllerFromConfig(cfg.Epever, publisher, cfg.DeviceID)
+			},
+		},
+		{
+			name: "voltgo",
+			build: func(cfg *config.SolarControllerConfiguration, publisher publish.MessagePublisher) (controllers.SolarController, error) {
+				return voltgo.NewControllerFromConfig(cfg.Voltgo, publisher, cfg.DeviceID)
 			},
 		},
 	}
