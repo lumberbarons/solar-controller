@@ -6,24 +6,38 @@ import { Grid, Box, Alert, IconButton, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 import Metric from "../components/metric"
+import VoltgoBattery from "../components/voltgo-battery"
 import { CHARGING_STATUS_LABELS, type EpeverMetrics } from '../api/types';
 
 type MainState = {
   metrics: Partial<EpeverMetrics>;
   error: string | undefined;
   loading: boolean;
+  /** Incremented on every refresh, so child panels refetch alongside this one. */
+  refreshKey: number;
 };
 
 class Main extends React.Component<Record<string, never>, MainState> {
   constructor(props: Record<string, never>) {
     super(props);
 
-    this.state = { metrics: {}, error: undefined, loading: false };
+    this.state = { metrics: {}, error: undefined, loading: false, refreshKey: 0 };
 
     this.fetchMetrics = this.fetchMetrics.bind(this);
+    this.refresh = this.refresh.bind(this);
   }
 
   componentDidMount() {
+    this.fetchMetrics();
+  }
+
+  /**
+   * Refetches this page's metrics and bumps refreshKey so the panels that own
+   * their own fetches reload too. Mount does not bump it: those panels already
+   * fetch on mount, and bumping would make them fetch twice.
+   */
+  refresh() {
+    this.setState(state => ({ refreshKey: state.refreshKey + 1 }));
     this.fetchMetrics();
   }
 
@@ -107,9 +121,12 @@ class Main extends React.Component<Record<string, never>, MainState> {
             </Grid>
           </Grid>
 
+          {/* Battery bank via the voltgo BLE controller; renders nothing when it is disabled */}
+          <VoltgoBattery refreshKey={this.state.refreshKey} />
+
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
             <IconButton
-              onClick={this.fetchMetrics}
+              onClick={this.refresh}
               disabled={this.state.loading}
               sx={{
                 backgroundColor: 'white',

@@ -49,6 +49,70 @@ export const CHARGING_STATUS_LABELS: Record<number, string> = {
   3: 'Equalization',
 };
 
+/** GET /api/voltgo/metrics */
+export const VOLTGO_METRIC_FIELDS = [
+  'cellCount',
+  'cells',
+  'collectionTime',
+  'current',
+  'soc',
+  'soh',
+  'temperature',
+  'temperatures',
+  'timestamp',
+  'voltage',
+] as const;
+
+/** The objects inside the `cells` array of GET /api/voltgo/metrics. */
+export const VOLTGO_CELL_FIELDS = ['index', 'voltage'] as const;
+
+export type VoltgoCell = {
+  index: number;
+  voltage: number;
+};
+
+/**
+ * Value types per field. VoltgoMetrics is mapped over VOLTGO_METRIC_FIELDS
+ * rather than declared directly, so the field list stays authoritative: a field
+ * added to the list without a type here fails the type check.
+ */
+type VoltgoMetricTypes = {
+  timestamp: number;
+  collectionTime: number;
+  voltage: number;
+  /** Pack current: positive while charging, negative while discharging. */
+  current: number;
+  soc: number;
+  soh: number;
+  temperature: number;
+  temperatures: number[];
+  cellCount: number;
+  cells: VoltgoCell[];
+};
+
+export type VoltgoMetrics = {
+  [K in (typeof VOLTGO_METRIC_FIELDS)[number]]: VoltgoMetricTypes[K];
+};
+
+/** GET /api/voltgo/info */
+export const VOLTGO_INFO_FIELDS = [
+  'capacityAh',
+  'chemistry',
+  'deviceStrings',
+  'nominalVoltage',
+] as const;
+
+type VoltgoInfoTypes = {
+  chemistry: string;
+  nominalVoltage: number;
+  capacityAh: number;
+  deviceStrings: string[];
+};
+
+export type VoltgoInfo = {
+  [K in (typeof VOLTGO_INFO_FIELDS)[number]]: VoltgoInfoTypes[K];
+};
+
 /** GET and PATCH /api/epever/battery-profile */
 export const BATTERY_PROFILE_FIELDS = [
   'batteryCapacity',

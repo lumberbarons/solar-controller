@@ -183,6 +183,35 @@ func TestApplication_SPAFallback(t *testing.T) {
 	}
 }
 
+// The frontend hides a controller's panel when its endpoint 404s, so an
+// unmatched /api route must not be swallowed by the SPA fallback.
+func TestApplication_UnmatchedAPIRouteReturnsJSON404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		SolarController: config.SolarControllerConfiguration{
+			HTTPPort: 8080,
+			Epever:   epever.Configuration{Enabled: false},
+		},
+	}
+
+	app, err := NewApplication(cfg, testutil.NewMockPublisher(), getTestVersionInfo())
+	require.NoError(t, err)
+	defer app.Close()
+
+	for _, path := range []string{"/api/voltgo/metrics", "/api/epever/metrics", "/api/nonsense"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", path, nil)
+			app.Router().ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+			assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
+			assert.NotContains(t, w.Body.String(), "<!doctype html>")
+		})
+	}
+}
+
 func TestApplication_AuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -382,10 +411,11 @@ func TestApplication_ControllerRegistration(t *testing.T) {
 				assert.NotEqual(t, http.StatusNotFound, w.Code)
 				assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
 			} else {
-				// With NoRoute handler, unmatched routes return 200 with index.html (SPA fallback)
-				// We verify the endpoint doesn't exist by checking it returns HTML, not JSON
-				assert.Equal(t, http.StatusOK, w.Code)
-				assert.NotContains(t, w.Header().Get("Content-Type"), "application/json")
+				// Unmatched /api routes are answered with a JSON 404 rather than
+				// the SPA fallback, so the frontend can tell a disabled
+				// controller from one that is merely slow to report.
+				assert.Equal(t, http.StatusNotFound, w.Code)
+				assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
 			}
 		})
 	}

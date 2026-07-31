@@ -17,7 +17,7 @@
 # Format: <package path relative to the module root> <floor percentage>
 
 cmd/controller                       46
-internal/app                         92
+internal/app                         93
 internal/config                      100
 internal/controllers/epever          56
 internal/controllers/epever/parser   97
