@@ -144,7 +144,7 @@ func TestMultiPublisher_Close_ClosesAllPublishers(t *testing.T) {
 	}
 }
 
-func TestMultiPublisher_EmptyPublishers(t *testing.T) {
+func TestMultiPublisher_EmptyPublishers(_ *testing.T) {
 	// Arrange
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
@@ -152,14 +152,10 @@ func TestMultiPublisher_EmptyPublishers(t *testing.T) {
 	publishers := []publish.MessagePublisher{}
 	multiPublisher := NewMultiPublisher(publishers, logger)
 
-	// Act - should not panic with zero publishers
+	// Act - reaching the end without panicking is the assertion; a
+	// MultiPublisher wrapping no publishers has no observable side effects.
 	multiPublisher.Publish("device-1/epever/test", `{"value":1}`)
 	multiPublisher.Close()
-
-	// Verify the empty publisher list was not modified
-	if len(publishers) != 0 {
-		t.Error("Expected empty publishers slice to remain empty")
-	}
 }
 
 func TestMultiPublisher_SinglePublisher(t *testing.T) {

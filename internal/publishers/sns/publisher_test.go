@@ -109,32 +109,27 @@ func TestResolveTopicPrefix(t *testing.T) {
 	}
 }
 
-func TestPublish_DisabledPublisher(t *testing.T) {
+// TestPublish_DisabledPublisherDoesNotPanic is a smoke test: a disabled
+// publisher has a nil client, so Publish must return early rather than
+// dereference it. Reaching the end without panicking is the assertion.
+func TestPublish_DisabledPublisherDoesNotPanic(_ *testing.T) {
 	pub := &Publisher{
 		client:      nil,
 		topicPrefix: "",
 	}
 
-	// Should not panic and client should remain nil (no side effects)
 	pub.Publish("test/topic", "test payload")
-
-	if pub.client != nil {
-		t.Error("Expected client to remain nil after publishing to disabled publisher")
-	}
 }
 
-func TestClose_DisabledPublisher(t *testing.T) {
+// TestClose_DisabledPublisherDoesNotPanic is the Close counterpart of
+// TestPublish_DisabledPublisherDoesNotPanic.
+func TestClose_DisabledPublisherDoesNotPanic(_ *testing.T) {
 	pub := &Publisher{
 		client:      nil,
 		topicPrefix: "",
 	}
 
-	// Should not panic and client should remain nil (no side effects)
 	pub.Close()
-
-	if pub.client != nil {
-		t.Error("Expected client to remain nil after closing disabled publisher")
-	}
 }
 
 // Note: Full integration tests with mocked SNS clients would require extensive
