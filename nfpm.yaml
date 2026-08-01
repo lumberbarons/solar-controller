@@ -42,10 +42,18 @@ scripts:
   postinstall: package/postinstall.sh
   postremove: package/postremove.sh
 
+# bluez is a recommendation rather than a dependency: it is needed only by the
+# voltgo BLE controller, and an epever-only install has no use for it. The
+# service does not get access to org.bluez by installing it — see the Bluetooth
+# LE section of the README for the systemd drop-in that grants that.
 overrides:
   deb:
     depends:
       - systemd
+    recommends:
+      - bluez
   rpm:
     depends:
       - systemd
+    recommends:
+      - bluez
