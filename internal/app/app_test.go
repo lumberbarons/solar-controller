@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,12 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// getTestVersionInfo returns version info for testing
+// getTestVersionInfo returns version info for testing. No value is a substring
+// of another, so an assertion satisfied by the wrong field cannot pass.
 func getTestVersionInfo() VersionInfo {
 	return VersionInfo{
-		Version:   "test",
-		BuildTime: "2025-01-01T00:00:00Z",
-		GitCommit: "test123",
+		Version:   "v-ver",
+		BuildTime: "b-time",
+		GitCommit: "g-commit",
 	}
 }
 
@@ -101,9 +103,19 @@ func TestApplication_InfoEndpoint(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
-	assert.Contains(t, w.Body.String(), versionInfo.Version)
-	assert.Contains(t, w.Body.String(), versionInfo.BuildTime)
-	assert.Contains(t, w.Body.String(), versionInfo.GitCommit)
+
+	// Decode into a map rather than VersionInfo: unmarshalling into the struct
+	// would rename the keys symmetrically with the handler, so a renamed json
+	// tag would still round-trip. Comparing the decoded map to an expected map
+	// fails on a wrong value, a missing field, or a renamed key.
+	var got map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+
+	assert.Equal(t, map[string]string{
+		"version":   versionInfo.Version,
+		"buildTime": versionInfo.BuildTime,
+		"gitCommit": versionInfo.GitCommit,
+	}, got)
 }
 
 func TestApplication_Close(t *testing.T) {
