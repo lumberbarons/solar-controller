@@ -12,6 +12,9 @@ import (
 	"github.com/lumberbarons/solar-controller/internal/publishers/solace"
 )
 
+// Compile-time check that NoOpPublisher satisfies MessagePublisher.
+var _ publish.MessagePublisher = (*publish.NoOpPublisher)(nil)
+
 func TestNewPublisher(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -214,16 +217,12 @@ func TestNewPublisher(t *testing.T) {
 	}
 }
 
-func TestNoOpPublisher(t *testing.T) {
-	// Verify NoOpPublisher satisfies MessagePublisher interface at compile time
+// TestNoOpPublisher_MethodsDoNotPanic is a smoke test: the no-op publisher's
+// methods discard their arguments, so there is no observable state to assert
+// on. Reaching the end of the test without panicking is the whole check.
+func TestNoOpPublisher_MethodsDoNotPanic(_ *testing.T) {
 	var pub publish.MessagePublisher = &publish.NoOpPublisher{}
 
-	// Should not panic when used as MessagePublisher
 	pub.Publish("test", "payload")
 	pub.Close()
-
-	// Verify the concrete type is preserved after operations
-	if _, ok := pub.(*publish.NoOpPublisher); !ok {
-		t.Error("Expected publisher to remain a *publish.NoOpPublisher")
-	}
 }
