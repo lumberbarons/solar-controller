@@ -11,7 +11,10 @@
     "    match the lists below.",
     "",
     "Renaming a field on either side therefore fails CI until this file and the",
-    "other side are updated to agree. Keep each list sorted."
+    "other side are updated to agree. Keep each list sorted.",
+    "",
+    "An entry named '<endpoint>#<field>[]' records the fields of the objects",
+    "inside a nested array, which a top-level field list would not cover."
   ],
   "endpoints": {
     "GET /api/info": [
@@ -62,6 +65,28 @@
     ],
     "GET /api/epever/time": [
       "time"
+    ],
+    "GET /api/voltgo/metrics": [
+      "cellCount",
+      "cells",
+      "collectionTime",
+      "current",
+      "soc",
+      "soh",
+      "temperature",
+      "temperatures",
+      "timestamp",
+      "voltage"
+    ],
+    "GET /api/voltgo/metrics#cells[]": [
+      "index",
+      "voltage"
+    ],
+    "GET /api/voltgo/info": [
+      "capacityAh",
+      "chemistry",
+      "deviceStrings",
+      "nominalVoltage"
     ]
   }
 }

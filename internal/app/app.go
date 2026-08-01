@@ -177,8 +177,18 @@ func (a *Application) setupRoutes() {
 	a.router.Use(static.Serve("/", siteFS))
 
 	// SPA fallback: serve index.html for any route that doesn't match
-	// This allows React Router to handle client-side routing
+	// This allows React Router to handle client-side routing.
+	//
+	// /api paths are excluded: a controller that is disabled registers no
+	// endpoints, and serving index.html for its URLs would answer an API
+	// request with 200 and a page of HTML. The frontend uses 404 to decide a
+	// controller is absent and hide its panel, so unmatched API routes must
+	// say so rather than fall through to the SPA.
 	a.router.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
 		c.FileFromFS("/", siteFS)
 	})
 }

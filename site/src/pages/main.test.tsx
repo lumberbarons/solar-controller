@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import Main from './main';
-import type { EpeverMetrics } from '../api/types';
+import type { EpeverMetrics, VoltgoMetrics } from '../api/types';
 
 vi.mock('axios', () => {
   const isAxiosError = (error: unknown): boolean =>
@@ -32,14 +32,63 @@ const METRICS: EpeverMetrics = {
   chargingStatus: 2,
 };
 
+const VOLTGO_METRICS: VoltgoMetrics = {
+  timestamp: 1699000000,
+  collectionTime: 1.8,
+  voltage: 13.31,
+  current: 12.4,
+  soc: 74,
+  soh: 99,
+  temperature: 19.5,
+  temperatures: [19, 20],
+  cellCount: 4,
+  cells: [
+    { index: 0, voltage: 3.331 },
+    { index: 1, voltage: 3.325 },
+    { index: 2, voltage: 3.338 },
+    { index: 3, voltage: 3.326 },
+  ],
+};
+
+const notFound = (): Promise<never> => {
+  const error = new Error('Request failed with status code 404') as Error & {
+    isAxiosError: boolean;
+    response: { status: number; statusText: string };
+  };
+  error.isAxiosError = true;
+  error.response = { status: 404, statusText: 'Not Found' };
+  return Promise.reject(error);
+};
+
+/**
+ * Routes by URL rather than answering every call with the same payload: the
+ * dashboard now fetches the voltgo battery endpoints too, and handing those the
+ * epever payload would test a response the backend never sends. Voltgo is
+ * absent unless a test says otherwise, which is what a solar-only deployment
+ * looks like.
+ */
+function mockApi(responses: Record<string, unknown> = {}) {
+  mockedGet.mockImplementation((url: string) => {
+    if (url in responses) {
+      return Promise.resolve({ status: 200, data: responses[url] });
+    }
+    if (url === '/api/epever/metrics') {
+      return Promise.resolve({ status: 200, data: METRICS });
+    }
+    return notFound();
+  });
+}
+
+const callCount = (url: string): number =>
+  mockedGet.mock.calls.filter(call => call[0] === url).length;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockApi();
 });
 
 describe('dashboard', () => {
   it('renders the fetched metric values', async () => {
-    mockedGet.mockResolvedValue({ data: METRICS });
-
     render(<Main />);
 
     await waitFor(() => expect(screen.getByText('38.9 W')).toBeInTheDocument());
@@ -57,7 +106,7 @@ describe('dashboard', () => {
     [3, 'Equalization'],
     [9, 'Unknown'],
   ])('renders charging status code %i as %s', async (code, label) => {
-    mockedGet.mockResolvedValue({ data: { ...METRICS, chargingStatus: code } });
+    mockApi({ '/api/epever/metrics': { ...METRICS, chargingStatus: code } });
 
     render(<Main />);
 
@@ -71,7 +120,9 @@ describe('dashboard', () => {
     };
     error.isAxiosError = true;
     error.response = { status: 500, statusText: 'Internal Server Error' };
-    mockedGet.mockRejectedValue(error);
+    mockedGet.mockImplementation((url: string) =>
+      url === '/api/epever/metrics' ? Promise.reject(error) : notFound(),
+    );
 
     render(<Main />);
 
@@ -81,13 +132,34 @@ describe('dashboard', () => {
   });
 
   it('refetches when the refresh button is clicked', async () => {
-    mockedGet.mockResolvedValue({ data: METRICS });
-
     render(<Main />);
-    await waitFor(() => expect(mockedGet).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith('/api/epever/metrics'),
+    );
+    const before = callCount('/api/epever/metrics');
 
     screen.getByRole('button', { name: 'refresh metrics' }).click();
 
-    await waitFor(() => expect(mockedGet).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(callCount('/api/epever/metrics')).toBe(before + 1));
+  });
+
+  it('hides the battery panel when the voltgo controller is not running', async () => {
+    render(<Main />);
+
+    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/voltgo/metrics'));
+    expect(screen.queryByText('Battery Bank')).not.toBeInTheDocument();
+  });
+
+  it('shows the battery panel and refreshes it alongside the dashboard', async () => {
+    mockApi({ '/api/voltgo/metrics': VOLTGO_METRICS });
+
+    render(<Main />);
+    await waitFor(() => expect(screen.getByText('Battery Bank')).toBeInTheDocument());
+
+    const before = callCount('/api/voltgo/metrics');
+
+    screen.getByRole('button', { name: 'refresh metrics' }).click();
+
+    await waitFor(() => expect(callCount('/api/voltgo/metrics')).toBe(before + 1));
   });
 });
