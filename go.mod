@@ -15,7 +15,7 @@ require (
 	github.com/go-co-op/gocron v1.37.0
 	github.com/klauspost/compress v1.19.1
 	github.com/lumberbarons/modbus v0.5.0
-	github.com/lumberbarons/voltgo v0.2.0
+	github.com/lumberbarons/voltgo v0.2.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/prometheus v0.313.1
 	github.com/sirupsen/logrus v1.9.4
