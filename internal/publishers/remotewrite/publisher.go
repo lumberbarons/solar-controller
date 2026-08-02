@@ -123,18 +123,32 @@ func (p *Publisher) Publish(topicSuffix, payload string) {
 }
 
 // parseMetric converts a topic suffix and JSON payload into metric data.
-// Topic format: {deviceId}/{controller}/{metric-name}
+// Topic format: {deviceId}/{controller}/{metric-name}, or
+// {deviceId}/{controller}/{batteryId}/{metric-name} for a controller that
+// drives several devices of the same kind.
 // Example: controller-123/epever/battery-voltage
+//
+//	controller-123/voltgo/bank-a/battery-voltage
 func (p *Publisher) parseMetric(topicSuffix, payload string) (metricData, error) {
 	// Parse topic suffix
 	parts := strings.Split(topicSuffix, "/")
-	if len(parts) != 3 {
-		return metricData{}, fmt.Errorf("invalid topic format, expected 3 parts: %s", topicSuffix)
+	if len(parts) < 3 || len(parts) > 4 {
+		return metricData{}, fmt.Errorf("invalid topic format, expected 3 or 4 parts: %s", topicSuffix)
 	}
 
 	deviceID := parts[0]
 	controller := parts[1]
+
+	// The optional third segment identifies one device among several on the
+	// same controller. It becomes a `battery` label rather than part of the
+	// metric name, so the remote-written series match the ones the /metrics
+	// scrape endpoint exposes for the same reading.
+	batteryID := ""
 	metricNameKebab := parts[2]
+	if len(parts) == 4 {
+		batteryID = parts[2]
+		metricNameKebab = parts[3]
+	}
 
 	// Convert kebab-case to snake_case for Prometheus naming
 	metricNameSnake := strings.ReplaceAll(metricNameKebab, "-", "_")
@@ -158,6 +172,10 @@ func (p *Publisher) parseMetric(topicSuffix, payload string) (metricData, error)
 	labels := map[string]string{
 		"device_id":  deviceID,
 		"controller": controller,
+	}
+
+	if batteryID != "" {
+		labels["battery"] = batteryID
 	}
 
 	// Add unit as a label if present

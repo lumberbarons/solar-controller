@@ -16,85 +16,58 @@ import (
 const (
 	namespace = "voltgo"
 
-	defaultConnectTimeout = 30 * time.Second
-
-	// collectTimeout bounds a full collection cycle: a BLE connect
-	// (default 30s) plus the status reads.
+	// collectTimeout bounds one battery's collection: a BLE connect
+	// (default 30s) plus the status reads. Each battery in a cycle gets its
+	// own budget, because a cycle is serialised across them.
 	collectTimeout = 60 * time.Second
 )
 
-type Configuration struct {
-	Enabled       bool   `yaml:"enabled"`
-	Address       string `yaml:"address"`
-	PublishPeriod int    `yaml:"publishPeriod"`
-
-	// ConnectTimeout is the maximum time to wait for a BLE connection,
-	// as a duration string (default: 30s)
-	ConnectTimeout string `yaml:"connectTimeout"`
+// BatteryRef identifies one configured battery in the index endpoint, so the
+// frontend can discover which batteries exist rather than hardcoding them.
+type BatteryRef struct {
+	ID      string `json:"id"`
+	Address string `json:"address"`
 }
 
-// Validate checks the configuration for errors. Only called when enabled.
-func (c *Configuration) Validate() error {
-	if c.ConnectTimeout != "" {
-		if _, err := time.ParseDuration(c.ConnectTimeout); err != nil {
-			return err
-		}
-	}
-	return nil
+// BatteryIndex is the payload of GET /api/voltgo.
+type BatteryIndex struct {
+	Batteries []BatteryRef `json:"batteries"`
 }
 
-// GetConnectTimeout returns the configured connect timeout or the default (30s).
-func (c *Configuration) GetConnectTimeout() time.Duration {
-	if c.ConnectTimeout == "" {
-		return defaultConnectTimeout
-	}
-	timeout, err := time.ParseDuration(c.ConnectTimeout)
-	if err != nil {
-		return defaultConnectTimeout
-	}
-	return timeout
-}
-
+// Controller drives every configured voltgo battery. It is one controller
+// rather than one per battery because the three things that have to be unique
+// - the Gin routes, the Prometheus registration, and the BLE adapter - are all
+// process-wide: registering them once here is what lets a second battery exist
+// at all.
 type Controller struct {
-	collector           *Collector
-	publisher           publish.MessagePublisher
-	prometheusCollector MetricsCollector
-	scheduler           *gocron.Scheduler
-	deviceID            string
-	lastStatus          *BatteryStatus
-	lastInfo            *BatteryInfo
-	lastStatusMutex     sync.RWMutex
-	collectInProgress   bool
-	collectMutex        sync.Mutex
+	batteries []*batteryRunner
+	byID      map[string]*batteryRunner
+
+	// connector is the shared BLE adapter behind every battery's collector,
+	// owned here so it is released exactly once on Close.
+	connector BatteryConnector
+
+	scheduler *gocron.Scheduler
+
+	collectInProgress bool
+	collectMutex      sync.Mutex
 }
 
-// NewController creates a new voltgo controller with dependency injection for testing.
-// For production use, call NewControllerFromConfig instead.
+// NewController creates a voltgo controller from already-built battery
+// runners, for testing. For production use, call NewControllerFromConfig.
 func NewController(
-	collector *Collector,
-	publisher publish.MessagePublisher,
-	prometheusCollector MetricsCollector,
-	deviceID string,
+	batteries []*batteryRunner,
+	connector BatteryConnector,
 	publishPeriod int,
 ) (*Controller, error) {
-	if collector == nil {
+	if len(batteries) == 0 {
 		return &Controller{}, nil
 	}
 
-	// Default device ID if not provided
-	if deviceID == "" {
-		deviceID = "controller-1"
-	}
+	controller := newControllerForTest(batteries, connector)
 
 	s := gocron.NewScheduler(time.UTC)
-
-	controller := &Controller{
-		collector:           collector,
-		publisher:           publisher,
-		prometheusCollector: prometheusCollector,
-		deviceID:            deviceID,
-		scheduler:           s,
-	}
+	controller.scheduler = s
 
 	_, err := s.Every(publishPeriod).Seconds().Do(controller.collectAndPublish)
 	if err != nil {
@@ -109,22 +82,18 @@ func NewController(
 	return controller, nil
 }
 
-// newControllerForTest creates a Controller without starting the scheduler or background goroutine.
-// This allows tests to call collectAndPublish synchronously without racing.
-func newControllerForTest(
-	collector *Collector,
-	publisher publish.MessagePublisher,
-	prometheusCollector MetricsCollector,
-	deviceID string,
-) *Controller {
-	if deviceID == "" {
-		deviceID = "controller-1"
+// newControllerForTest creates a Controller without starting the scheduler or
+// background goroutine, so tests can call collectAndPublish synchronously
+// without racing.
+func newControllerForTest(batteries []*batteryRunner, connector BatteryConnector) *Controller {
+	byID := make(map[string]*batteryRunner, len(batteries))
+	for _, battery := range batteries {
+		byID[battery.id] = battery
 	}
 	return &Controller{
-		collector:           collector,
-		publisher:           publisher,
-		prometheusCollector: prometheusCollector,
-		deviceID:            deviceID,
+		batteries: batteries,
+		byID:      byID,
+		connector: connector,
 	}
 }
 
@@ -136,30 +105,49 @@ func NewControllerFromConfig(config Configuration, publisher publish.MessagePubl
 		return &Controller{}, nil
 	}
 
-	if config.Address == "" {
-		log.Warn("voltgo enabled but no battery address provided")
+	batteryConfigs, err := config.ResolveBatteries()
+	if err != nil {
+		log.Warnf("voltgo enabled but not usable: %s", err)
+		return &Controller{}, nil
+	}
+	if len(batteryConfigs) == 0 {
+		log.Warn("voltgo enabled but no batteries configured")
 		return &Controller{}, nil
 	}
 
+	if deviceID == "" {
+		deviceID = "controller-1"
+	}
+
+	// One adapter is shared by every battery. BLE hardware exposes a single
+	// adapter per host, and the collectors serialise their use of it.
 	connector, err := NewBLEConnector()
 	if err != nil {
 		return nil, err
 	}
 
-	collector := NewCollector(connector, config.Address, config.GetConnectTimeout())
 	prometheusCollector := NewPrometheusCollector()
+	connectTimeout := config.GetConnectTimeout()
 
-	log.Infof("voltgo battery configured at %s", config.Address)
+	runners := make([]*batteryRunner, 0, len(batteryConfigs))
+	for _, batteryConfig := range batteryConfigs {
+		collector := NewCollector(connector, batteryConfig.Address, connectTimeout)
+		runners = append(runners, newBatteryRunner(
+			batteryConfig.ID, batteryConfig.Address, collector, publisher, prometheusCollector, deviceID,
+		))
+		log.Infof("voltgo battery %q configured at %s", batteryConfig.ID, batteryConfig.Address)
+	}
 
-	return NewController(
-		collector,
-		publisher,
-		prometheusCollector,
-		deviceID,
-		config.PublishPeriod,
-	)
+	return NewController(runners, connector, config.PublishPeriod)
 }
 
+// collectAndPublish runs one collection cycle across every battery.
+//
+// Batteries are collected one after another rather than concurrently: the
+// host has a single BLE adapter, BlueZ limits concurrent links, and the BMS is
+// timing-sensitive enough that overlapping connects provoke the connection
+// aborts that voltgo v0.2.1 fixed. The cost is that the publish period has to
+// accommodate the sum of the per-battery connect-and-read times.
 func (v *Controller) collectAndPublish() {
 	// Check if a collection is already in progress
 	v.collectMutex.Lock()
@@ -178,89 +166,38 @@ func (v *Controller) collectAndPublish() {
 		v.collectMutex.Unlock()
 	}()
 
-	log.Debug("collecting and publishing metrics for voltgo controller")
-
-	ctx, cancel := context.WithTimeout(context.Background(), collectTimeout)
-	defer cancel()
-
-	status, err := v.collector.GetStatus(ctx)
-	if err != nil {
-		log.Errorf("failed to collect metrics from voltgo battery: %s", err)
-		v.prometheusCollector.IncrementFailures()
-
-		// Publish failure metric to message broker
-		failureMetric := CreateCollectionFailureMetric()
-		payload, err := failureMetric.ToJSON()
-		if err != nil {
-			log.Errorf("failed to marshal failure metric: %s", err)
-			return
-		}
-
-		topicSuffix := fmt.Sprintf("%s/%s/%s", v.deviceID, namespace, failureMetric.Name)
-		v.publisher.Publish(topicSuffix, payload)
-		log.Debugf("published failure metric to %s", topicSuffix)
-
-		return
+	for _, battery := range v.batteries {
+		// Each battery gets its own timeout so one unreachable battery
+		// burns its own budget and not the whole cycle's.
+		ctx, cancel := context.WithTimeout(context.Background(), collectTimeout)
+		battery.collectAndPublish(ctx)
+		cancel()
 	}
-
-	v.lastStatusMutex.Lock()
-	v.lastStatus = status
-	v.lastStatusMutex.Unlock()
-
-	v.prometheusCollector.SetMetrics(status)
-
-	// Fetch static battery info once, now that a connection is up
-	v.fetchInfoOnce(ctx)
-
-	// Convert status to individual metrics
-	metrics := ConvertStatusToMetrics(status)
-
-	// Publish each metric individually
-	for _, metric := range metrics {
-		payload, err := metric.ToJSON()
-		if err != nil {
-			log.Errorf("failed to marshal metric %s for publishing: %s", metric.Name, err)
-			continue
-		}
-
-		// Topic format: {deviceId}/voltgo/{metric-name}
-		topicSuffix := fmt.Sprintf("%s/%s/%s", v.deviceID, namespace, metric.Name)
-		v.publisher.Publish(topicSuffix, payload)
-
-		log.Debugf("published metric %s to %s", metric.Name, topicSuffix)
-	}
-
-	log.Debug("collection done for voltgo controller")
 }
 
-// fetchInfoOnce caches static battery info on the first successful collection
-// cycle. Failures are logged but never fail the cycle - the next cycle retries.
-func (v *Controller) fetchInfoOnce(ctx context.Context) {
-	v.lastStatusMutex.RLock()
-	cached := v.lastInfo != nil
-	v.lastStatusMutex.RUnlock()
-	if cached {
-		return
+// IndexGet lists the configured batteries. It answers 200 with a possibly
+// empty list as soon as the controller is running, so the frontend can tell
+// "voltgo is configured, batteries are still connecting" from the 404 that
+// means no voltgo controller exists at all.
+func (v *Controller) IndexGet() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		refs := make([]BatteryRef, 0, len(v.batteries))
+		for _, battery := range v.batteries {
+			refs = append(refs, BatteryRef{ID: battery.id, Address: battery.address})
+		}
+		c.JSON(http.StatusOK, BatteryIndex{Batteries: refs})
 	}
-
-	info, err := v.collector.GetInfo(ctx)
-	if err != nil {
-		log.Warnf("failed to read voltgo battery info: %s", err)
-		return
-	}
-
-	v.lastStatusMutex.Lock()
-	v.lastInfo = info
-	v.lastStatusMutex.Unlock()
-	log.Debugf("cached voltgo battery info: %s %.1fV %.0fAh", info.Chemistry, info.NominalVoltage, info.CapacityAh)
 }
 
 func (v *Controller) MetricsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		v.lastStatusMutex.RLock()
-		status := v.lastStatus
-		v.lastStatusMutex.RUnlock()
+		battery, ok := v.byID[c.Param("id")]
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown battery"})
+			return
+		}
 
+		status := battery.status()
 		if status == nil {
 			c.JSON(http.StatusNoContent, gin.H{})
 			return
@@ -271,10 +208,13 @@ func (v *Controller) MetricsGet() gin.HandlerFunc {
 
 func (v *Controller) InfoGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		v.lastStatusMutex.RLock()
-		info := v.lastInfo
-		v.lastStatusMutex.RUnlock()
+		battery, ok := v.byID[c.Param("id")]
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown battery"})
+			return
+		}
 
+		info := battery.info()
 		if info == nil {
 			c.JSON(http.StatusNoContent, gin.H{})
 			return
@@ -284,27 +224,44 @@ func (v *Controller) InfoGet() gin.HandlerFunc {
 }
 
 func (v *Controller) RegisterEndpoints(r *gin.Engine) {
-	if v.collector == nil {
+	if len(v.batteries) == 0 {
 		return
 	}
 
 	prefix := fmt.Sprintf("/api/%s", namespace)
 
-	r.GET(fmt.Sprintf("%s/metrics", prefix), v.MetricsGet())
-	r.GET(fmt.Sprintf("%s/info", prefix), v.InfoGet())
+	r.GET(prefix, v.IndexGet())
+	r.GET(fmt.Sprintf("%s/:id/metrics", prefix), v.MetricsGet())
+	r.GET(fmt.Sprintf("%s/:id/info", prefix), v.InfoGet())
 }
 
 func (v *Controller) Enabled() bool {
-	return v.collector != nil
+	return len(v.batteries) > 0
 }
 
+// Close stops collection, disconnects every battery, and then releases the
+// shared BLE adapter once.
 func (v *Controller) Close() error {
 	if v.scheduler != nil {
 		v.scheduler.Stop()
 		log.Debug("voltgo scheduler stopped")
 	}
-	if v.collector != nil {
-		return v.collector.Close()
+
+	var firstErr error
+	for _, battery := range v.batteries {
+		if err := battery.close(); err != nil {
+			log.Errorf("failed to close voltgo battery %s: %v", battery.id, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
 	}
-	return nil
+
+	if v.connector != nil {
+		if err := v.connector.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return firstErr
 }

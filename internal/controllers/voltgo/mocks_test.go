@@ -72,40 +72,62 @@ func (m *MockBatteryClient) Disconnect() error {
 	return nil
 }
 
+// SetMetricsCall records one SetMetrics invocation, including which battery
+// it was for: with several batteries sharing one collector, the id is the
+// only thing distinguishing their updates.
+type SetMetricsCall struct {
+	BatteryID string
+	Status    *BatteryStatus
+}
+
 // MockMetricsCollector is a mock implementation of the MetricsCollector interface for testing.
 type MockMetricsCollector struct {
 	mu sync.RWMutex
 
 	// Function fields that can be set to customize behavior in tests
-	IncrementFailuresFunc func()
-	SetMetricsFunc        func(status *BatteryStatus)
+	IncrementFailuresFunc func(batteryID string)
+	SetMetricsFunc        func(batteryID string, status *BatteryStatus)
 
 	// Call tracking
 	FailuresCount   int
-	SetMetricsCalls []*BatteryStatus
+	FailureIDs      []string
+	SetMetricsCalls []SetMetricsCall
 }
 
 // Verify MockMetricsCollector implements MetricsCollector
 var _ MetricsCollector = (*MockMetricsCollector)(nil)
 
-func (m *MockMetricsCollector) IncrementFailures() {
+func (m *MockMetricsCollector) IncrementFailures(batteryID string) {
 	m.mu.Lock()
 	m.FailuresCount++
+	m.FailureIDs = append(m.FailureIDs, batteryID)
 	m.mu.Unlock()
 
 	if m.IncrementFailuresFunc != nil {
-		m.IncrementFailuresFunc()
+		m.IncrementFailuresFunc(batteryID)
 	}
 }
 
-func (m *MockMetricsCollector) SetMetrics(status *BatteryStatus) {
+func (m *MockMetricsCollector) SetMetrics(batteryID string, status *BatteryStatus) {
 	m.mu.Lock()
-	m.SetMetricsCalls = append(m.SetMetricsCalls, status)
+	m.SetMetricsCalls = append(m.SetMetricsCalls, SetMetricsCall{BatteryID: batteryID, Status: status})
 	m.mu.Unlock()
 
 	if m.SetMetricsFunc != nil {
-		m.SetMetricsFunc(status)
+		m.SetMetricsFunc(batteryID, status)
 	}
+}
+
+// metricsBatteryIDs returns the battery ids SetMetrics was called for, in order.
+func (m *MockMetricsCollector) metricsBatteryIDs() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.SetMetricsCalls))
+	for _, call := range m.SetMetricsCalls {
+		ids = append(ids, call.BatteryID)
+	}
+	return ids
 }
 
 // MockBatteryConnector is a mock implementation of the BatteryConnector interface for testing.

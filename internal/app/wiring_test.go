@@ -275,10 +275,10 @@ func TestDefaultFactories_VoltgoNotStartedWithoutAddress(t *testing.T) {
 
 			assert.Empty(t, app.controllers)
 
-			assert.NotContains(t, registeredPaths(app), "/api/voltgo/metrics",
-				"voltgo endpoints were registered for a controller that never started")
-			assert.NotContains(t, registeredPaths(app), "/api/voltgo/info",
-				"voltgo endpoints were registered for a controller that never started")
+			for _, path := range []string{"/api/voltgo", "/api/voltgo/:id/metrics", "/api/voltgo/:id/info"} {
+				assert.NotContains(t, registeredPaths(app), path,
+					"voltgo endpoints were registered for a controller that never started")
+			}
 		})
 	}
 }

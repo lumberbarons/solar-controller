@@ -49,7 +49,29 @@ export const CHARGING_STATUS_LABELS: Record<number, string> = {
   3: 'Equalization',
 };
 
-/** GET /api/voltgo/metrics */
+/**
+ * GET /api/voltgo — the list of configured batteries.
+ *
+ * The panel discovers batteries from this rather than hardcoding them: the
+ * count is a deployment detail, and a 404 here still means no voltgo
+ * controller is running at all.
+ */
+export const VOLTGO_INDEX_FIELDS = ['batteries'] as const;
+
+/** The objects inside the `batteries` array of GET /api/voltgo. */
+export const VOLTGO_BATTERY_REF_FIELDS = ['address', 'id'] as const;
+
+export type VoltgoBatteryRef = {
+  /** Used verbatim in routes, Prometheus labels, and publisher topics. */
+  id: string;
+  address: string;
+};
+
+export type VoltgoIndex = {
+  batteries: VoltgoBatteryRef[];
+};
+
+/** GET /api/voltgo/{id}/metrics */
 export const VOLTGO_METRIC_FIELDS = [
   'cellCount',
   'cells',
@@ -63,7 +85,7 @@ export const VOLTGO_METRIC_FIELDS = [
   'voltage',
 ] as const;
 
-/** The objects inside the `cells` array of GET /api/voltgo/metrics. */
+/** The objects inside the `cells` array of GET /api/voltgo/{id}/metrics. */
 export const VOLTGO_CELL_FIELDS = ['index', 'voltage'] as const;
 
 export type VoltgoCell = {
@@ -94,7 +116,7 @@ export type VoltgoMetrics = {
   [K in (typeof VOLTGO_METRIC_FIELDS)[number]]: VoltgoMetricTypes[K];
 };
 
-/** GET /api/voltgo/info */
+/** GET /api/voltgo/{id}/info */
 export const VOLTGO_INFO_FIELDS = [
   'capacityAh',
   'chemistry',
