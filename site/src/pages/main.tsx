@@ -6,7 +6,7 @@ import { Grid, Box, Alert, IconButton, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 import Metric from "../components/metric"
-import VoltgoBattery from "../components/voltgo-battery"
+import VoltgoBatteryBank from "../components/voltgo-battery"
 import { CHARGING_STATUS_LABELS, type EpeverMetrics } from '../api/types';
 
 type MainState = {
@@ -121,8 +121,9 @@ class Main extends React.Component<Record<string, never>, MainState> {
             </Grid>
           </Grid>
 
-          {/* Battery bank via the voltgo BLE controller; renders nothing when it is disabled */}
-          <VoltgoBattery refreshKey={this.state.refreshKey} />
+          {/* One panel per battery on the voltgo BLE controller, discovered from
+              /api/voltgo; renders nothing when that controller is disabled */}
+          <VoltgoBatteryBank refreshKey={this.state.refreshKey} />
 
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
             <IconButton

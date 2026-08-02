@@ -299,7 +299,7 @@ func TestCollector_GetInfo(t *testing.T) {
 func TestCollector_Close(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("disconnects battery and closes connector", func(t *testing.T) {
+	t.Run("disconnects battery but leaves the shared adapter alone", func(t *testing.T) {
 		mockBattery := &MockBatteryClient{
 			GetStatusFunc: func(_ context.Context) (*battery.Status, error) {
 				return testBatteryStatus(), nil
@@ -322,58 +322,23 @@ func TestCollector_Close(t *testing.T) {
 		if mockBattery.DisconnectCalls != 1 {
 			t.Errorf("Disconnect calls = %d, want 1", mockBattery.DisconnectCalls)
 		}
-		if mockConnector.CloseCalls != 1 {
-			t.Errorf("connector Close calls = %d, want 1", mockConnector.CloseCalls)
+		// The connector is one BLE adapter shared by every battery, so a
+		// single collector closing must not take it down for the others.
+		// The Controller releases it once, after all collectors are closed.
+		if mockConnector.CloseCalls != 0 {
+			t.Errorf("connector Close calls = %d, want 0", mockConnector.CloseCalls)
 		}
 	})
 
-	t.Run("closes connector when never connected", func(t *testing.T) {
+	t.Run("close is a no-op when never connected", func(t *testing.T) {
 		mockConnector := &MockBatteryConnector{}
 
 		collector := NewCollector(mockConnector, "AA:BB:CC:DD:EE:FF", 10*time.Second)
 		if err := collector.Close(); err != nil {
 			t.Fatalf("Close() error = %v", err)
 		}
-		if mockConnector.CloseCalls != 1 {
-			t.Errorf("connector Close calls = %d, want 1", mockConnector.CloseCalls)
+		if mockConnector.CloseCalls != 0 {
+			t.Errorf("connector Close calls = %d, want 0", mockConnector.CloseCalls)
 		}
 	})
-}
-
-func TestConfiguration_GetConnectTimeout(t *testing.T) {
-	tests := []struct {
-		name    string
-		timeout string
-		want    time.Duration
-	}{
-		{"default when empty", "", 30 * time.Second},
-		{"parses valid duration", "45s", 45 * time.Second},
-		{"default on invalid duration", "bogus", 30 * time.Second},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &Configuration{ConnectTimeout: tt.timeout}
-			if got := c.GetConnectTimeout(); got != tt.want {
-				t.Errorf("GetConnectTimeout() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConfiguration_Validate(t *testing.T) {
-	valid := &Configuration{ConnectTimeout: "10s"}
-	if err := valid.Validate(); err != nil {
-		t.Errorf("Validate() error = %v, want nil", err)
-	}
-
-	empty := &Configuration{}
-	if err := empty.Validate(); err != nil {
-		t.Errorf("Validate() error = %v, want nil for empty timeout", err)
-	}
-
-	invalid := &Configuration{ConnectTimeout: "bogus"}
-	if err := invalid.Validate(); err == nil {
-		t.Error("Validate() should return an error for an invalid duration")
-	}
 }

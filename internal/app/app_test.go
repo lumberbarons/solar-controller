@@ -211,7 +211,7 @@ func TestApplication_UnmatchedAPIRouteReturnsJSON404(t *testing.T) {
 	require.NoError(t, err)
 	defer app.Close()
 
-	for _, path := range []string{"/api/voltgo/metrics", "/api/epever/metrics", "/api/nonsense"} {
+	for _, path := range []string{"/api/voltgo", "/api/voltgo/bank-a/metrics", "/api/epever/metrics", "/api/nonsense"} {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req, _ := http.NewRequest("GET", path, nil)

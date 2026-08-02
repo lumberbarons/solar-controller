@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Alert, Box, Chip, Grid, Stack, Typography } from '@mui/material';
 
 import Metric from './metric';
-import type { VoltgoCell, VoltgoInfo, VoltgoMetrics } from '../api/types';
+import type { VoltgoBatteryRef, VoltgoCell, VoltgoIndex, VoltgoInfo, VoltgoMetrics } from '../api/types';
 
 /**
  * Below this many amps the pack is reported as idle rather than charging or
@@ -16,14 +16,21 @@ const IDLE_CURRENT_THRESHOLD_A = 0.05;
 type PanelState =
   /** The first fetch has not settled yet. */
   | { kind: 'loading' }
-  /** No voltgo controller is running: the endpoint is not registered. */
+  /** This battery's routes are gone: it was removed from the configuration. */
   | { kind: 'absent' }
-  /** Enabled, but no successful collection has happened yet (204). */
+  /** Configured, but no successful collection has happened yet (204). */
   | { kind: 'pending' }
   | { kind: 'ready'; metrics: VoltgoMetrics }
   | { kind: 'error'; message: string };
 
-type VoltgoBatteryProps = {
+type BankState =
+  | { kind: 'loading' }
+  /** No voltgo controller is running: the index endpoint is not registered. */
+  | { kind: 'absent' }
+  | { kind: 'ready'; batteries: VoltgoBatteryRef[] }
+  | { kind: 'error'; message: string };
+
+type RefreshProps = {
   /** Changing this triggers a refetch, so the dashboard refresh covers this panel too. */
   refreshKey: number;
 };
@@ -60,18 +67,24 @@ function errorMessage(error: unknown): string {
   return `Failed to load battery metrics: ${(error as Error).message}`;
 }
 
-/**
- * The battery pack reported by the voltgo BLE controller.
- *
- * Renders nothing when that controller is disabled — its endpoints are then
- * unregistered and answer 404 — so a solar-only deployment sees no empty panel.
- */
-function VoltgoBattery({ refreshKey }: VoltgoBatteryProps) {
+type VoltgoBatteryPanelProps = RefreshProps & {
+  battery: VoltgoBatteryRef;
+  /**
+   * With one battery the id is noise — often just its BLE address. With
+   * several it is the only thing telling the panels apart, so it is shown.
+   */
+  showId: boolean;
+};
+
+/** One battery pack, read from its own per-battery endpoints. */
+function VoltgoBatteryPanel({ battery, showId, refreshKey }: VoltgoBatteryPanelProps) {
   const [state, setState] = useState<PanelState>({ kind: 'loading' });
   const [info, setInfo] = useState<VoltgoInfo | null>(null);
 
+  const { id } = battery;
+
   const fetchInfo = useCallback(() => {
-    axios.get<VoltgoInfo>('/api/voltgo/info')
+    axios.get<VoltgoInfo>(`/api/voltgo/${id}/info`)
       .then(response => {
         // 204 until the first connection has read the static info.
         setInfo(response.status === 204 ? null : response.data);
@@ -80,12 +93,12 @@ function VoltgoBattery({ refreshKey }: VoltgoBatteryProps) {
         // Info is decoration; the panel is useful without it.
         setInfo(null);
       });
-  }, []);
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
 
-    axios.get<VoltgoMetrics>('/api/voltgo/metrics')
+    axios.get<VoltgoMetrics>(`/api/voltgo/${id}/metrics`)
       .then(response => {
         if (cancelled) {
           return;
@@ -105,14 +118,14 @@ function VoltgoBattery({ refreshKey }: VoltgoBatteryProps) {
           setState({ kind: 'absent' });
           return;
         }
-        console.error('Failed to load voltgo battery metrics:', error);
+        console.error(`Failed to load voltgo battery ${id} metrics:`, error);
         setState({ kind: 'error', message: errorMessage(error) });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, fetchInfo]);
+  }, [id, refreshKey, fetchInfo]);
 
   if (state.kind === 'absent' || state.kind === 'loading') {
     return null;
@@ -120,7 +133,7 @@ function VoltgoBattery({ refreshKey }: VoltgoBatteryProps) {
 
   const heading = (
     <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, color: '#1b5e20' }}>
-      Battery Bank
+      {showId ? `Battery Bank · ${id}` : 'Battery Bank'}
       {info && (
         <Typography component="span" sx={{ ml: 1, fontSize: '0.875rem', color: 'text.secondary' }}>
           {info.chemistry} · {info.nominalVoltage} V · {info.capacityAh} Ah
@@ -197,7 +210,7 @@ function VoltgoBattery({ refreshKey }: VoltgoBatteryProps) {
                 <Chip
                   key={cell.index}
                   label={label}
-                  aria-label={`${label}${extreme}`}
+                  aria-label={`${showId ? `${id} ` : ''}${label}${extreme}`}
                   variant="outlined"
                   sx={{
                     borderColor,
@@ -214,4 +227,67 @@ function VoltgoBattery({ refreshKey }: VoltgoBatteryProps) {
   );
 }
 
-export default VoltgoBattery;
+/**
+ * Every battery pack reported by the voltgo BLE controller.
+ *
+ * The batteries come from the index endpoint rather than being hardcoded, so
+ * a deployment with four packs renders four panels without a frontend change.
+ * Renders nothing when the controller is disabled — the index is then
+ * unregistered and answers 404 — so a solar-only deployment sees no empty panel.
+ */
+function VoltgoBatteryBank({ refreshKey }: RefreshProps) {
+  const [state, setState] = useState<BankState>({ kind: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    axios.get<VoltgoIndex>('/api/voltgo')
+      .then(response => {
+        if (cancelled) {
+          return;
+        }
+        setState({ kind: 'ready', batteries: response.data?.batteries ?? [] });
+      })
+      .catch(error => {
+        if (cancelled) {
+          return;
+        }
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          setState({ kind: 'absent' });
+          return;
+        }
+        console.error('Failed to load the voltgo battery list:', error);
+        setState({ kind: 'error', message: errorMessage(error) });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  if (state.kind === 'absent' || state.kind === 'loading') {
+    return null;
+  }
+
+  if (state.kind === 'error') {
+    return <Alert severity="error" sx={{ mb: 2 }}>{state.message}</Alert>;
+  }
+
+  const { batteries } = state;
+  const showId = batteries.length > 1;
+
+  return (
+    <>
+      {batteries.map(battery => (
+        <VoltgoBatteryPanel
+          key={battery.id}
+          battery={battery}
+          showId={showId}
+          refreshKey={refreshKey}
+        />
+      ))}
+    </>
+  );
+}
+
+export default VoltgoBatteryBank;

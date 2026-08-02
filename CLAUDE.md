@@ -13,7 +13,7 @@ Solar-controller is a Go-based service that collects metrics from solar power eq
 | `cmd/controller/` | Application entry point | Changing startup, flags, or controller wiring |
 | `internal/controllers/` | Hardware controller implementations | Adding controllers, modifying collection or publishing logic |
 | `internal/controllers/epever/` | Epever charge controller over Modbus RTU | Changing solar metric collection or device configuration |
-| `internal/controllers/voltgo/` | Voltgo battery over Bluetooth LE | Changing battery collection, cell metrics, or BLE connection handling |
+| `internal/controllers/voltgo/` | Voltgo batteries over Bluetooth LE | Changing battery collection, cell metrics, or BLE connection handling |
 | `internal/publishers/` | Publisher factory, MultiPublisher, MessagePublisher interface | Adding a new publisher or changing fan-out behavior |
 | `internal/publishers/mqtt/` | MQTT publisher | Modifying MQTT publishing |
 | `internal/publishers/solace/` | Solace publisher | Modifying Solace publishing |
@@ -349,6 +349,15 @@ The Voltgo controller follows the same shape minus the Configurer - the battery
 is read-only over BLE - and adds a **BLEConnector**, which owns the connection
 so the Collector can be tested against a fake.
 
+Voltgo is one controller driving *N* batteries, not one controller per battery.
+Each battery gets a **batteryRunner** (`battery.go`) holding its own Collector
+and cached status; the Controller owns the schedule, the routes, the shared
+Prometheus collector, and the shared BLE adapter. That split exists because the
+three things a second controller would duplicate are all process-wide: Gin
+panics on a duplicate route, promauto panics on a duplicate registration, and
+the host has one BLE adapter. Adding per-battery state means touching
+`batteryRunner`; adding anything registered once means touching `Controller`.
+
 Controllers are instantiated in `main.go:buildControllers()` and conditionally enabled based on configuration. Each controller has an `enabled` boolean field that must be set to `true` for the controller to start. If required config fields are missing (even when enabled is true), the controller returns an empty/disabled instance.
 
 ### Data Flow
@@ -460,9 +469,26 @@ Voltgo controller publishes the following metrics:
 - `collection-time` (seconds) - Time taken to collect metrics
 - `collection-failure` (count) - Published instead of the above when a cycle fails
 
+Voltgo topics carry an extra battery segment, because one controller drives
+several packs:
+
+```
+{topicPrefix}/{deviceId}/voltgo/{batteryId}/{metric-name}
+```
+
+Keeping the id as its own segment rather than folding it into the metric name
+lets a subscriber wildcard either way: `solar/+/voltgo/+/battery-soc` across
+every battery, `solar/+/voltgo/bank-a/#` across one battery's metrics. The
+RemoteWrite publisher accepts both the 3-segment and 4-segment forms and turns
+the battery segment into a `battery` label, so a remote-written series matches
+the scraped one.
+
 Per-cell voltages are deliberately not published - they would scale the topic
-space with the cell count. They are exposed on `/api/voltgo/metrics` and as the
-`voltgo_cell_voltage` Prometheus gauge, labelled by cell index.
+space with the cell count. They are exposed on `/api/voltgo/{id}/metrics` and as
+the `voltgo_cell_voltage` Prometheus gauge, labelled by `battery` and cell
+index. Every `voltgo_*` series carries the `battery` label, including in a
+single-battery deployment, so a query does not have to change when a second
+battery is added.
 
 #### Wildcard Subscriptions
 
@@ -511,8 +537,10 @@ Every metric from a successful collection cycle is batched into a single WriteRe
 - **Voltgo**: Bluetooth LE GATT (via `lumberbarons/voltgo`, over `tinygo.org/x/bluetooth`)
   - On Linux this is BlueZ driven over D-Bus, in pure Go - no cgo, so it adds nothing to the cross-build requirements
   - The connection is opened lazily on the first collection, reused across cycles, and dropped on a read error so the next cycle reconnects
-  - Connect timeout 30s by default; a full cycle is bounded at 60 seconds to cover the connect plus the status reads
-  - Collection overlap prevention via mutex guard
+  - Connect timeout 30s by default; each battery in a cycle gets its own 60-second budget to cover the connect plus the status reads
+  - Batteries are collected **sequentially**, not concurrently: the host has one BLE adapter, BlueZ caps concurrent links, and overlapping connects provoke the `le-connection-abort-by-local` failures voltgo v0.2.1 fixed. `publishPeriod` therefore has to cover the sum of the per-battery times (~9s cold, well under 1s warm)
+  - A battery that fails to connect publishes its own `collection-failure` and does not stop the rest of the cycle
+  - Collection overlap prevention via mutex guard, across the whole cycle
   - Static battery info is fetched once, on the first cycle that connects successfully
 
 ### Web Server
@@ -525,13 +553,14 @@ Every metric from a successful collection cycle is batched into a single WriteRe
   - `/api/epever/charging-parameters` - Charging parameters configuration (GET/PATCH)
   - `/api/epever/time` - Controller time (GET/PATCH)
   - `/api/epever/config` - Legacy configuration endpoint (GET/PATCH)
-  - `/api/voltgo/metrics` - JSON battery status including per-cell voltages
-  - `/api/voltgo/info` - Static battery info (chemistry, nominal voltage, capacity)
+  - `/api/voltgo` - The configured batteries, as `{"batteries": [{"id", "address"}]}`
+  - `/api/voltgo/{id}/metrics` - JSON battery status including per-cell voltages
+  - `/api/voltgo/{id}/info` - Static battery info (chemistry, nominal voltage, capacity)
   - `/*` - Embedded React SPA (via `//go:embed site/build`)
 - **SPA Support**: NoRoute handler serves index.html for client-side routing (React Router), except under `/api`, where an unmatched route returns a JSON 404. A disabled controller registers no endpoints, so the frontend uses that 404 to hide its panel; answering with index.html would look like a successful response
 - **Namespace**: Each controller registers endpoints under `/api/{controllerName}` where the controller name matches the hardware type (e.g., "epever")
 
-Both voltgo endpoints return `204 No Content` until the first successful collection, so "enabled but nothing read yet" is distinguishable from "not configured".
+Both per-battery voltgo endpoints return `204 No Content` until that battery's first successful collection, so "enabled but nothing read yet" is distinguishable from "not configured"; an unknown battery id returns `404`. The index answers `200` whenever the controller is running, and is how the frontend discovers how many panels to render - a `404` there is what hides the panel entirely.
 
 The React frontend is embedded into the binary at build time and served statically by Gin. The frontend build artifacts are copied from `site/build` to `internal/static/build` during the build process, where they're embedded using `//go:embed`.
 
@@ -585,14 +614,18 @@ solarController:
     publishPeriod: 60
   voltgo:
     enabled: false
-    address: AA:BB:CC:DD:EE:FF  # BLE address of the battery
-    publishPeriod: 60
-    connectTimeout: 30s         # Optional (default: 30s)
+    publishPeriod: 60           # Must cover one connect-and-read per battery
+    connectTimeout: 30s         # Optional (default: 30s), applied per battery
+    batteries:
+      - id: bank-a              # Optional; defaults to the address, lowercased with dashes
+        address: A4:C1:37:43:A4:33
+      - id: bank-b
+        address: A4:C1:37:43:A4:42
 ```
 
 A controller can be explicitly enabled or disabled via the `enabled` boolean field. If `enabled: false`, the controller will not start regardless of other configuration.
 
-The two controllers differ in how they treat a bad configuration. Epever warns and stays down when `serialPort` is missing; voltgo is validated in `config.Validate()`, so an enabled section without an `address`, or with a non-positive `publishPeriod` or an unparseable `connectTimeout`, fails startup outright. Keep that in mind when adding fields to either.
+The two controllers differ in how they treat a bad configuration. Epever warns and stays down when `serialPort` is missing; voltgo is validated in `config.Validate()`, which delegates to `voltgo.Configuration.Validate()`, so an enabled section with no battery, a battery without an address, a duplicate id or address, a malformed id, a non-positive `publishPeriod`, or an unparseable `connectTimeout` fails startup outright. Keep that in mind when adding fields to either.
 
 **Global Configuration:**
 - `deviceId` (optional): Unique identifier for this device instance, used in publisher topics across all controllers. Defaults to `"controller-1"` if not specified.
@@ -604,9 +637,17 @@ The two controllers differ in how they treat a bad configuration. Epever warns a
 - `publishPeriod` (required): Collection interval in seconds
 
 **Voltgo Controller Configuration:**
-- `address` (required): BLE address of the battery, e.g. `AA:BB:CC:DD:EE:FF`
+- `batteries` (required): the batteries to collect from, each with an `address` and an optional `id`
+- `address` (deprecated): a single battery's BLE address, kept working for existing configs. Setting it alongside `batteries` is an error rather than a merge
 - `publishPeriod` (required): Collection interval in seconds, must be positive
-- `connectTimeout` (optional): BLE connect timeout as a duration string (default: `30s`)
+- `connectTimeout` (optional): BLE connect timeout as a duration string (default: `30s`), applied per battery
+
+A battery's `id` is used verbatim in its routes, its Prometheus `battery` label,
+and its publisher topic segment, so it is validated against
+`^[a-z0-9][a-z0-9-]*$` - a slash would split a route and a topic, `+`/`#` would
+collide with MQTT wildcards. Omitted, it is derived from the address
+(`A4:C1:37:43:A4:33` -> `a4-c1-37-43-a4-33`). Duplicate ids and duplicate
+addresses (compared case-insensitively) both fail startup.
 - Requires BlueZ on the host; see the Bluetooth LE section of `README.md` for the D-Bus permissions the service needs and why Docker is not a suitable deployment for it
 
 **Message Publisher Configuration:**

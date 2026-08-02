@@ -122,13 +122,18 @@ func (c *Collector) GetInfo(ctx context.Context) (*BatteryInfo, error) {
 	}, nil
 }
 
-// Close drops any active battery connection and releases the BLE adapter.
+// Close drops any active battery connection.
+//
+// The BLE adapter behind the connector is deliberately left alone: it is
+// shared by every battery's collector, so releasing it here would tear it out
+// from under the other batteries. The Controller closes it once, after every
+// collector has disconnected.
 func (c *Collector) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.dropConnectionLocked()
-	return c.connector.Close()
+	return nil
 }
 
 // connectLocked returns the current battery connection, establishing or

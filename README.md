@@ -244,9 +244,13 @@ solarController:
 
   voltgo:
     enabled: false
-    address: AA:BB:CC:DD:EE:FF  # BLE address of the battery
-    publishPeriod: 60
-    connectTimeout: 30s         # Optional (default: 30s)
+    publishPeriod: 60           # Covers one connect-and-read per battery
+    connectTimeout: 30s         # Optional (default: 30s), applied per battery
+    batteries:
+      - id: bank-a              # Optional; defaults to the address, lowercased with dashes
+        address: A4:C1:37:43:A4:33
+      - id: bank-b
+        address: A4:C1:37:43:A4:42
 ```
 
 ### Configuration Details
@@ -261,7 +265,56 @@ solarController:
 - Each controller (epever, voltgo) has an `enabled` boolean field
 - Set `enabled: true` to activate the controller
 - **epever** requires `serialPort` and `publishPeriod`. If `serialPort` is missing, a warning is logged and the controller won't start
-- **voltgo** requires `address` (the battery's BLE address) and a positive `publishPeriod`; `connectTimeout` is optional and defaults to `30s`. Unlike epever, an enabled voltgo section missing either required field fails startup with a configuration error rather than starting without the controller
+- **voltgo** requires at least one battery and a positive `publishPeriod`; `connectTimeout` is optional and defaults to `30s`. Unlike epever, an enabled voltgo section missing a required field fails startup with a configuration error rather than starting without the controller
+
+#### Multiple Voltgo batteries
+
+`voltgo.batteries` is a list, so a bank of several packs is collected by one
+service. Each entry takes an `address` and an optional `id`.
+
+The `id` is the battery's name in three places at once — its HTTP routes
+(`/api/voltgo/{id}/metrics`), its Prometheus `battery` label, and its publisher
+topic segment — so it is constrained to lowercase letters, digits, and dashes.
+A slash would split a route and a topic in two; a `+` or `#` would collide with
+MQTT wildcards. Omit it and it is derived from the address:
+`A4:C1:37:43:A4:33` becomes `a4-c1-37-43-a4-33`, which works but reads poorly
+on a dashboard, so name them.
+
+Startup rejects two batteries sharing an `id` (they would collapse onto one
+route, one series, and one topic) and two sharing an `address`, compared
+case-insensitively (they would fight over one BLE connection).
+
+Batteries are collected **one after another**, not concurrently: the host has a
+single BLE adapter, BlueZ caps concurrent links, and overlapping connects
+provoke the `le-connection-abort-by-local` failures that voltgo v0.2.1 fixed. A
+cold connect costs roughly 9 seconds and a warm one well under a second, so size
+`publishPeriod` to cover a connect-and-read for every battery — a cycle still
+running when the next tick arrives logs a warning and skips that tick. One
+battery failing to connect does not stop the rest of the cycle: it publishes its
+own `collection-failure` and the remaining batteries are collected normally.
+
+**Migrating from a single battery.** The old singular form still works:
+
+```yaml
+  voltgo:
+    enabled: true
+    address: AA:BB:CC:DD:EE:FF   # Deprecated: use batteries
+    publishPeriod: 60
+```
+
+It is treated as a one-entry list whose `id` is derived from the address.
+Setting both `address` and `batteries` is an error rather than a merge, so the
+configuration can never mean two things at once.
+
+Two things do change for an existing deployment, whichever form is used:
+
+- Publisher topics gain a battery segment: `…/voltgo/battery-soc` becomes
+  `…/voltgo/{id}/battery-soc`. Subscribers matching the old path need updating.
+- Prometheus series gain a `battery` label. Existing queries keep returning
+  data, but a query that assumed one series per metric now sees one per battery.
+
+Moving to `batteries` with an explicit `id` at the same time avoids having the
+derived id baked into topics and dashboards.
 
 **Message Publishers:**
 - Multiple publishers can be enabled simultaneously — metrics are published to all enabled publishers (fan-out)
@@ -297,7 +350,9 @@ Find the battery's address with a scan:
 bluetoothctl scan le      # note the address of the battery, e.g. AA:BB:CC:DD:EE:FF
 ```
 
-Then set it as `voltgo.address`. Pairing is not required: the controller
+Then set it as a battery's `address` under `voltgo.batteries`. Note that a
+battery only appears while it is advertising, so a bank of several packs may
+need more than one scan to find them all. Pairing is not required: the controller
 connects on its first collection, keeps the connection while it stays alive, and
 reconnects on the next cycle after a read error.
 
@@ -450,13 +505,17 @@ These delays and timeouts ensure the Epever device has adequate time to process 
 #### Monitoring Endpoints
 - `GET /metrics` - Prometheus metrics export
 - `GET /api/epever/metrics` - JSON metrics for Epever controller (current status)
-- `GET /api/voltgo/metrics` - JSON metrics for the Voltgo battery, including per-cell voltages
-- `GET /api/voltgo/info` - Static battery information (chemistry, nominal voltage, capacity)
+- `GET /api/voltgo` - The configured batteries, as `{"batteries": [{"id": ..., "address": ...}]}`
+- `GET /api/voltgo/{id}/metrics` - JSON metrics for one battery, including per-cell voltages
+- `GET /api/voltgo/{id}/info` - Static battery information (chemistry, nominal voltage, capacity)
 
 A controller that is not running registers no endpoints, and unmatched `/api`
-routes return `404` with a JSON body. Both voltgo endpoints answer `204` until
-the first successful collection, which is what the web UI uses to tell "no
-battery configured" apart from "no reading yet".
+routes return `404` with a JSON body. The web UI reads the index first: a `404`
+there means no voltgo controller exists and the panel is hidden entirely, while
+the list it returns is how the UI knows how many panels to render. An unknown
+battery id under it also returns `404`. Both per-battery endpoints answer `204`
+until that battery's first successful collection, which distinguishes "not
+reporting yet" from "not configured".
 
 #### Configuration Endpoints
 - `GET /api/epever/battery-profile` - Get battery type and capacity
@@ -519,9 +578,21 @@ Example with `topicPrefix: "solar"` and `deviceId: "controller-123"`:
 solar/controller-123/epever/array-voltage
 solar/controller-123/epever/battery-soc
 solar/controller-123/epever/charging-power
-solar/controller-123/voltgo/battery-soh
-solar/controller-123/voltgo/cell-voltage-delta
+solar/controller-123/voltgo/bank-a/battery-soh
+solar/controller-123/voltgo/bank-a/cell-voltage-delta
+solar/controller-123/voltgo/bank-b/battery-soh
 ```
+
+Voltgo carries an extra `{batteryId}` segment, because one service collects a
+bank of several packs:
+```
+{topicPrefix}/{deviceId}/voltgo/{batteryId}/{metric-name}
+```
+
+Keeping the id as its own segment rather than folding it into the metric name
+means a subscriber can wildcard either way: `solar/+/voltgo/+/battery-soc` for
+one metric across every battery, `solar/+/voltgo/bank-a/#` for every metric of
+one battery.
 
 ### Published Metrics
 
@@ -548,9 +619,13 @@ When a collection cycle fails, the controller publishes a single
 `collection-failure` metric (unit `count`, value `1`) instead.
 
 Per-cell voltages are deliberately not published: they would multiply the topic
-space by the cell count. They are available from `GET /api/voltgo/metrics`, from
-the web UI, and as the `voltgo_cell_voltage` Prometheus metric, labelled by
-cell.
+space by the cell count. They are available from `GET /api/voltgo/{id}/metrics`,
+from the web UI, and as the `voltgo_cell_voltage` Prometheus metric, labelled by
+`battery` and `cell`.
+
+Every `voltgo_*` Prometheus series carries a `battery` label holding the
+configured id, including when only one battery is configured, so a query written
+for one pack keeps working when a second is added.
 
 ### Message Payload
 
@@ -569,7 +644,7 @@ When using the RemoteWrite publisher, metrics are converted to Prometheus format
 - Metric names: `{controller}_{metric_name}` (snake_case)
 - Labels: `device_id`, `controller`, `unit`
 - Example: `epever_battery_voltage{device_id="controller-123",unit="volts"}`
-- Voltgo metrics follow the same rule: `voltgo_battery_soh{device_id="controller-123",unit="percent"}`
+- Voltgo metrics follow the same rule and add a `battery` label from the topic's battery segment: `voltgo_battery_soh{device_id="controller-123",battery="bank-a",unit="percent"}`. The battery is a label rather than part of the metric name, so a remote-written series matches the one the `/metrics` scrape endpoint exposes for the same reading.
 
 All metrics from each collection cycle are batched into a single WriteRequest for efficiency.
 

@@ -26,12 +26,15 @@ type BatteryClient interface {
 
 // MetricsCollector defines the interface for collecting and exposing metrics.
 // This abstraction allows for testing without the Prometheus global registry.
+//
+// Every method takes the battery id: one collector serves every configured
+// battery, and the id is what keeps their series apart.
 type MetricsCollector interface {
-	// IncrementFailures increments the collection failure counter.
-	IncrementFailures()
+	// IncrementFailures increments the collection failure counter for one battery.
+	IncrementFailures(batteryID string)
 
-	// SetMetrics updates all metrics based on the provided status.
-	SetMetrics(status *BatteryStatus)
+	// SetMetrics updates all metrics for one battery based on the provided status.
+	SetMetrics(batteryID string, status *BatteryStatus)
 }
 
 // BatteryConnector defines the interface for establishing BLE connections

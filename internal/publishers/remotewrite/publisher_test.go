@@ -168,6 +168,49 @@ func TestParseMetric(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// A voltgo topic carries a battery segment, because one
+			// controller drives several packs. Without this the whole
+			// controller's metrics would be dropped as malformed.
+			name:        "per-battery topic yields a battery label, not a longer metric name",
+			topicSuffix: "controller-123/voltgo/bank-a/battery-voltage",
+			payload:     `{"value": 13.28, "unit": "volts", "timestamp": 1699000003}`,
+			wantMetric: metricData{
+				metricName: "voltgo_battery_voltage",
+				labels: map[string]string{
+					"device_id":  "controller-123",
+					"controller": "voltgo",
+					"battery":    "bank-a",
+					"unit":       "volts",
+				},
+				value:     13.28,
+				timestamp: 1699000003,
+			},
+			wantErr: false,
+		},
+		{
+			name:        "three-part topic carries no battery label",
+			topicSuffix: "controller-123/epever/battery-voltage",
+			payload:     `{"value": 13.4, "unit": "volts", "timestamp": 1699000004}`,
+			wantMetric: metricData{
+				metricName: "epever_battery_voltage",
+				labels: map[string]string{
+					"device_id":  "controller-123",
+					"controller": "epever",
+					"unit":       "volts",
+				},
+				value:     13.4,
+				timestamp: 1699000004,
+			},
+			wantErr: false,
+		},
+		{
+			name:        "invalid topic format - too many parts",
+			topicSuffix: "controller-123/voltgo/bank-a/cells/battery-voltage",
+			payload:     `{"value": 12.5, "unit": "volts", "timestamp": 1699000000}`,
+			wantErr:     true,
+			errContains: "invalid topic format",
+		},
+		{
 			name:        "invalid topic format - too few parts",
 			topicSuffix: "controller-123/epever",
 			payload:     `{"value": 12.5, "unit": "volts", "timestamp": 1699000000}`,

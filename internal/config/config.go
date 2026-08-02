@@ -168,13 +168,21 @@ func (c *Config) Validate() error {
 
 	// Validate Voltgo configuration if enabled
 	if c.SolarController.Voltgo.Enabled {
-		if c.SolarController.Voltgo.Address == "" {
+		voltgoCfg := c.SolarController.Voltgo
+		// Resolving first collapses the singular and list forms into one
+		// answer, so "is a battery configured at all" is asked once rather
+		// than once per form.
+		batteries, err := voltgoCfg.ResolveBatteries()
+		if err != nil {
+			return fmt.Errorf("invalid voltgo configuration: %w", err)
+		}
+		if len(batteries) == 0 {
 			return fmt.Errorf("voltgo address is required when voltgo is enabled")
 		}
-		if c.SolarController.Voltgo.PublishPeriod <= 0 {
+		if voltgoCfg.PublishPeriod <= 0 {
 			return fmt.Errorf("voltgo publish period must be positive")
 		}
-		if err := c.SolarController.Voltgo.Validate(); err != nil {
+		if err := voltgoCfg.Validate(); err != nil {
 			return fmt.Errorf("invalid voltgo configuration: %w", err)
 		}
 	}

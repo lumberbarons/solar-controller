@@ -10,7 +10,9 @@ import {
   INFO_FIELDS,
   METRIC_FIELDS,
   TIME_FIELDS,
+  VOLTGO_BATTERY_REF_FIELDS,
   VOLTGO_CELL_FIELDS,
+  VOLTGO_INDEX_FIELDS,
   VOLTGO_INFO_FIELDS,
   VOLTGO_METRIC_FIELDS,
 } from './types';
@@ -60,9 +62,11 @@ describe('API contract', () => {
     ['GET /api/epever/battery-profile', BATTERY_PROFILE_FIELDS],
     ['GET /api/epever/charging-parameters', CHARGING_PARAMETER_FIELDS],
     ['GET /api/epever/time', TIME_FIELDS],
-    ['GET /api/voltgo/metrics', VOLTGO_METRIC_FIELDS],
-    ['GET /api/voltgo/metrics#cells[]', VOLTGO_CELL_FIELDS],
-    ['GET /api/voltgo/info', VOLTGO_INFO_FIELDS],
+    ['GET /api/voltgo', VOLTGO_INDEX_FIELDS],
+    ['GET /api/voltgo#batteries[]', VOLTGO_BATTERY_REF_FIELDS],
+    ['GET /api/voltgo/{id}/metrics', VOLTGO_METRIC_FIELDS],
+    ['GET /api/voltgo/{id}/metrics#cells[]', VOLTGO_CELL_FIELDS],
+    ['GET /api/voltgo/{id}/info', VOLTGO_INFO_FIELDS],
   ])('%s declares the fields the Go handler returns', (endpoint, declared) => {
     expect([...declared].sort()).toEqual(contractFields(endpoint));
   });

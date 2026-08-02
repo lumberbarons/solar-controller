@@ -66,7 +66,14 @@
     "GET /api/epever/time": [
       "time"
     ],
-    "GET /api/voltgo/metrics": [
+    "GET /api/voltgo": [
+      "batteries"
+    ],
+    "GET /api/voltgo#batteries[]": [
+      "address",
+      "id"
+    ],
+    "GET /api/voltgo/{id}/metrics": [
       "cellCount",
       "cells",
       "collectionTime",
@@ -78,11 +85,11 @@
       "timestamp",
       "voltage"
     ],
-    "GET /api/voltgo/metrics#cells[]": [
+    "GET /api/voltgo/{id}/metrics#cells[]": [
       "index",
       "voltage"
     ],
-    "GET /api/voltgo/info": [
+    "GET /api/voltgo/{id}/info": [
       "capacityAh",
       "chemistry",
       "deviceStrings",

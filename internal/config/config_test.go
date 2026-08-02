@@ -276,8 +276,20 @@ solarController:
 				if !c.SolarController.Voltgo.Enabled {
 					t.Error("Voltgo should be enabled")
 				}
-				if c.SolarController.Voltgo.Address != "AA:BB:CC:DD:EE:FF" {
-					t.Errorf("Voltgo Address = %s, want AA:BB:CC:DD:EE:FF", c.SolarController.Voltgo.Address)
+				// The singular form resolves to a one-battery list whose id
+				// is derived from the address.
+				batteries, err := c.SolarController.Voltgo.ResolveBatteries()
+				if err != nil {
+					t.Fatalf("ResolveBatteries() error = %v", err)
+				}
+				if len(batteries) != 1 {
+					t.Fatalf("resolved %d batteries, want 1", len(batteries))
+				}
+				if batteries[0].Address != "AA:BB:CC:DD:EE:FF" {
+					t.Errorf("Voltgo Address = %s, want AA:BB:CC:DD:EE:FF", batteries[0].Address)
+				}
+				if batteries[0].ID != "aa-bb-cc-dd-ee-ff" {
+					t.Errorf("Voltgo battery id = %s, want aa-bb-cc-dd-ee-ff", batteries[0].ID)
 				}
 				if c.SolarController.Voltgo.PublishPeriod != 120 {
 					t.Errorf("Voltgo PublishPeriod = %d, want 120", c.SolarController.Voltgo.PublishPeriod)
@@ -342,6 +354,109 @@ solarController:
 `,
 			wantErr: true,
 			errMsg:  "voltgo publish period must be positive",
+		},
+		{
+			// The deployment this exists for: four packs, each with a
+			// human-meaningful id used in its routes, labels, and topics.
+			name: "voltgo configuration valid with a battery list",
+			yaml: `
+solarController:
+  httpPort: 8080
+  epever:
+    enabled: false
+  voltgo:
+    enabled: true
+    publishPeriod: 120
+    connectTimeout: 45s
+    batteries:
+      - id: bank-a
+        address: A4:C1:37:43:A4:33
+      - id: bank-b
+        address: A4:C1:37:43:A4:42
+      - id: bank-c
+        address: A4:C1:37:23:A4:3F
+      - address: A4:C1:37:23:A4:40
+`,
+			wantErr: false,
+			check: func(t *testing.T, c Config) {
+				batteries, err := c.SolarController.Voltgo.ResolveBatteries()
+				if err != nil {
+					t.Fatalf("ResolveBatteries() error = %v", err)
+				}
+				if len(batteries) != 4 {
+					t.Fatalf("resolved %d batteries, want 4", len(batteries))
+				}
+				if batteries[0].ID != "bank-a" || batteries[0].Address != "A4:C1:37:43:A4:33" {
+					t.Errorf("battery 0 = %+v, want {bank-a A4:C1:37:43:A4:33}", batteries[0])
+				}
+				// The fourth is configured without an id, so it gets one
+				// derived from its address.
+				if batteries[3].ID != "a4-c1-37-23-a4-40" {
+					t.Errorf("battery 3 id = %q, want a4-c1-37-23-a4-40", batteries[3].ID)
+				}
+			},
+		},
+		{
+			name: "voltgo enabled with neither address nor batteries",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    publishPeriod: 60
+`,
+			wantErr: true,
+			errMsg:  "voltgo address is required",
+		},
+		{
+			name: "voltgo rejects duplicate battery ids",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    publishPeriod: 60
+    batteries:
+      - id: bank-a
+        address: A4:C1:37:43:A4:33
+      - id: bank-a
+        address: A4:C1:37:43:A4:42
+`,
+			wantErr: true,
+			errMsg:  `voltgo battery id "bank-a" is configured more than once`,
+		},
+		{
+			name: "voltgo rejects duplicate battery addresses",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    publishPeriod: 60
+    batteries:
+      - id: bank-a
+        address: A4:C1:37:43:A4:33
+      - id: bank-b
+        address: A4:C1:37:43:A4:33
+`,
+			wantErr: true,
+			errMsg:  "is configured more than once",
+		},
+		{
+			name: "voltgo rejects the singular address alongside a battery list",
+			yaml: `
+solarController:
+  httpPort: 8080
+  voltgo:
+    enabled: true
+    publishPeriod: 60
+    address: AA:BB:CC:DD:EE:FF
+    batteries:
+      - id: bank-a
+        address: A4:C1:37:43:A4:33
+`,
+			wantErr: true,
+			errMsg:  "mutually exclusive",
 		},
 		{
 			name: "voltgo enabled but unparseable connect timeout",

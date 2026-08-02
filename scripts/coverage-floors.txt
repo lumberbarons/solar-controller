@@ -21,11 +21,11 @@ internal/app                         93
 internal/config                      100
 internal/controllers/epever          56
 internal/controllers/epever/parser   97
-internal/controllers/voltgo          81
+internal/controllers/voltgo          83
 internal/publishers                  90
 internal/publishers/file             92
 internal/publishers/mqtt             73
-internal/publishers/remotewrite      84
+internal/publishers/remotewrite      85
 internal/publishers/sns              40
 internal/publishers/solace           34
 

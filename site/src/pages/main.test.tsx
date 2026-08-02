@@ -146,20 +146,42 @@ describe('dashboard', () => {
   it('hides the battery panel when the voltgo controller is not running', async () => {
     render(<Main />);
 
-    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/voltgo/metrics'));
+    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/voltgo'));
     expect(screen.queryByText('Battery Bank')).not.toBeInTheDocument();
   });
 
   it('shows the battery panel and refreshes it alongside the dashboard', async () => {
-    mockApi({ '/api/voltgo/metrics': VOLTGO_METRICS });
+    mockApi({
+      '/api/voltgo': { batteries: [{ id: 'bank-a', address: 'A4:C1:37:43:A4:33' }] },
+      '/api/voltgo/bank-a/metrics': VOLTGO_METRICS,
+    });
 
     render(<Main />);
     await waitFor(() => expect(screen.getByText('Battery Bank')).toBeInTheDocument());
 
-    const before = callCount('/api/voltgo/metrics');
+    const before = callCount('/api/voltgo/bank-a/metrics');
 
     screen.getByRole('button', { name: 'refresh metrics' }).click();
 
-    await waitFor(() => expect(callCount('/api/voltgo/metrics')).toBe(before + 1));
+    await waitFor(() => expect(callCount('/api/voltgo/bank-a/metrics')).toBe(before + 1));
+  });
+
+  it('renders a panel per battery when several are configured', async () => {
+    mockApi({
+      '/api/voltgo': {
+        batteries: [
+          { id: 'bank-a', address: 'A4:C1:37:43:A4:33' },
+          { id: 'bank-b', address: 'A4:C1:37:43:A4:42' },
+        ],
+      },
+      '/api/voltgo/bank-a/metrics': VOLTGO_METRICS,
+      '/api/voltgo/bank-b/metrics': { ...VOLTGO_METRICS, soc: 52 },
+    });
+
+    render(<Main />);
+
+    await waitFor(() => expect(screen.getByText('Battery Bank · bank-a')).toBeInTheDocument());
+    expect(screen.getByText('Battery Bank · bank-b')).toBeInTheDocument();
+    expect(screen.getByText('52 %')).toBeInTheDocument();
   });
 });

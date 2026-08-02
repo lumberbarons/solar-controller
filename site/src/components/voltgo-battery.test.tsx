@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-import VoltgoBattery from './voltgo-battery';
-import type { VoltgoInfo, VoltgoMetrics } from '../api/types';
+import VoltgoBatteryBank from './voltgo-battery';
+import type { VoltgoBatteryRef, VoltgoInfo, VoltgoMetrics } from '../api/types';
 
 vi.mock('axios', () => {
   const isAxiosError = (error: unknown): boolean =>
@@ -62,10 +62,20 @@ function mockApi(responses: Record<string, { status: number; data?: unknown }>) 
   });
 }
 
+const BANK_A: VoltgoBatteryRef = { id: 'bank-a', address: 'A4:C1:37:43:A4:33' };
+const BANK_B: VoltgoBatteryRef = { id: 'bank-b', address: 'A4:C1:37:43:A4:42' };
+
+/** The index answer for a given set of batteries. */
+const index = (batteries: VoltgoBatteryRef[]) => ({
+  '/api/voltgo': { status: 200, data: { batteries } },
+});
+
+/** One battery, reporting normally: the single-pack deployment. */
 const withMetrics = (metrics: VoltgoMetrics = METRICS) =>
   mockApi({
-    '/api/voltgo/metrics': { status: 200, data: metrics },
-    '/api/voltgo/info': { status: 200, data: INFO },
+    ...index([BANK_A]),
+    '/api/voltgo/bank-a/metrics': { status: 200, data: metrics },
+    '/api/voltgo/bank-a/info': { status: 200, data: INFO },
   });
 
 beforeEach(() => {
@@ -76,7 +86,7 @@ describe('voltgo battery panel', () => {
   it('renders the pack metrics', async () => {
     withMetrics();
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
     expect(screen.getByText('13.31 V')).toBeInTheDocument();
@@ -87,7 +97,7 @@ describe('voltgo battery panel', () => {
   it('shows the battery description once the info endpoint answers', async () => {
     withMetrics();
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     await waitFor(() =>
       expect(screen.getByText('LiFePO4 · 12.8 V · 100 Ah')).toBeInTheDocument(),
@@ -96,11 +106,12 @@ describe('voltgo battery panel', () => {
 
   it('still renders the pack when the info endpoint has no data yet', async () => {
     mockApi({
-      '/api/voltgo/metrics': { status: 200, data: METRICS },
-      '/api/voltgo/info': { status: 204 },
+      ...index([BANK_A]),
+      '/api/voltgo/bank-a/metrics': { status: 200, data: METRICS },
+      '/api/voltgo/bank-a/info': { status: 204 },
     });
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
     expect(screen.queryByText(/LiFePO4/)).not.toBeInTheDocument();
@@ -114,7 +125,7 @@ describe('voltgo battery panel', () => {
   ])('renders current %p as %s (%s)', async (current, displayed, flow) => {
     withMetrics({ ...METRICS, current });
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     await waitFor(() => expect(screen.getByText(displayed)).toBeInTheDocument());
     expect(screen.getByText(flow)).toBeInTheDocument();
@@ -123,7 +134,7 @@ describe('voltgo battery panel', () => {
   it('highlights the highest and lowest cell and reports the spread', async () => {
     withMetrics();
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     await waitFor(() =>
       expect(screen.getByLabelText('Cell 2 · 3.338 V (highest)')).toBeInTheDocument(),
@@ -143,7 +154,7 @@ describe('voltgo battery panel', () => {
       cellCount: 2,
     });
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     await waitFor(() => expect(screen.getByLabelText('Cell 0 · 3.330 V')).toBeInTheDocument());
     expect(screen.queryByLabelText(/highest/)).not.toBeInTheDocument();
@@ -153,17 +164,17 @@ describe('voltgo battery panel', () => {
   it('renders nothing when the controller is disabled', async () => {
     mockApi({});
 
-    const { container } = render(<VoltgoBattery refreshKey={0} />);
+    const { container } = render(<VoltgoBatteryBank refreshKey={0} />);
 
-    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/voltgo/metrics'));
+    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/voltgo'));
     await waitFor(() => expect(container).toBeEmptyDOMElement());
-    expect(mockedGet).not.toHaveBeenCalledWith('/api/voltgo/info');
+    expect(mockedGet).not.toHaveBeenCalledWith('/api/voltgo/bank-a/metrics');
   });
 
   it('says it is waiting when no reading has arrived yet', async () => {
-    mockApi({ '/api/voltgo/metrics': { status: 204 } });
+    mockApi({ ...index([BANK_A]), '/api/voltgo/bank-a/metrics': { status: 204 } });
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     expect(
       await screen.findByText('Waiting for the first battery reading.'),
@@ -173,7 +184,7 @@ describe('voltgo battery panel', () => {
   it('reports a failed fetch rather than rendering nothing', async () => {
     mockedGet.mockRejectedValue(httpError(500, 'Internal Server Error'));
 
-    render(<VoltgoBattery refreshKey={0} />);
+    render(<VoltgoBatteryBank refreshKey={0} />);
 
     expect(
       await screen.findByText('Failed to load battery metrics: 500 Internal Server Error'),
@@ -183,12 +194,89 @@ describe('voltgo battery panel', () => {
   it('refetches when refreshKey changes', async () => {
     withMetrics();
 
-    const { rerender } = render(<VoltgoBattery refreshKey={0} />);
+    const { rerender } = render(<VoltgoBatteryBank refreshKey={0} />);
     await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
 
     withMetrics({ ...METRICS, soc: 81 });
-    rerender(<VoltgoBattery refreshKey={1} />);
+    rerender(<VoltgoBatteryBank refreshKey={1} />);
 
     await waitFor(() => expect(screen.getByText('81 %')).toBeInTheDocument());
+  });
+  it('renders one panel per battery in the index', async () => {
+    mockApi({
+      ...index([BANK_A, BANK_B]),
+      '/api/voltgo/bank-a/metrics': { status: 200, data: METRICS },
+      '/api/voltgo/bank-a/info': { status: 200, data: INFO },
+      '/api/voltgo/bank-b/metrics': { status: 200, data: { ...METRICS, soc: 41, voltage: 12.90 } },
+      '/api/voltgo/bank-b/info': { status: 200, data: INFO },
+    });
+
+    render(<VoltgoBatteryBank refreshKey={0} />);
+
+    // Each pack shows its own reading, so a divergent bank is visible rather
+    // than being averaged away or overwritten by whichever answered last.
+    await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
+    expect(screen.getByText('41 %')).toBeInTheDocument();
+    expect(screen.getByText('13.31 V')).toBeInTheDocument();
+    expect(screen.getByText('12.9 V')).toBeInTheDocument();
+
+    expect(screen.getByText(/Battery Bank · bank-a/)).toBeInTheDocument();
+    expect(screen.getByText(/Battery Bank · bank-b/)).toBeInTheDocument();
+  });
+
+  it('does not label the panel with an id when there is only one battery', async () => {
+    withMetrics();
+
+    render(<VoltgoBatteryBank refreshKey={0} />);
+
+    await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
+    expect(screen.queryByText(/Battery Bank · /)).not.toBeInTheDocument();
+  });
+
+  it('renders the batteries that answer even when one is unreachable', async () => {
+    mockApi({
+      ...index([BANK_A, BANK_B]),
+      '/api/voltgo/bank-a/metrics': { status: 200, data: METRICS },
+      '/api/voltgo/bank-a/info': { status: 200, data: INFO },
+      // bank-b is configured but has never connected.
+      '/api/voltgo/bank-b/metrics': { status: 204 },
+    });
+
+    render(<VoltgoBatteryBank refreshKey={0} />);
+
+    await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
+    expect(
+      screen.getByText('Waiting for the first battery reading.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Battery Bank · bank-b/)).toBeInTheDocument();
+  });
+
+  it('renders nothing when the index lists no batteries', async () => {
+    mockApi(index([]));
+
+    const { container } = render(<VoltgoBatteryBank refreshKey={0} />);
+
+    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/voltgo'));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('refetches the index as well as the panels when refreshKey changes', async () => {
+    withMetrics();
+
+    const { rerender } = render(<VoltgoBatteryBank refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('74 %')).toBeInTheDocument());
+
+    // A battery added to the configuration and a reload of the service shows
+    // up as a longer index, and must produce a second panel.
+    mockApi({
+      ...index([BANK_A, BANK_B]),
+      '/api/voltgo/bank-a/metrics': { status: 200, data: METRICS },
+      '/api/voltgo/bank-a/info': { status: 200, data: INFO },
+      '/api/voltgo/bank-b/metrics': { status: 200, data: { ...METRICS, soc: 41 } },
+      '/api/voltgo/bank-b/info': { status: 200, data: INFO },
+    });
+    rerender(<VoltgoBatteryBank refreshKey={1} />);
+
+    await waitFor(() => expect(screen.getByText('41 %')).toBeInTheDocument());
   });
 });
