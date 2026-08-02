@@ -156,8 +156,8 @@ github.com/lufia/plan9stats v0.0.0-20240226150601-1dcf7310316a h1:3Bm7EwfUQUvhNe
 github.com/lufia/plan9stats v0.0.0-20240226150601-1dcf7310316a/go.mod h1:ilwx/Dta8jXAgpFYFvSWEMwxmbWXyiUHkd5FwyKhb5k=
 github.com/lumberbarons/modbus v0.5.0 h1:6QALe5yY8Ba7gi2OR2QrEDScNkp97uARCOS1QzTz2W4=
 github.com/lumberbarons/modbus v0.5.0/go.mod h1:siOveg104gQ0JeWOU5YJXe6ZOvoYkIs+IEWy64RmuwE=
-github.com/lumberbarons/voltgo v0.2.0 h1:2vYTiZpMjeCncFm869GnD6TYCc/OBgBc5hqGhnaeGjk=
-github.com/lumberbarons/voltgo v0.2.0/go.mod h1:Y5DXTvyLDVHVZEWgIgopRMGLGa/2CUotgyH7DTyztAE=
+github.com/lumberbarons/voltgo v0.2.1 h1:zT0gBgDhEyP6jovymLzZoxS/D5BRTUiFVrl5H+VRo18=
+github.com/lumberbarons/voltgo v0.2.1/go.mod h1:lwaroJWtUzWc5RQFgkyD3Z9EBSmjCzNFbGE1Pw1Dk7U=
 github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8SYxI99mE=
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
